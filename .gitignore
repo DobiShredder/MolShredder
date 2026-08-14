@@ -1,0 +1,68 @@
+# Build and generated output
+/build/
+/out/
+/dist/
+/artifacts/
+CMakeUserPresets.json
+CMakeCache.txt
+CMakeFiles/
+cmake-build-*/
+Testing/
+compile_commands.json
+
+# Binary and package output
+*.app/
+*.dmg
+*.pkg
+*.AppImage
+*.deb
+*.rpm
+*.msi
+*.msix
+*.exe
+*.dll
+*.dylib
+*.so
+*.pdb
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# IDE and editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS metadata
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.pfx
+*.key
+
+# Large local scientific data and generated results
+/data/
+/benchmarks/data/
+/results/
+*.dcd
+*.xtc
+*.trr
+*.tng
+*.nc
+*.h5
+*.h5md
+
+# Agent-private files live outside this public repository
+/AGENTS.md

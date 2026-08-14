@@ -1,0 +1,135 @@
+#include "molshredder/selection/named_selection.hpp"
+
+#include <algorithm>
+#include <cctype>
+#include <optional>
+#include <string>
+#include <utility>
+
+namespace molshredder::selection {
+namespace {
+
+operation::Error invalid(std::string message, std::string suggestion = {}) {
+  return operation::Error{operation::ErrorCode::invalid_selection,
+                          std::move(message), std::move(suggestion)};
+}
+
+bool valid_name(std::string_view name) {
+  if (name.empty() ||
+      (std::isalpha(static_cast<unsigned char>(name.front())) == 0 &&
+       name.front() != '_')) {
+    return false;
+  }
+  return std::all_of(name.begin() + 1, name.end(), [](char character) {
+    const auto byte = static_cast<unsigned char>(character);
+    return std::isalnum(byte) != 0 || character == '_' || character == '-' ||
+           character == '.';
+  });
+}
+
+}  // namespace
+
+std::optional<operation::Error> NamedSelections::set(
+    std::string name, Expression expression, bool dynamic,
+    const model::Topology& topology) {
+  if (!valid_name(name) || name == "all" || name == "none") {
+    return invalid(
+        "named selection name is invalid or reserved",
+        "start with a letter or underscore and use letters, digits, _, -, .");
+  }
+
+  const auto previous = entries_.find(name);
+  std::optional<Entry> saved;
+  if (previous != entries_.end()) saved = previous->second;
+  entries_.insert_or_assign(
+      name, Entry{std::move(expression), true, nullptr, 0U, {}});
+
+  std::vector<std::string> stack;
+  auto mask = evaluate_impl(name, topology, stack);
+  if (!mask.has_value()) {
+    if (saved.has_value()) {
+      entries_.insert_or_assign(name, std::move(saved.value()));
+    } else {
+      entries_.erase(name);
+    }
+    return mask.error();
+  }
+  auto& entry = entries_.at(name);
+  entry.dynamic = dynamic;
+  if (!dynamic) {
+    entry.static_topology = &topology;
+    entry.static_topology_version = topology.version();
+    entry.static_mask = std::move(mask.value());
+  }
+  return std::nullopt;
+}
+
+std::optional<operation::Error> NamedSelections::erase(std::string_view name) {
+  if (!entries_.contains(name)) {
+    return operation::Error{operation::ErrorCode::not_found,
+                            "named selection '" + std::string{name} +
+                                "' does not exist",
+                            {}};
+  }
+  for (const auto& [other_name, entry] : entries_) {
+    if (other_name != name && entry.expression.named_references().contains(name)) {
+      return invalid("named selection is referenced by '@" + other_name + "'",
+                     "replace or erase dependent selections first");
+    }
+  }
+  entries_.erase(entries_.find(name));
+  return std::nullopt;
+}
+
+operation::Result<Mask> NamedSelections::evaluate(
+    std::string_view name, const model::Topology& topology) const {
+  std::vector<std::string> stack;
+  return evaluate_impl(name, topology, stack);
+}
+
+operation::Result<Mask> NamedSelections::evaluate_impl(
+    std::string_view name, const model::Topology& topology,
+    std::vector<std::string>& stack) const {
+  const auto found = entries_.find(name);
+  if (found == entries_.end()) {
+    return operation::Result<Mask>::failure(operation::Error{
+        operation::ErrorCode::not_found,
+        "named selection '" + std::string{name} + "' does not exist", {}});
+  }
+  if (std::find(stack.begin(), stack.end(), name) != stack.end()) {
+    return operation::Result<Mask>::failure(
+        invalid("named selection cycle contains '@" + std::string{name} +
+                "'"));
+  }
+  const auto& entry = found->second;
+  if (!entry.dynamic) {
+    if (entry.static_topology != &topology ||
+        entry.static_topology_version != topology.version() ||
+        !mask_is_valid(entry.static_mask, topology.atom_count())) {
+      return operation::Result<Mask>::failure(invalid(
+          "static named selection belongs to a different topology snapshot",
+          "redefine it for the current topology or use a dynamic selection"));
+    }
+    return operation::Result<Mask>::success(entry.static_mask);
+  }
+
+  stack.emplace_back(name);
+  const auto resolved = selection::evaluate(
+      entry.expression, topology,
+      [&](std::string_view nested) {
+        return evaluate_impl(nested, topology, stack);
+      });
+  stack.pop_back();
+  return resolved;
+}
+
+std::vector<NamedSelectionInfo> NamedSelections::list() const {
+  std::vector<NamedSelectionInfo> result;
+  result.reserve(entries_.size());
+  for (const auto& [name, entry] : entries_) {
+    result.push_back({name, entry.expression.source(), entry.dynamic});
+  }
+  return result;
+}
+
+}  // namespace molshredder::selection

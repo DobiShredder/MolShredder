@@ -1,0 +1,6 @@
+invoke "load" --file-format "pdb" --path "model.pdb"
+invoke "select" --expression "polymer.protein" --name "protein" --update "false"
+invoke "show" --representation "sticks" --selection "all"
+invoke "analyze center" --mode "centroid" --precision "6" --selection "all" --unit "angstrom"
+invoke "analyze center" --mode "com" --precision "4" --selection "chain A" --unit "angstrom"
+invoke "measure distance" --from "id 1" --mode "atom" --pbc "raw" --precision "6" --to "id 2" --unit "angstrom"

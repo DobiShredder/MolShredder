@@ -1,0 +1,68 @@
+data_MS02
+_entry.id MS02
+_struct.title
+;Synthetic structure
+with multiline metadata
+;
+_audit.creation_method 'MolShredder # synthetic fixture'
+_cell.length_a 10.0
+_cell.length_b 11.0
+_cell.length_c 12.0
+_cell.angle_alpha 80.0
+_cell.angle_beta 75.0
+_cell.angle_gamma 70.0
+_symmetry.space_group_name_H-M 'P 1'
+#
+loop_
+_atom_site.group_PDB
+_atom_site.id
+_atom_site.type_symbol
+_atom_site.label_atom_id
+_atom_site.label_alt_id
+_atom_site.label_comp_id
+_atom_site.label_asym_id
+_atom_site.label_entity_id
+_atom_site.label_seq_id
+_atom_site.pdbx_PDB_ins_code
+_atom_site.Cartn_x
+_atom_site.Cartn_y
+_atom_site.Cartn_z
+_atom_site.occupancy
+_atom_site.B_iso_or_equiv
+_atom_site.pdbx_formal_charge
+_atom_site.auth_seq_id
+_atom_site.auth_comp_id
+_atom_site.auth_asym_id
+_atom_site.auth_atom_id
+_atom_site.pdbx_PDB_model_num
+ATOM   1 N N  A GLY A 1 42 B 1.0 2.0 3.0 0.50 20.0 1 42 GLY X N  1
+ATOM   2 C CA A GLY A 1 42 B 2.0 3.0 4.0 1.00 21.0 ? 42 GLY X CA 1
+HETATM 3 O O  . HOH B 2 .  ? 5.0 6.0 7.0 .    .    ? 7  HOH Y O  1
+ATOM   4 N N  A GLY A 1 42 B 1.5 2.5 3.5 0.60 22.0 1 42 GLY X N  2
+ATOM   5 C CA A GLY A 1 42 B 2.5 3.5 4.5 1.00 23.0 ? 42 GLY X CA 2
+#
+loop_
+_struct_conn.id
+_struct_conn.conn_type_id
+_struct_conn.ptnr1_label_asym_id
+_struct_conn.ptnr1_label_seq_id
+_struct_conn.ptnr1_label_comp_id
+_struct_conn.ptnr1_label_atom_id
+_struct_conn.pdbx_ptnr1_label_alt_id
+_struct_conn.ptnr2_label_asym_id
+_struct_conn.ptnr2_label_seq_id
+_struct_conn.ptnr2_label_comp_id
+_struct_conn.ptnr2_label_atom_id
+_struct_conn.pdbx_ptnr2_label_alt_id
+_struct_conn.pdbx_value_order
+_struct_conn.ptnr1_auth_asym_id
+_struct_conn.ptnr1_auth_seq_id
+_struct_conn.ptnr1_auth_comp_id
+_struct_conn.ptnr1_auth_atom_id
+_struct_conn.ptnr2_auth_asym_id
+_struct_conn.ptnr2_auth_seq_id
+_struct_conn.ptnr2_auth_comp_id
+_struct_conn.ptnr2_auth_atom_id
+c1 covale A 42 GLY N  A A 42 GLY CA A sing ? ?  ?   ?  ? ? ?   ?
+c2 covale ? ?  ?   ?  A ? ?  ?   ?  . sing X 42 GLY CA Y 7 HOH O
+#

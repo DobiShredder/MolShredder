@@ -1,0 +1,4 @@
+invoke "analyze center" --mode "centroid" --selection "protein"
+invoke "analyze center" --selection "all"
+invoke "analyze center" --mode "com" --selection "chain A"
+invoke "analyze center" --mode "centroid" --selection "chain A"

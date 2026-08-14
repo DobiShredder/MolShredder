@@ -1,0 +1,9 @@
+name: molshredder
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - cmake>=3.25,<5
+  - ninja>=1.11
+  - qt6-main=6.8.3
+  - spirv-tools

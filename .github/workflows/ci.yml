@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  build-test-install:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, ubuntu-latest, windows-latest]
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Configure
+        run: >-
+          cmake -S . -B build/ci
+          -DBUILD_TESTING=ON
+          -DMOLSHREDDER_WARNINGS_AS_ERRORS=ON
+          -DCMAKE_BUILD_TYPE=Debug
+
+      - name: Build
+        run: cmake --build build/ci --config Debug --parallel
+
+      - name: Test
+        run: ctest --test-dir build/ci -C Debug --output-on-failure
+
+      - name: Install staging
+        run: cmake --install build/ci --config Debug --prefix build/stage
+
+      - name: Smoke installed executable (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          ./build/stage/bin/molshredder --version
+          ./build/stage/bin/molshredder system version --format json
+
+      - name: Smoke installed Python module (Unix)
+        if: runner.os != 'Windows'
+        run: >-
+          PYTHONPATH=build/stage/lib/molshredder/python
+          python -c "import molshredder; assert molshredder.invoke('version')['status'] == 'ok'"
+
+      - name: Smoke installed executable (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          .\build\stage\bin\molshredder.exe --version
+          .\build\stage\bin\molshredder.exe system version --format json
+
+      - name: Smoke installed Python module (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:PYTHONPATH = "build/stage/lib/molshredder/python"
+          python -c "import molshredder; assert molshredder.invoke('version')['status'] == 'ok'"

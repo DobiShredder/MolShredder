@@ -1,0 +1,1 @@
+{"schema_version":1,"status":"ok","command":"invoke \"analyze center\" --selection \"chain A\"","summary":"center \"calculated\"\nready","data":{"active":true,"count":2,"label":"chain\tA","metadata":{"unit":"angstrom"},"position":[1.25,-2,null]}}
