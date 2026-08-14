@@ -74,6 +74,8 @@ mode/direction에서 앞으로 방문할 frame을 simulation하고 중복을 제
 Application `traj load`는 indexed source를 `FrameCache`로 감싸 active `MolecularSystem` 및 scene node에
 설치한다. `traj frame/play/range/tick`은 timeline/clock copy에서 seek/advance하고 도착 frame decode와
 representation rebuild가 성공한 뒤에만 state를 commit한다. `traj tick --elapsed-ms`가 UI clock
-adapter의 portable core boundary이며 실제 Qt timer와 async completion scheduling은 아직 없다.
+adapter의 portable core boundary다. Desktop precise Qt timer가 이 boundary에 실제 elapsed time을
+전달하며 frame transition이 있을 때만 render packet을 교체한다. Cache-miss decode/rebuild의 background
+completion scheduling은 아직 없다.
 사용자-facing 계약은
 [Trajectory commands](TRAJECTORY_COMMANDS.md)에 둔다.

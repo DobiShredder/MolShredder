@@ -1,8 +1,8 @@
 #include "structure_reader_internal.hpp"
 
 #include <algorithm>
-#include <charconv>
 #include <cctype>
+#include <charconv>
 #include <cstdint>
 #include <map>
 #include <optional>
@@ -29,17 +29,12 @@ using model::TopologyBuilder;
 using model::Vec3d;
 using operation::Result;
 
-struct Token {
-  std::string text;
-  std::size_t line{};
-  bool quoted{};
-};
+using Token = CifToken;
 
 std::string lowercase(std::string_view value) {
   std::string result{value};
   std::transform(result.begin(), result.end(), result.begin(), [](char letter) {
-    return static_cast<char>(
-        std::tolower(static_cast<unsigned char>(letter)));
+    return static_cast<char>(std::tolower(static_cast<unsigned char>(letter)));
   });
   return result;
 }
@@ -48,7 +43,7 @@ bool is_space(char value) {
   return std::isspace(static_cast<unsigned char>(value)) != 0;
 }
 
-bool is_control(const Token& token) {
+bool is_control(const Token &token) {
   if (token.quoted) {
     return false;
   }
@@ -147,15 +142,16 @@ Result<std::vector<Token>> tokenize(std::string_view content,
           break;
         }
         if (character == '\n' || character == '\r') {
-          return Result<std::vector<Token>>::failure(parse_error(
-              source, token_line, "quoted mmCIF value crosses a line boundary"));
+          return Result<std::vector<Token>>::failure(
+              parse_error(source, token_line,
+                          "quoted mmCIF value crosses a line boundary"));
         }
         value.push_back(character);
         advance(character);
       }
       if (!closed) {
-        return Result<std::vector<Token>>::failure(parse_error(
-            source, token_line, "unterminated quoted mmCIF value"));
+        return Result<std::vector<Token>>::failure(
+            parse_error(source, token_line, "unterminated quoted mmCIF value"));
       }
       tokens.push_back(Token{std::move(value), token_line, true});
       continue;
@@ -171,23 +167,10 @@ Result<std::vector<Token>> tokenize(std::string_view content,
   return Result<std::vector<Token>>::success(std::move(tokens));
 }
 
-struct CifLoop {
-  std::vector<std::string> columns;
-  std::vector<Token> values;
-  std::size_t line{};
-};
-
-struct CifBlock {
-  std::string name;
-  std::size_t line{};
-  std::map<std::string, Token, std::less<>> scalars;
-  std::vector<CifLoop> loops;
-};
-
-Result<std::vector<CifBlock>> parse_blocks(const std::vector<Token>& tokens,
+Result<std::vector<CifBlock>> parse_blocks(const std::vector<Token> &tokens,
                                            std::string_view source) {
   std::vector<CifBlock> blocks;
-  CifBlock* block = nullptr;
+  CifBlock *block = nullptr;
   std::size_t index = 0;
   while (index < tokens.size()) {
     const auto keyword = lowercase(tokens[index].text);
@@ -203,9 +186,9 @@ Result<std::vector<CifBlock>> parse_blocks(const std::vector<Token>& tokens,
       continue;
     }
     if (block == nullptr) {
-      return Result<std::vector<CifBlock>>::failure(parse_error(
-          source, tokens[index].line,
-          "mmCIF content appears before the first data_ block"));
+      return Result<std::vector<CifBlock>>::failure(
+          parse_error(source, tokens[index].line,
+                      "mmCIF content appears before the first data_ block"));
     }
     if (!tokens[index].quoted && keyword == "loop_") {
       CifLoop loop;
@@ -224,7 +207,7 @@ Result<std::vector<CifBlock>> parse_blocks(const std::vector<Token>& tokens,
       const auto category = loop.columns.front().substr(0, category_end);
       if (category_end == std::string::npos ||
           std::any_of(loop.columns.begin(), loop.columns.end(),
-                      [&category](const std::string& column) {
+                      [&category](const std::string &column) {
                         return !column.starts_with(category + ".");
                       })) {
         return Result<std::vector<CifBlock>>::failure(parse_error(
@@ -241,9 +224,10 @@ Result<std::vector<CifBlock>> parse_blocks(const std::vector<Token>& tokens,
       }
       if (loop.values.empty() ||
           loop.values.size() % loop.columns.size() != 0) {
-        return Result<std::vector<CifBlock>>::failure(parse_error(
-            source, loop.line,
-            "mmCIF loop value count is not a positive multiple of its columns"));
+        return Result<std::vector<CifBlock>>::failure(
+            parse_error(source, loop.line,
+                        "mmCIF loop value count is not a positive multiple of "
+                        "its columns"));
       }
       block->loops.push_back(std::move(loop));
       continue;
@@ -286,44 +270,42 @@ Result<std::vector<CifBlock>> parse_blocks(const std::vector<Token>& tokens,
   return Result<std::vector<CifBlock>>::success(std::move(blocks));
 }
 
-bool is_missing(std::string_view value) {
-  return value == "." || value == "?";
-}
+bool is_missing(std::string_view value) { return value == "." || value == "?"; }
 
-std::optional<std::string> present(const Token* token) {
+std::optional<std::string> present(const Token *token) {
   if (token == nullptr || is_missing(token->text)) {
     return std::nullopt;
   }
   return token->text;
 }
 
-const Token* scalar(const CifBlock& block, std::string_view name) {
+const Token *scalar(const CifBlock &block, std::string_view name) {
   const auto found = block.scalars.find(name);
   return found == block.scalars.end() ? nullptr : &found->second;
 }
 
 template <typename Value>
-Result<Value> parse_number(const Token& token, std::string_view source,
+Result<Value> parse_number(const Token &token, std::string_view source,
                            std::string_view field_name) {
   Value value{};
-  const auto result = std::from_chars(token.text.data(),
-                                      token.text.data() + token.text.size(), value);
+  const auto result = std::from_chars(
+      token.text.data(), token.text.data() + token.text.size(), value);
   if (result.ec != std::errc{} ||
       result.ptr != token.text.data() + token.text.size()) {
-    return Result<Value>::failure(parse_error(
-        source, token.line,
-        "invalid numeric mmCIF field " + std::string{field_name} + ": " +
-            token.text));
+    return Result<Value>::failure(parse_error(source, token.line,
+                                              "invalid numeric mmCIF field " +
+                                                  std::string{field_name} +
+                                                  ": " + token.text));
   }
   return Result<Value>::success(value);
 }
 
 struct RowView {
-  const CifLoop& loop;
+  const CifLoop &loop;
   std::size_t row{};
-  const std::map<std::string, std::size_t, std::less<>>& columns;
+  const std::map<std::string, std::size_t, std::less<>> &columns;
 
-  const Token* get(std::string_view name) const {
+  const Token *get(std::string_view name) const {
     const auto found = columns.find(name);
     if (found == columns.end()) {
       return nullptr;
@@ -332,9 +314,9 @@ struct RowView {
   }
 };
 
-const Token* choose(const RowView& row, std::string_view preferred,
+const Token *choose(const RowView &row, std::string_view preferred,
                     std::string_view fallback) {
-  const auto* first = row.get(preferred);
+  const auto *first = row.get(preferred);
   return present(first).has_value() ? first : row.get(fallback);
 }
 
@@ -345,7 +327,7 @@ struct AtomIdentity {
   std::string atom;
   std::string alternate_location;
 
-  friend auto operator<=>(const AtomIdentity&, const AtomIdentity&) = default;
+  friend auto operator<=>(const AtomIdentity &, const AtomIdentity &) = default;
 };
 
 struct ParsedAtom {
@@ -371,8 +353,8 @@ struct ParsedAtom {
   std::size_t line{};
 };
 
-std::optional<AtomIdentity> identity_from_row(const RowView& row,
-                                              std::string_view category_prefix) {
+std::optional<AtomIdentity>
+identity_from_row(const RowView &row, std::string_view category_prefix) {
   const auto value = [&](std::string_view suffix) {
     return present(row.get(std::string{category_prefix} + std::string{suffix}));
   };
@@ -383,8 +365,7 @@ std::optional<AtomIdentity> identity_from_row(const RowView& row,
   if (label_asym.has_value() && label_sequence.has_value() &&
       label_component.has_value() && label_atom.has_value()) {
     return AtomIdentity{*label_asym, *label_sequence, *label_component,
-                        *label_atom,
-                        value("label_alt_id").value_or("")};
+                        *label_atom, value("label_alt_id").value_or("")};
   }
   const auto auth_asym = value("auth_asym_id");
   const auto auth_sequence = value("auth_seq_id");
@@ -398,22 +379,23 @@ std::optional<AtomIdentity> identity_from_row(const RowView& row,
   return std::nullopt;
 }
 
-Result<ParsedAtom> parse_atom_row(const RowView& row, std::string_view source) {
-  const auto* x_token = row.get("_atom_site.cartn_x");
-  const auto* y_token = row.get("_atom_site.cartn_y");
-  const auto* z_token = row.get("_atom_site.cartn_z");
-  const auto* element_token = row.get("_atom_site.type_symbol");
-  const auto* atom_token =
+Result<ParsedAtom> parse_atom_row(const RowView &row, std::string_view source) {
+  const auto *x_token = row.get("_atom_site.cartn_x");
+  const auto *y_token = row.get("_atom_site.cartn_y");
+  const auto *z_token = row.get("_atom_site.cartn_z");
+  const auto *element_token = row.get("_atom_site.type_symbol");
+  const auto *atom_token =
       choose(row, "_atom_site.auth_atom_id", "_atom_site.label_atom_id");
-  const auto* residue_token =
+  const auto *residue_token =
       choose(row, "_atom_site.auth_comp_id", "_atom_site.label_comp_id");
-  const auto* chain_token =
+  const auto *chain_token =
       choose(row, "_atom_site.auth_asym_id", "_atom_site.label_asym_id");
-  const auto* sequence_token =
+  const auto *sequence_token =
       choose(row, "_atom_site.auth_seq_id", "_atom_site.label_seq_id");
-  const auto required = {x_token, y_token, z_token, element_token, atom_token,
-                         residue_token, chain_token, sequence_token};
-  if (std::any_of(required.begin(), required.end(), [](const Token* token) {
+  const auto required = {x_token,       y_token,       z_token,
+                         element_token, atom_token,    residue_token,
+                         chain_token,   sequence_token};
+  if (std::any_of(required.begin(), required.end(), [](const Token *token) {
         return !present(token).has_value();
       })) {
     const auto line = row.loop.values[row.row * row.loop.columns.size()].line;
@@ -441,9 +423,9 @@ Result<ParsedAtom> parse_atom_row(const RowView& row, std::string_view source) {
   }
   const auto element = atomic_number(element_token->text);
   if (!element.has_value() || element.value() == 0U) {
-    return Result<ParsedAtom>::failure(parse_error(
-        source, element_token->line,
-        "unknown mmCIF element symbol: " + element_token->text));
+    return Result<ParsedAtom>::failure(
+        parse_error(source, element_token->line,
+                    "unknown mmCIF element symbol: " + element_token->text));
   }
 
   ParsedAtom atom;
@@ -453,17 +435,16 @@ Result<ParsedAtom> parse_atom_row(const RowView& row, std::string_view source) {
   atom.residue_number = residue_number.value();
   atom.label_asym_id =
       present(row.get("_atom_site.label_asym_id")).value_or("");
-  atom.label_seq_id =
-      present(row.get("_atom_site.label_seq_id")).value_or("");
+  atom.label_seq_id = present(row.get("_atom_site.label_seq_id")).value_or("");
   atom.label_entity_id =
       present(row.get("_atom_site.label_entity_id")).value_or("");
   atom.insertion_code =
       present(row.get("_atom_site.pdbx_pdb_ins_code")).value_or("");
   const auto identity = identity_from_row(row, "_atom_site.");
   if (!identity.has_value()) {
-    return Result<ParsedAtom>::failure(parse_error(
-        source, x_token->line,
-        "atom_site row lacks a complete label or author identity"));
+    return Result<ParsedAtom>::failure(
+        parse_error(source, x_token->line,
+                    "atom_site row lacks a complete label or author identity"));
   }
   atom.identity = *identity;
   const auto auth_asym = present(row.get("_atom_site.auth_asym_id"));
@@ -472,22 +453,22 @@ Result<ParsedAtom> parse_atom_row(const RowView& row, std::string_view source) {
   const auto auth_atom = present(row.get("_atom_site.auth_atom_id"));
   if (auth_asym.has_value() && auth_sequence.has_value() &&
       auth_component.has_value() && auth_atom.has_value()) {
-    atom.author_identity = AtomIdentity{
-        *auth_asym, *auth_sequence, *auth_component, *auth_atom,
-        present(row.get("_atom_site.label_alt_id")).value_or("")};
+    atom.author_identity =
+        AtomIdentity{*auth_asym, *auth_sequence, *auth_component, *auth_atom,
+                     present(row.get("_atom_site.label_alt_id")).value_or("")};
   }
   atom.source_id = present(row.get("_atom_site.id")).value_or("");
   atom.atomic_number = element.value();
   atom.position = Vec3d{x.value(), y.value(), z.value()};
-  atom.hetero = lowercase(
-                    present(row.get("_atom_site.group_pdb")).value_or("ATOM")) ==
-                "hetatm";
+  atom.hetero =
+      lowercase(present(row.get("_atom_site.group_pdb")).value_or("ATOM")) ==
+      "hetatm";
   atom.line = x_token->line;
 
   if (const auto charge = present(row.get("_atom_site.pdbx_formal_charge"));
       charge.has_value()) {
-    Token charge_token{*charge,
-                       row.get("_atom_site.pdbx_formal_charge")->line, false};
+    Token charge_token{*charge, row.get("_atom_site.pdbx_formal_charge")->line,
+                       false};
     const auto parsed = parse_number<std::int32_t>(
         charge_token, source, "_atom_site.pdbx_formal_charge");
     if (!parsed.has_value()) {
@@ -496,25 +477,25 @@ Result<ParsedAtom> parse_atom_row(const RowView& row, std::string_view source) {
     atom.formal_charge = parsed.value();
     atom.formal_charge_present = true;
   }
-  if (const auto* token = row.get("_atom_site.occupancy");
+  if (const auto *token = row.get("_atom_site.occupancy");
       present(token).has_value()) {
-    const auto parsed = parse_number<double>(*token, source,
-                                             "_atom_site.occupancy");
+    const auto parsed =
+        parse_number<double>(*token, source, "_atom_site.occupancy");
     if (!parsed.has_value()) {
       return Result<ParsedAtom>::failure(parsed.error());
     }
     atom.occupancy = parsed.value();
   }
-  if (const auto* token = row.get("_atom_site.b_iso_or_equiv");
+  if (const auto *token = row.get("_atom_site.b_iso_or_equiv");
       present(token).has_value()) {
-    const auto parsed = parse_number<double>(*token, source,
-                                             "_atom_site.B_iso_or_equiv");
+    const auto parsed =
+        parse_number<double>(*token, source, "_atom_site.B_iso_or_equiv");
     if (!parsed.has_value()) {
       return Result<ParsedAtom>::failure(parsed.error());
     }
     atom.b_factor = parsed.value();
   }
-  if (const auto* token = row.get("_atom_site.pdbx_pdb_model_num");
+  if (const auto *token = row.get("_atom_site.pdbx_pdb_model_num");
       present(token).has_value()) {
     const auto parsed = parse_number<std::uint64_t>(
         *token, source, "_atom_site.pdbx_PDB_model_num");
@@ -526,19 +507,20 @@ Result<ParsedAtom> parse_atom_row(const RowView& row, std::string_view source) {
   return Result<ParsedAtom>::success(std::move(atom));
 }
 
-Result<std::optional<model::UnitCell>> block_unit_cell(
-    const CifBlock& block, std::string_view source) {
+Result<std::optional<model::UnitCell>>
+block_unit_cell(const CifBlock &block, std::string_view source) {
   const std::vector<std::string_view> names{
-      "_cell.length_a", "_cell.length_b", "_cell.length_c",
+      "_cell.length_a",    "_cell.length_b",   "_cell.length_c",
       "_cell.angle_alpha", "_cell.angle_beta", "_cell.angle_gamma"};
-  std::vector<const Token*> values;
+  std::vector<const Token *> values;
   values.reserve(names.size());
   for (const auto name : names) {
     values.push_back(scalar(block, name));
   }
-  const auto present_count = std::count_if(
-      values.begin(), values.end(),
-      [](const Token* token) { return present(token).has_value(); });
+  const auto present_count =
+      std::count_if(values.begin(), values.end(), [](const Token *token) {
+        return present(token).has_value();
+      });
   if (present_count == 0) {
     return Result<std::optional<model::UnitCell>>::success(std::nullopt);
   }
@@ -550,27 +532,31 @@ Result<std::optional<model::UnitCell>> block_unit_cell(
   std::vector<double> numbers;
   numbers.reserve(values.size());
   for (std::size_t index = 0; index < values.size(); ++index) {
-    const auto parsed = parse_number<double>(*values[index], source, names[index]);
+    const auto parsed =
+        parse_number<double>(*values[index], source, names[index]);
     if (!parsed.has_value()) {
       return Result<std::optional<model::UnitCell>>::failure(parsed.error());
     }
     numbers.push_back(parsed.value());
   }
-  const auto cell = make_unit_cell(numbers[0], numbers[1], numbers[2],
-                                   numbers[3], numbers[4], numbers[5], source,
-                                   values.front()->line);
+  const auto cell =
+      make_unit_cell(numbers[0], numbers[1], numbers[2], numbers[3], numbers[4],
+                     numbers[5], source, values.front()->line);
   if (!cell.has_value()) {
     return Result<std::optional<model::UnitCell>>::failure(cell.error());
   }
   return Result<std::optional<model::UnitCell>>::success(cell.value());
 }
 
-Result<StructureData> build_structure(const CifBlock& block,
-                                      std::string_view source) {
-  const CifLoop* atom_loop = nullptr;
-  std::vector<const CifLoop*> connection_loops;
-  for (const auto& loop : block.loops) {
-    if (!loop.columns.empty() && loop.columns.front().starts_with("_atom_site.")) {
+Result<StructureData> build_structure(const CifBlock &block,
+                                      std::string_view source,
+                                      StructureFormat format,
+                                      std::string_view syntax) {
+  const CifLoop *atom_loop = nullptr;
+  std::vector<const CifLoop *> connection_loops;
+  for (const auto &loop : block.loops) {
+    if (!loop.columns.empty() &&
+        loop.columns.front().starts_with("_atom_site.")) {
       if (atom_loop != nullptr) {
         return Result<StructureData>::failure(parse_error(
             source, loop.line, "multiple atom_site loops in one data block"));
@@ -606,15 +592,15 @@ Result<StructureData> build_structure(const CifBlock& block,
   }
 
   std::vector<std::uint64_t> model_order;
-  std::map<std::uint64_t, std::vector<const ParsedAtom*>> models;
-  for (const auto& atom : atoms) {
+  std::map<std::uint64_t, std::vector<const ParsedAtom *>> models;
+  for (const auto &atom : atoms) {
     if (!models.contains(atom.model_number)) {
       model_order.push_back(atom.model_number);
     }
     models[atom.model_number].push_back(&atom);
   }
   const auto first_model_number = model_order.front();
-  const auto& first_model = models.at(first_model_number);
+  const auto &first_model = models.at(first_model_number);
 
   TopologyBuilder builder;
   std::map<std::tuple<std::string, std::int64_t, std::string, std::string,
@@ -629,11 +615,10 @@ Result<StructureData> build_structure(const CifBlock& block,
   BooleanColumn hetero;
   BooleanColumn formal_charge_present;
 
-  for (const auto* atom : first_model) {
+  for (const auto *atom : first_model) {
     const auto residue_key =
-        std::tuple{atom->chain_id, atom->residue_number,
-                   atom->insertion_code, atom->residue_name,
-                   atom->label_asym_id};
+        std::tuple{atom->chain_id, atom->residue_number, atom->insertion_code,
+                   atom->residue_name, atom->label_asym_id};
     auto residue = residues.find(residue_key);
     if (residue == residues.end()) {
       const auto added = builder.add_residue(ResidueRecord{
@@ -653,8 +638,8 @@ Result<StructureData> build_structure(const CifBlock& block,
     std::optional<std::int64_t> numeric_id;
     if (!atom->source_id.empty()) {
       Token source_token{atom->source_id, atom->line, false};
-      const auto parsed = parse_number<std::int64_t>(
-          source_token, source, "_atom_site.id");
+      const auto parsed =
+          parse_number<std::int64_t>(source_token, source, "_atom_site.id");
       if (parsed.has_value()) {
         numeric_id = parsed.value();
       }
@@ -675,11 +660,12 @@ Result<StructureData> build_structure(const CifBlock& block,
     label_seq_ids.push_back(atom->label_seq_id);
     label_entity_ids.push_back(atom->label_entity_id);
     hetero.values.push_back(atom->hetero ? 1U : 0U);
-    formal_charge_present.values.push_back(atom->formal_charge_present ? 1U : 0U);
+    formal_charge_present.values.push_back(atom->formal_charge_present ? 1U
+                                                                       : 0U);
   }
 
   std::set<std::pair<std::size_t, std::size_t>> unique_bonds;
-  for (const auto* loop : connection_loops) {
+  for (const auto *loop : connection_loops) {
     std::map<std::string, std::size_t, std::less<>> connection_columns;
     for (std::size_t index = 0; index < loop->columns.size(); ++index) {
       connection_columns.emplace(loop->columns[index], index);
@@ -712,15 +698,14 @@ Result<StructureData> build_structure(const CifBlock& block,
             source, loop->values[row_index * loop->columns.size()].line,
             "struct_conn references an atom absent from model 1"));
       }
-      const auto endpoints = std::minmax(first_atom->second.value,
-                                         second_atom->second.value);
+      const auto endpoints =
+          std::minmax(first_atom->second.value, second_atom->second.value);
       if (endpoints.first == endpoints.second ||
           !unique_bonds.emplace(endpoints.first, endpoints.second).second) {
         continue;
       }
       auto order = model::BondOrder::unknown;
-      if (const auto value =
-              present(row.get("_struct_conn.pdbx_value_order"));
+      if (const auto value = present(row.get("_struct_conn.pdbx_value_order"));
           value.has_value()) {
         const auto normalized = lowercase(*value);
         if (normalized == "sing") {
@@ -741,33 +726,32 @@ Result<StructureData> build_structure(const CifBlock& block,
     }
   }
 
-  const auto add_property = [&](std::string name, model::AtomPropertyColumn values,
-                                std::string source_name)
-      -> std::optional<operation::Error> {
+  const auto add_property =
+      [&](std::string name, model::AtomPropertyColumn values,
+          std::string source_name) -> std::optional<operation::Error> {
     return builder.add_property(
         std::move(name), std::move(values),
         PropertyMetadata{std::nullopt, std::move(source_name), {}});
   };
-  for (auto property : {
-           std::tuple{"mmcif.atom_site_id",
-                      model::AtomPropertyColumn{std::move(atom_site_ids)},
-                      "_atom_site.id"},
-           std::tuple{"mmcif.label_asym_id",
-                      model::AtomPropertyColumn{std::move(label_asym_ids)},
-                      "_atom_site.label_asym_id"},
-           std::tuple{"mmcif.label_seq_id",
-                      model::AtomPropertyColumn{std::move(label_seq_ids)},
-                      "_atom_site.label_seq_id"},
-           std::tuple{"mmcif.label_entity_id",
-                      model::AtomPropertyColumn{std::move(label_entity_ids)},
-                      "_atom_site.label_entity_id"},
-           std::tuple{"mmcif.is_hetero",
-                      model::AtomPropertyColumn{std::move(hetero)},
-                      "_atom_site.group_PDB"},
-           std::tuple{"formal_charge_present",
-                      model::AtomPropertyColumn{
-                          std::move(formal_charge_present)},
-                      "_atom_site.pdbx_formal_charge"}}) {
+  for (auto property :
+       {std::tuple{"mmcif.atom_site_id",
+                   model::AtomPropertyColumn{std::move(atom_site_ids)},
+                   "_atom_site.id"},
+        std::tuple{"mmcif.label_asym_id",
+                   model::AtomPropertyColumn{std::move(label_asym_ids)},
+                   "_atom_site.label_asym_id"},
+        std::tuple{"mmcif.label_seq_id",
+                   model::AtomPropertyColumn{std::move(label_seq_ids)},
+                   "_atom_site.label_seq_id"},
+        std::tuple{"mmcif.label_entity_id",
+                   model::AtomPropertyColumn{std::move(label_entity_ids)},
+                   "_atom_site.label_entity_id"},
+        std::tuple{"mmcif.is_hetero",
+                   model::AtomPropertyColumn{std::move(hetero)},
+                   "_atom_site.group_PDB"},
+        std::tuple{"formal_charge_present",
+                   model::AtomPropertyColumn{std::move(formal_charge_present)},
+                   "_atom_site.pdbx_formal_charge"}}) {
     if (const auto error = add_property(std::get<0>(property),
                                         std::move(std::get<1>(property)),
                                         std::get<2>(property));
@@ -776,8 +760,8 @@ Result<StructureData> build_structure(const CifBlock& block,
     }
   }
 
-  builder.set_source_metadata("format", "mmcif");
-  builder.set_source_metadata("syntax", "CIF 1.1");
+  builder.set_source_metadata("format", std::string{to_string(format)});
+  builder.set_source_metadata("syntax", std::string{syntax});
   builder.set_source_metadata("data_block", block.name);
   builder.set_source_metadata("source_name", std::string{source});
   const auto topology = builder.build();
@@ -801,7 +785,7 @@ Result<StructureData> build_structure(const CifBlock& block,
     std::vector<std::uint8_t> b_factor_present(topology.value()->atom_count(),
                                                0U);
     std::set<std::size_t> seen;
-    for (const auto* atom : models.at(model_number)) {
+    for (const auto *atom : models.at(model_number)) {
       const auto found = identity_to_index.find(atom->identity);
       if (found == identity_to_index.end()) {
         return Result<StructureData>::failure(parse_error(
@@ -830,9 +814,9 @@ Result<StructureData> build_structure(const CifBlock& block,
     metadata.coordinate_unit = operation::LengthUnit::angstrom;
     metadata.atom_properties.emplace(
         "occupancy",
-        model::AtomProperty{std::move(occupancy),
-                            PropertyMetadata{std::nullopt,
-                                             "_atom_site.occupancy", {}}});
+        model::AtomProperty{
+            std::move(occupancy),
+            PropertyMetadata{std::nullopt, "_atom_site.occupancy", {}}});
     metadata.atom_properties.emplace(
         "occupancy_present",
         model::AtomProperty{
@@ -866,16 +850,36 @@ Result<StructureData> build_structure(const CifBlock& block,
   structure.name = present(scalar(block, "_entry.id")).value_or(block.name);
   structure.topology = topology.value();
   structure.coordinates = coordinates.value();
-  structure.metadata.emplace("format", "mmcif");
-  structure.metadata.emplace("syntax", "CIF 1.1");
+  structure.metadata.emplace("format", to_string(format));
+  structure.metadata.emplace("syntax", syntax);
   structure.metadata.emplace("data_block", block.name);
-  for (const auto& [name, value] : block.scalars) {
+  for (const auto &[name, value] : block.scalars) {
     structure.metadata.emplace(name, value.text);
   }
   return Result<StructureData>::success(std::move(structure));
 }
 
-}  // namespace
+} // namespace
+
+Result<StructureDocument>
+build_cif_document(const std::vector<CifBlock> &blocks, std::string source_name,
+                   StructureFormat format, std::string syntax) {
+  if (blocks.empty()) {
+    return Result<StructureDocument>::failure(
+        parse_error(source_name, 1, "CIF document contains no data block"));
+  }
+  StructureDocument document;
+  document.format = format;
+  document.source_name = source_name;
+  for (const auto &block : blocks) {
+    const auto structure = build_structure(block, source_name, format, syntax);
+    if (!structure.has_value()) {
+      return Result<StructureDocument>::failure(structure.error());
+    }
+    document.structures.push_back(structure.value());
+  }
+  return Result<StructureDocument>::success(std::move(document));
+}
 
 Result<StructureDocument> read_mmcif(std::string_view content,
                                      std::string source_name) {
@@ -887,17 +891,8 @@ Result<StructureDocument> read_mmcif(std::string_view content,
   if (!blocks.has_value()) {
     return Result<StructureDocument>::failure(blocks.error());
   }
-  StructureDocument document;
-  document.format = StructureFormat::mmcif;
-  document.source_name = source_name;
-  for (const auto& block : blocks.value()) {
-    const auto structure = build_structure(block, source_name);
-    if (!structure.has_value()) {
-      return Result<StructureDocument>::failure(structure.error());
-    }
-    document.structures.push_back(structure.value());
-  }
-  return Result<StructureDocument>::success(std::move(document));
+  return build_cif_document(blocks.value(), std::move(source_name),
+                            StructureFormat::mmcif, "CIF 1.1");
 }
 
-}  // namespace molshredder::io::detail
+} // namespace molshredder::io::detail

@@ -12,7 +12,10 @@ pin한다. 개발 도구는 `environment.yml`에 기록한다.
 | Ninja 1.11 이상 | development/build | 공통 local/CI build executor |
 | CLI11 2.6.2 | build/static headers | Native CLI parsing과 subcommand/help adapter |
 | pybind11 3.1.0 | build/header-only | CPython extension module 생성 |
+| msgpack-cxx 8.0.0 | build/header-only | BinaryCIF MessagePack container decode와 synthetic fixture encode |
 | Qt 6.8.3 | optional desktop/runtime | Qt Quick UI와 QRhi GPU viewport |
+| netCDF-C 4.9 이상, 5 미만 | core/runtime | Amber NetCDF classic/64-bit/NetCDF-4 trajectory I/O |
+| HDF5 1.14 이상, 3 미만 | core/runtime | H5MD 1.x hierarchy, metadata와 random-access dataset I/O |
 | SPIRV-Tools | desktop build tool | multi-backend `.qsb` shader optimization |
 | Native threading runtime | system/runtime | async trajectory prefetch와 synchronization |
 | xdrfile/Chemfiles-derived code | compiled source | XTC compressed-coordinate decoding |
@@ -75,6 +78,79 @@ packaged, not the `spirv-opt` executable. Exact build-tool lock과 its Apache-2.
 Python extension은 현재 wheel이 아니라 CMake install tree의
 `lib/molshredder/python/`에 배치한다. Python minor-version ABI와 runtime bundling 정책은 installer
 단계에서 wheel 또는 embedded-runtime prototype을 비교한 뒤 확정한다.
+
+## msgpack-cxx provenance
+
+- BinaryCIF normative specification: `molstar/BinaryCIF` commit
+  `ce75b24289746edc28dcef9a703afca2c7e74d81`
+- Independent behavior cross-check: `molstar/molstar` commit
+  `5bd9cb1f3075347db16aa0a46f771907e5889a29`; no Mol* source was copied or vendored
+- Version: 8.0.0, tag `cpp-8.0.0`
+- Source: `https://github.com/msgpack/msgpack-c/archive/refs/tags/cpp-8.0.0.tar.gz`
+- SHA-256: `f634fb7052da4478096f2a02dfb6d91174e5836b317afb006375249ccb086aa8`
+- License: BSL-1.0
+- Linkage: header-only private implementation dependency of the BinaryCIF reader; configured with
+  `MSGPACK_NO_BOOST` so no Boost runtime or header dependency enters MolShredder
+- Install boundary: the FetchContent subdirectory is `EXCLUDE_FROM_ALL`; Release staging contains no
+  msgpack header, CMake package or exported target because MolShredder public headers do not require it
+- Security boundary: MessagePack collection/string/bin/depth limits, exact single-root consumption and
+  BinaryCIF row/encoding expansion limits are enforced before topology construction
+- Distribution obligation: full Boost Software License 1.0 notice is retained in `THIRD_PARTY_NOTICES.md`
+
+## netCDF-C provenance
+
+- Development version verified: netCDF-C 4.10.0 from conda-forge
+- Version range: `libnetcdf>=4.9,<5`; release/CI lock must pin an exact artifact
+- Source release: `https://github.com/Unidata/netcdf-c/releases/tag/v4.10.0`
+- License: BSD-3-Clause, official `v4.10.0/COPYRIGHT`
+- Linkage: dynamic through the imported `netCDF::netcdf` CMake target; core reader
+  calls the public C API
+- Format coverage: classic CDF-1, 64-bit-offset CDF-2, 64-bit-data CDF-5 and
+  NetCDF-4/HDF5 as enabled by the selected runtime build
+- Threading: all netCDF API access is serialized inside the native Amber reader;
+  no thread-safety guarantee from a particular distribution is exposed to callers
+- Distribution obligation: copyright, license conditions and disclaimer are
+  reproduced in `THIRD_PARTY_NOTICES.md`
+- Packaging gate: installer dependency collection must include and audit the exact
+  dynamically loaded netCDF-C, HDF5 and compression/runtime closure for each OS;
+  a development conda environment is not evidence of a self-contained installer
+- Development install behavior: CLI and Python module retain the active external
+  link directory through `INSTALL_RPATH_USE_LINK_PATH` on RPATH platforms so a
+  prefix installed inside the declared environment remains runnable. Release
+  installers must replace this environment-specific path with bundled, relative
+  runtime paths during the platform packaging/fixup stage.
+
+## HDF5 provenance
+
+- Development version verified: HDF5 2.1.0 from conda-forge
+- Version range: `hdf5>=1.14,<3`; release/CI lock must pin an exact artifact
+- Source release: `https://github.com/HDFGroup/hdf5/releases/tag/hdf5_2.1.0`
+- License: BSD-3-Clause plus the enhancement grant and retained laboratory notices in the official HDF5 license
+- Linkage: dynamic through the distribution's HDF5 CMake target; the native H5MD reader calls only the public C API
+- Access model: persistent read-only file/dataset handles and requested-frame hyperslabs; all HDF5 API access is
+  serialized because a distribution-specific thread-safety build is not exposed to callers
+- Trust boundary: external links and datasets backed by external or virtual storage are rejected; one selected local
+  particle group is treated as the authoritative trajectory source
+- Distribution obligation: the complete HDF5 copyright/license/laboratory notice is reproduced in
+  `THIRD_PARTY_NOTICES.md`
+- Packaging gate: installer dependency collection must include and audit the exact HDF5 library and compression/filter
+  runtime closure on macOS, Linux and Windows. Development RPATH behavior is not self-contained installer evidence.
+
+## OpenDX format reference
+
+- Normative behavior reference: APBS OpenDX scalar-data documentation
+- Implementation: independently authored C++ parser; no APBS/OpenDX library or source dependency
+- Runtime/build dependency: none
+- Supported contract: bounded ASCII regular rank-0 float/double scalar grid only
+- Distribution obligation: none beyond MolShredder's own license; the reference documentation is linked, not copied
+
+## MRC2014/CCP4 format reference
+
+- Normative behavior references: CCP-EM MRC2014 specification and CCP4 MAPLIB documentation
+- Implementation: independently authored C++20 decoder; no CCP4, mrcfile or cryo-EM library source is copied or linked
+- Runtime/build dependency: none
+- Supported contract: bounded scalar mode 0/1/2/6/12 map with byte-order and axis-permutation handling
+- Distribution obligation: none beyond MolShredder's own license; reference documentation is linked, not copied
 
 ## XTC decoder provenance
 

@@ -7,16 +7,36 @@ application state와 core kernel을 호출한다.
 
 ## State model
 
-Workspace는 immutable scene snapshot, ordered molecular objects, active object와 다음 object ID를
-소유한다. Object는 `MolecularSystem`, scene node, named selections와 representation record를 묶는다.
-Load가 성공하면 topology/coordinate source를 system으로 만들고 scene root 아래 node를 추가한 뒤
-해당 object를 active로 설정한다. Duplicate name과 실패한 read는 기존 state를 바꾸지 않는다.
+Workspace는 immutable scene snapshot, ordered molecular objects, ordered scalar volume objects, 각각의
+active index와 공유되는 다음 object ID를 소유한다. Molecular object는 `MolecularSystem`, scene node,
+named selections와 representation record를 묶고 volume object는 `VolumeGrid`, source path와 scene node를
+묶는다. 두 종류는 하나의 object-name/ID namespace를 사용한다.
+Structure reader가 둘 이상의 frame을 반환하면 Workspace는 그 coordinate source를 공통 bounded cache,
+playback timeline과 prefetch controller에 자동 등록한다. 따라서 multi-model PDB/mmCIF, GRO/G96/VTF/XYZ는
+별도 `traj load` 없이 GUI timeline과 `traj frame`/trajectory analysis에서 같은 state를 사용한다.
+Load가 성공하면 각 topology/coordinate source를 system으로 만들고 scene root 아래 node를 추가한 뒤
+마지막 object를 active로 설정한다. Duplicate name과 실패한 read/build는 기존 state를 바꾸지 않는다.
 Active object와 scene selection은 `object activate`에서 함께 commit되고 `object visibility`는 immutable
 scene snapshot을 교체한다. `object list`가 GUI/CLI/Python에 동일한 typed state table을 제공한다.
 
-현재 load는 PDB 또는 mmCIF document의 정확히 한 structure/data block만 받는다. Multi-model은 한
-object의 coordinate frames로 유지하지만 multi-data-block mmCIF를 여러 object로 펼치는 정책은 아직
-없다. Format은 `auto`, `pdb`, `mmcif`, `cif`이며 auto가 기본이다.
+현재 molecular load는 PDB/mmCIF/BCIF/PQR/MOL/SDF/MOL2/PSF/PRMTOP/GRO/G96/VTF/XYZ document를 받는다. Multi-model PDB/mmCIF/BCIF,
+concatenated GRO, ordered G96 frame block과 multi-block XYZ는
+한 object의 coordinate frames로 유지하고, multi-data-block mmCIF 및 multi-record SDF는 ordered object
+batch로 펼친다. MOL2의 각 `@<TRIPOS>MOLECULE` record도 같은 ordered batch path를 사용한다. 모든
+system/node를 temporary batch에서 완성한 뒤 scene/object/next-ID를 commit하므로
+중간 실패가 일부 object를 남기지 않는다. Result의 `structure_count`, `object_ids`, `objects[]`는 모든
+생성 object와 source record index를 노출하며 기존 singular field는 active/last object를 가리킨다.
+PSF와 PRMTOP은 topology와 atom count가 있지만 frame count가 0인 정상 system이다. `traj load`는 같은 atom
+count/order의 DCD/XTC/TRR/MDCRD/Amber NetCDF/H5MD/LAMMPS/BINPOS indexed coordinate source 또는 single-frame Amber RST7을 이 system에 붙인다.
+Attach 전 `show`나 coordinate
+analysis는 좌표를 발명하지 않고 actionable `not_found`를 반환한다.
+
+`volume load`는 OpenDX 또는 MRC2014/CCP4 document 전체를 먼저 parse/validate하고 하나의 typed volume scene node를 만든 뒤
+Workspace에 commit한다. Duplicate molecular/volume name이나 read/build 실패는 기존 scene, object vector,
+active index와 next ID를 바꾸지 않는다. Molecular active object와 active volume은 독립적이므로 potential
+map을 load해도 현재 molecular representation과 trajectory state를 폐기하지 않는다. `volume list`는
+dimensions, precision, scalar range, coordinate unit과 scene visibility를 동일 GUI/CLI/Python result로
+노출한다. Volume rendering과 volume session persistence는 아직 없다.
 
 ## Command sequence
 
@@ -26,7 +46,13 @@ invoke "select" --expression "chain A" --name "chain_a" --update "false"
 invoke "show" --replace "true" --representation "spheres" --selection "@chain_a"
 invoke "analyze center" --mode "com" --selection "@chain_a" --unit "angstrom"
 invoke "measure distance" --from "index 1" --to "index 2" --mode "atom" --pbc "raw"
+invoke "volume load" --file-format "opendx" --name "potential" --path "potential.dx" \
+  --coordinate-unit "angstrom"
+invoke "volume list"
 ```
+
+MRC/CCP4도 같은 sequence에서 `--file-format mrc|map|ccp4|mrcs`로 load할 수 있으며 OpenDX와
+동시에 별도 object/scene node로 유지된다.
 
 Select는 active object의 named-selection registry를 atomic하게 갱신한다. Show는 active object의 현재
 frame에서 expression을 평가하고 default atom visuals와 representation packet을 생성해 object에

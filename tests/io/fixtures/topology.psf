@@ -1,0 +1,32 @@
+PSF EXT XPLOR
+
+         1 !NTITLE
+ REMARKS Synthetic peptide topology
+
+         4 !NATOM
+         1 PROT     1        ALA      N        NH1          -0.300000     14.007000       0
+         2 PROT     1        ALA      CA       CT1           0.100000     12.011000       0
+         3 PROT     1        ALA      C        C              0.500000     12.011000       0
+         4 PROT     2A       GLY      N        NH1           -0.300000     14.007000       0
+
+         3 !NBOND: bonds
+         1         2         2         3         3         4
+
+         2 !NTHETA: angles
+         1         2         3         2         3         4
+
+         1 !NPHI: dihedrals
+         1         2         3         4
+
+         1 !NIMPHI: impropers
+         2         1         3         4
+
+         0 !NDON: donors
+
+         0 !NACC: acceptors
+
+         0 !NNB
+         0         0         0         0
+
+       1       0 !NGRP
+         0         0         0

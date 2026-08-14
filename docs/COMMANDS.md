@@ -8,6 +8,15 @@ command grammar를 version 1로 pin한다. Canonical history/session에는 생�
 
 ```text
 molshredder load --path PATH [--name NAME] [--file-format FORMAT]
+molshredder format list [--family all|structure|trajectory|volume]
+                           [--direction all|read|write]
+molshredder volume load --path PATH [--name NAME]
+                           [--file-format auto|dx|opendx|mrc|map|ccp4|mrcs]
+                           [--coordinate-unit angstrom|nanometer]
+molshredder volume list
+molshredder save --path PATH [--file-format auto|pdb|mmcif|cif|mol|mol2|psf|pqr|sdf|gro|g96|xyz]
+                 [--frames current|all] [--precision 0..15]
+                 [--comment TEXT] [--overwrite false|true]
 molshredder select --name NAME --expression EXPR [--update false|true]
 molshredder show --representation lines|sticks|spheres|ribbon|cartoon [--selection EXPR]
                    [--replace false|true]
@@ -28,11 +37,29 @@ MD vertical slice의 additive trajectory playback 및 time-series 문법은
 변경하지 않는다.
 다중 object의 additive `object list/activate/visibility` 문법과 failure-atomic scene semantics는
 [Molecular objects and visibility](OBJECTS.md)에 둔다.
+Additive `format list`와 `save` 문법, atomic output 및 semantic loss table은
+[Structure writing](STRUCTURE_WRITING.md)에 둔다.
 
 ## 의미
 
-- `load`: molecular structure를 새 object로 읽는다. `--name`을 생략했을 때의 object naming과
-  format auto-detection은 I/O vertical slice에서 결정한다.
+- `load`: molecular structure를 새 object로 읽는다. Multi-record SDF, multi-molecule MOL2와 multi-block mmCIF는 record/block마다
+  object를 만들고 전체 batch를 atomic commit한다. Explicit name은 여러 structure에서 숫자 suffix로 확장된다.
+  Concatenated GRO는 stable identity의 frame들로 한 object에 유지된다.
+  G96 ordered POSITION block도 stable identity의 frame들로 한 object에 유지된다. PSF와 Amber PRMTOP은
+  정상적인 zero-frame topology object로 load되며 `traj load` 전에는 coordinate operation이 명시적으로
+  실패한다. PRMTOP에는 `--file-format prmtop`을 사용하며 `.prmtop`, `.parm7`, `.top`은 자동 판별된다.
+  VTF는 `--file-format vtf` 또는 `.vtf` suffix로 topology, bond, atom property, unit cell과 ordered/indexed
+  sparse frame을 한 object에 load한다. Multi-frame structure는 즉시 `traj frame/play`에 연결된다.
+  BinaryCIF 0.3.x는 `.bcif` 또는 `--file-format bcif`로 읽으며 multi-block/model semantics는 mmCIF와 같다.
+- `volume load`: ASCII OpenDX regular scalar grid 하나를 molecular object와 독립된 typed volume scene
+  object로 읽는다. `coordinate-unit` 기본값은 APBS convention인 `angstrom`이며 source format 자체가
+  단위를 기록하지 않으므로 override와 provenance를 결과에 보존한다. 성공 결과는 dimensions, origin,
+  세 delta vector, z-fastest value count, precision과 scalar range를 반환한다. MRC/CCP4는 header geometry가
+  Angstrom이므로 `nanometer` 선택 시 geometry를 변환한다. MRC axis permutation과 origin/start policy는
+  [Volumetric data](VOLUMETRIC_DATA.md)에 고정한다.
+- `volume list`: 현재 Workspace의 volume object ID/name, scene node, dimensions, value count, precision,
+  scalar range, coordinate unit, active/visibility를 typed table로 반환한다. Volume rendering command는 아직
+  없으며 load/list가 isosurface·slice의 선행 data contract다.
 - `select`: atom selection expression을 named selection으로 생성 또는 교체한다. `--update true`는
   frame/state 변화에 따라 다시 평가되는 selection을 뜻한다.
 - `show`: selection에 representation을 보이게 한다. 현재 choice는 lines/sticks/spheres와

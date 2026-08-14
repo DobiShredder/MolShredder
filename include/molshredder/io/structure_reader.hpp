@@ -14,7 +14,22 @@
 
 namespace molshredder::io {
 
-enum class StructureFormat { auto_detect, pdb, mmcif };
+enum class StructureFormat {
+  auto_detect,
+  pdb,
+  mmcif,
+  bcif,
+  pqr,
+  mol,
+  sdf,
+  mol2,
+  psf,
+  prmtop,
+  gro,
+  g96,
+  vtf,
+  xyz
+};
 
 struct StructureData {
   std::string name;
@@ -34,13 +49,13 @@ struct StructureReadOptions {
   std::string source_name{"<memory>"};
 };
 
-[[nodiscard]] operation::Result<StructureDocument> read_structure(
-    std::string_view content, StructureReadOptions options = {});
+[[nodiscard]] operation::Result<StructureDocument>
+read_structure(std::string_view content, StructureReadOptions options = {});
 
-[[nodiscard]] operation::Result<StructureDocument> read_structure_file(
-    const std::filesystem::path& path,
-    StructureFormat format = StructureFormat::auto_detect);
+[[nodiscard]] operation::Result<StructureDocument>
+read_structure_file(const std::filesystem::path &path,
+                    StructureFormat format = StructureFormat::auto_detect);
 
 [[nodiscard]] std::string_view to_string(StructureFormat format) noexcept;
 
-}  // namespace molshredder::io
+} // namespace molshredder::io

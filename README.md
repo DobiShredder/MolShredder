@@ -8,6 +8,8 @@ trajectory 분석을 하나의 desktop application에 통합하는 고성능 mol
 - PyMOL 수준의 세련된 molecular representation과 publication workflow
 - VMD 수준의 MD trajectory playback, PBC와 time-series analysis
 - COM, centroid, distance, RMSD 등 빈번한 계산을 GUI·CLI·Python에 기본 내장
+- GUI로 표현 가능한 operation을 최대한 편입하고 workflow 중심 menu, context panel과 searchable command palette 제공
+- UI·UX·CLI 전반의 안전한 default, 일관된 용어, actionable error와 progressive disclosure
 - topology와 trajectory를 분리한 bounded-memory streaming
 - macOS, Linux, Windows 동시 지원
 - 각 platform에서 개발 도구 없이 사용할 수 있는 installer 제공
@@ -22,17 +24,56 @@ executable은 registry 기반 help, version command와 interactive console을 �
 dispatcher를 toolkit-independent GUI action adapter와 실제 CPython extension module도 호출한다.
 Alias는 실행 전에 canonical command로 확장되어 history에 재현 가능한 형태로 저장된다.
 Immutable topology, typed atom property, coordinate frame/source와 molecular-system foundation도
-구현됐다. PDB 3.3과 PDBx/mmCIF foundation reader도 synthetic multi-model fixture에서 동작한다.
+구현됐다. PDB 3.3, PDBx/mmCIF/BinaryCIF 0.3.x, APBS-compatible PQR, MDL MOL/SDF V2000, Tripos MOL2, GROMACS GRO,
+CHARMM/NAMD PSF, Amber PRMTOP/RST7/MDCRD/NetCDF, H5MD, LAMMPS custom text dump, Scripps BINPOS, GROMOS-96 G96,
+VMD VTF와 plain multi-frame XYZ native
+reader가 synthetic fixture에서 동작한다. PQR은 partial charge/radius를 typed property로 보존하고 sphere에
+적용한다. MOL/SDF는 formal charge, isotope, radical 및 single/double/triple/aromatic bond를 보존하며
+multi-record SDF를 failure-atomic object batch로 읽는다. MOL2는 SYBYL atom type, partial charge presence,
+substructure, aromatic/amide bond와 triclinic `CRYSIN`을 보존하고 여러 molecule을 atomic batch로 읽는다.
+GRO는 가변 정밀도 nm 좌표, optional nm/ps 속도, ps 물리 시간과 3/9-value unit cell을 보존하며
+stable atom identity의 concatenated frame을 하나의 trajectory로 읽는다. G96은 ordered full/reduced
+F15.9 block의 identity, 좌표, 속도, step/time과 triclinic box를 보존한다. PSF는 force-field atom type,
+charge, mass와 ordered connectivity를 가진 zero-frame topology로 읽고 DCD/XTC/TRR/MDCRD/NetCDF/H5MD/RST7/LAMMPS/BINPOS attach를 지원한다.
+PRMTOP은 Amber atom type/index, 18.2223 charge scale, mass, GB radius/screen과 signed proper/improper
+connectivity를 zero-frame topology로 보존한다. RST7은 one-frame 좌표, AKMA velocity, time/temperature와
+3/6-value triclinic cell을 active topology에 붙인다. MDCRD는 fixed-width multi-frame 좌표를 offset-indexed
+source로 열고 PRMTOP `BOX_DIMENSIONS` angle과 trajectory box length를 결합한다.
+Amber NetCDF convention 1.0은 CDF-1/2/5와 NetCDF-4/HDF5 container에서 좌표, velocity, force,
+time, temperature와 triclinic cell을 random-access로 읽고 scale factor 및 CPPTRAJ integer compression을 해제한다.
+H5MD 1.x는 임의의 particle group에서 static/time-dependent position, velocity, force, mass, charge,
+species, image, ID/presence와 orthorhombic/triclinic box를 HDF5 hyperslab random access로 읽는다. SI unit
+expression을 Å·ps 기준으로 정규화하고 source ID로 topology 순서를 복원하며, position unit이 없으면 사용자가
+Å 또는 nm를 명시한다. 외부 HDF5 link/storage와 부분 주기 box는 명시적으로 거부한다.
+LAMMPS dump는 snapshot offset만 index하고 atom row 순서 대신 `id`를 topology source serial에 매핑한다.
+Orthogonal/restricted-triclinic box와 `x/xs/xu/xsu` 좌표를 지원하며 dump에 없는 Å/nm 단위는 사용자가 명시한다.
+Scripps BINPOS는 `fxyz` 뒤 atom count와 float32 Cartesian Å record를 indexed source로 열며 topology atom
+count를 이용해 little/big-endian을 구분한다. Format에 없는 cell, step/time과 velocity/force는 생성하지 않는다.
+PDB/mmCIF/MOL/SDF/MOL2/PSF/PQR/XYZ/GRO/G96 writer는 selected frame 또는 topology를
+failure-atomic output에 쓰고 표현하지 못하는 channel을 typed semantic-loss table로 반환한다.
+BinaryCIF는 MessagePack container와 ByteArray/FixedPoint/IntervalQuantization/RunLength/Delta/
+IntegerPacking/StringArray encoding 및 column mask를 native decode하고 기존 PDBx topology builder를 공유한다.
+APBS-compatible ASCII OpenDX regular scalar grid는 origin, 세 개의 skewed delta vector, z-fastest scalar
+ordering과 float32/float64 precision을 typed volume scene object로 읽는다. GUI, CLI와 Python에서 같은
+`volume load/list` operation을 사용하지만 isosurface/slice/direct-volume rendering은 아직 구현되지 않았다.
+MRC2014/CCP4 map은 little/big-endian scalar mode 0/1/2/6/12, extended header offset, axis permutation,
+triclinic cell, grid start와 physical origin을 같은 typed grid로 읽는다. Standard가 handedness를 완전히
+정의하지 않는 사실과 complex/packed/skew mode 제한도 metadata/capability에 노출한다.
+schema v2는 24개 native format의 read/write, multi-frame/multi-structure, volume channel과 streaming limitation을
+machine-readable하게 제공한다.
 Immutable scene object tree와 renderer-independent orbit/pan/dolly camera foundation도 구현됐다.
 Lines/sticks/spheres와 protein ribbon/cartoon의 backend-neutral instance/indexed-mesh packet,
 atom/bond/residue picking 및 결정론적 headless CPU reference renderer도 구현됐다. Cartoon은 독립
 STRIDE-method v0 state, chain-break와 orientation continuity를 사용한다. Qt/Metal viewport는 indexed
 cartoon mesh와 GPU-instanced line/stick/sphere를 실제로 렌더링한다. Click GPU ID pass는 atom/bond/residue를
 비동기 readback해 canonical `picked` named selection과 QML feedback으로 연결한다. Hover/highlight,
-production object/trajectory UI, nucleic-acid cartoon, writer와 installer는 아직 구현되지 않았다.
+production object hierarchy/analysis UI, nucleic-acid cartoon, broad format writers와 installer는 아직 구현되지 않았다.
 여러 structure를 load하면 Objects panel에서 active object와 visibility를 바꿀 수 있으며 renderer는 모든
 visible object representation을 한 scene에 합성한다. 같은 상태 전환은 `object list/activate/visibility`
 command와 Python API에도 제공된다.
+Desktop trajectory panel은 active topology에 DCD/XTC/TRR/MDCRD/NetCDF/H5MD/RST7/LAMMPS/BINPOS를 attach하고 zero-based seek, first/last step,
+play/pause, once/loop/rock, forward/reverse와 FPS를 같은 canonical trajectory action으로 제어한다. Qt timer는
+경과 milliseconds만 `traj tick`에 전달하며 frame이 실제로 바뀔 때만 composite render packet을 교체한다.
 Boolean/field predicate와 명시적 `@name` reference를 가진 foundation atom
 selection parser/evaluator 및 static/dynamic named-selection lifecycle도 구현됐다.
 Raw-coordinate 단일 frame의 geometric centroid, provenance-aware COM 및 atom-distance C++ kernel도
@@ -49,10 +90,12 @@ range/stride timeline은 once/loop/rock 및 forward/reverse playback과 방향�
 Triclinic cell의 exact closest-lattice minimum image, 원자별 `[0,1)` wrap과 순차 trajectory
 continuity unwrap도 core에 구현됐다. Atom distance의 raw/minimum-image mode는 Workspace, CLI,
 GUI action과 Python command path에서 공유된다. Bond-aware molecule join/whole은 아직 없다.
-Active topology에는 `traj load`로 DCD/TRR/XTC를 bounded cache와 함께 attach할 수 있고, zero-based
+Active topology에는 `traj load`로 DCD/TRR/XTC/MDCRD/NetCDF/H5MD/RST7/LAMMPS/BINPOS를 bounded cache와 함께 attach할 수 있고, zero-based
 `traj frame` seek, inclusive range/stride, once/loop/rock playback, pause, FPS와 elapsed-time tick이
 selected frame, existing representation, analysis와 scene system을 transactionally 함께 갱신한다.
-Fractional frame time과 bounded catch-up도 보존하지만 실제 Qt timer/event-loop scheduler는 아직 없다.
+Fractional frame time과 bounded catch-up은 desktop Qt event-loop scheduler에도 연결됐다. 현재 cache miss
+decode와 representation rebuild는 GUI thread에서 실행되므로 background seek/load와 incremental coordinate
+GPU upload는 아직 필요하다.
 Object당 generation-aware prefetch worker가 현재 direction/range의 다음 frame을 cache에 채우며 seek,
 range와 pause는 stale read-ahead를 supersede/cancel한다. Reader 내부에서 진행 중인 단일 decode 취소와
 adaptive window는 아직 없다.
@@ -132,15 +175,19 @@ ctest --preset desktop -R desktop.gpu_smoke --output-on-failure
 
 현재 viewport는 indexed cartoon mesh, unit-sphere/unit-cylinder instancing, pixel-width line quad,
 depth, MSAA request, directional shading와 render-thread-safe packet snapshot을 Metal에서 검증한다.
-`Open` dialog 또는 `--open`으로 PDB/mmCIF를 shared GUI action/Workspace에 load하고 lines/sticks/spheres/
-ribbon/cartoon을 전환할 수 있다. Mouse left-drag orbit, right-drag pan, wheel dolly와 double-click framing은
+`Open` dialog 또는 `--open`으로 PDB/mmCIF/BCIF/PQR/MOL/SDF/MOL2/PSF/GRO/G96/VTF/XYZ/OpenDX/MRC/CCP4를 shared GUI action/Workspace에 load하고
+lines/sticks/spheres/ribbon/cartoon을 전환할 수 있다. Save dialog는 suffix에 따라 active current frame을
+canonical PDB/mmCIF/PQR/MOL/SDF/MOL2/PSF/GRO/G96/XYZ writer로 내보내고 semantic-loss item count를 status에 표시한다. Mouse left-drag orbit, right-drag pan,
+wheel dolly와 double-click framing은
 core `scene::Camera`를 사용한다. Left click은 atom/bond/residue GPU ID를 읽어 `picked` selection으로
-저장하고 하단 badge에 표시한다. Object/trajectory panel과 visual selection highlight가 다음 desktop slice다.
+저장하고 하단 badge에 표시한다. Objects panel은 active/visibility를, trajectory panel은 attach·seek·step·
+playback mode/direction/FPS를 제어한다. Visual selection highlight와 analysis panel은 다음 desktop slice다.
 Qt가 없는 환경에서는 기존 dev/release core build가 유지된다.
 
 ```bash
 ./build/desktop/molshredder_desktop.app/Contents/MacOS/molshredder_desktop \
-  --open=path/to/structure.pdb --representation=sticks
+  --open=path/to/structure.pdb --trajectory=path/to/run.dcd \
+  --trajectory-unit=angstrom --representation=sticks
 ```
 
 Console은 현재 versioned internal form인 `invoke "system version"`을 실행하며 `help`, `history`,
@@ -157,8 +204,12 @@ Workspace operation에 연결되어 있다. Atom distance는 `--pbc raw|minimum-
 있다.
 Topology, property, coordinate와 frame lifetime contract는 [Data model](docs/DATA_MODEL.md)에
 문서화되어 있다.
-현재 PDB/mmCIF read channel과 명시적 limitation은
+현재 PDB/mmCIF/BCIF/PQR/MOL/SDF/MOL2/PSF/GRO/G96/VTF/XYZ read/write channel과 명시적 limitation은
 [Structure format support](docs/FORMAT_SUPPORT.md)에 문서화되어 있다.
+[Volumetric data](docs/VOLUMETRIC_DATA.md)는 typed scalar grid, OpenDX ordering/unit 계약과 아직 구현되지
+않은 volume rendering 범위를 설명한다.
+[Structure writing and semantic loss](docs/STRUCTURE_WRITING.md)는 `format list`, `save`, atomic publish와
+loss-report 계약을 설명한다.
 Scene hierarchy, transform, camera coordinate와 interaction contract는
 [Scene and camera](docs/SCENE_AND_CAMERA.md)에 문서화되어 있다.
 Representation packet, reference image/picking과 GPU prototype 경계는
@@ -179,7 +230,7 @@ Stateful load/select/show sequence와 현재 lifetime 제한은
 한계를 설명한다.
 [Foundation session format](docs/SESSION_FORMAT.md)은 versioned canonical command journal과 replay
 limitation을 설명한다.
-[Trajectory format support](docs/TRAJECTORY_FORMATS.md)는 DCD/TRR/XTC read channel, memory model과 제한을
+[Trajectory format support](docs/TRAJECTORY_FORMATS.md)는 DCD/TRR/XTC/MDCRD/Amber NetCDF/H5MD/RST7 read channel, memory model과 제한을
 설명한다.
 [Trajectory runtime](docs/TRAJECTORY_RUNTIME.md)은 cache budget, LRU, lease와 async prefetch 계약을
 설명한다.

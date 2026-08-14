@@ -4,10 +4,24 @@ project(
   MolShredder
   VERSION 0.1.0
   DESCRIPTION "High-performance molecular visualization and analysis"
-  LANGUAGES CXX
+  LANGUAGES C CXX
 )
 
 find_package(Threads REQUIRED)
+find_package(HDF5 REQUIRED CONFIG COMPONENTS C shared)
+find_package(netCDF 4.9 REQUIRED CONFIG)
+
+if(HDF5_VERSION VERSION_LESS 1.14 OR NOT HDF5_VERSION VERSION_LESS 3)
+  message(FATAL_ERROR "MolShredder requires HDF5 >= 1.14 and < 3")
+endif()
+
+if(TARGET hdf5-shared)
+  set(MOLSHREDDER_HDF5_TARGET hdf5-shared)
+elseif(TARGET HDF5::HDF5)
+  set(MOLSHREDDER_HDF5_TARGET HDF5::HDF5)
+else()
+  message(FATAL_ERROR "The HDF5 package did not provide a supported C target")
+endif()
 
 include(CTest)
 include(FetchContent)
@@ -38,6 +52,49 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(pybind11)
 
+set(MSGPACK_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(MSGPACK_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(MSGPACK_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set(MSGPACK_USE_BOOST OFF CACHE BOOL "" FORCE)
+set(MSGPACK_CXX11 OFF CACHE BOOL "" FORCE)
+set(MSGPACK_CXX20 ON CACHE BOOL "" FORCE)
+if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.28)
+  FetchContent_Declare(
+    msgpack-cxx
+    URL https://github.com/msgpack/msgpack-c/archive/refs/tags/cpp-8.0.0.tar.gz
+    URL_HASH SHA256=f634fb7052da4478096f2a02dfb6d91174e5836b317afb006375249ccb086aa8
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    EXCLUDE_FROM_ALL
+  )
+  FetchContent_MakeAvailable(msgpack-cxx)
+else()
+  FetchContent_Declare(
+    msgpack-cxx
+    URL https://github.com/msgpack/msgpack-c/archive/refs/tags/cpp-8.0.0.tar.gz
+    URL_HASH SHA256=f634fb7052da4478096f2a02dfb6d91174e5836b317afb006375249ccb086aa8
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+  )
+  FetchContent_GetProperties(
+    msgpack-cxx
+    SOURCE_DIR MOLSHREDDER_MSGPACK_SOURCE_DIR
+    BINARY_DIR MOLSHREDDER_MSGPACK_BINARY_DIR
+    POPULATED MOLSHREDDER_MSGPACK_POPULATED
+  )
+  if(NOT MOLSHREDDER_MSGPACK_POPULATED)
+    FetchContent_Populate(msgpack-cxx)
+    FetchContent_GetProperties(
+      msgpack-cxx
+      SOURCE_DIR MOLSHREDDER_MSGPACK_SOURCE_DIR
+      BINARY_DIR MOLSHREDDER_MSGPACK_BINARY_DIR
+    )
+  endif()
+  add_subdirectory(
+    "${MOLSHREDDER_MSGPACK_SOURCE_DIR}"
+    "${MOLSHREDDER_MSGPACK_BINARY_DIR}"
+    EXCLUDE_FROM_ALL
+  )
+endif()
+
 function(molshredder_enable_warnings target_name)
   if(MSVC)
     target_compile_options(${target_name} PRIVATE /W4 /permissive-)
@@ -54,6 +111,138 @@ function(molshredder_enable_warnings target_name)
     endif()
   endif()
 endfunction()
+
+if(BUILD_TESTING)
+  add_executable(
+    molshredder_bcif_fixture_generator
+    tests/support/bcif_fixture_generator.cpp
+  )
+  target_compile_features(molshredder_bcif_fixture_generator PRIVATE cxx_std_20)
+  target_link_libraries(molshredder_bcif_fixture_generator PRIVATE msgpack-cxx)
+  molshredder_enable_warnings(molshredder_bcif_fixture_generator)
+  set(MOLSHREDDER_BCIF_FIXTURE "${CMAKE_CURRENT_BINARY_DIR}/structure.bcif")
+  set(MOLSHREDDER_BCIF_OLD_FIXTURE
+      "${CMAKE_CURRENT_BINARY_DIR}/structure-old.bcif")
+  add_test(
+    NAME io.bcif_fixture_setup
+    COMMAND molshredder_bcif_fixture_generator
+      "${MOLSHREDDER_BCIF_FIXTURE}"
+      "${MOLSHREDDER_BCIF_OLD_FIXTURE}"
+  )
+  set_tests_properties(
+    io.bcif_fixture_setup PROPERTIES FIXTURES_SETUP bcif_fixture
+  )
+
+  add_executable(
+    molshredder_h5md_fixture_generator
+    tests/support/h5md_fixture_generator.cpp
+  )
+  target_compile_features(molshredder_h5md_fixture_generator PRIVATE cxx_std_20)
+  target_link_libraries(
+    molshredder_h5md_fixture_generator PRIVATE ${MOLSHREDDER_HDF5_TARGET}
+  )
+  molshredder_enable_warnings(molshredder_h5md_fixture_generator)
+  set(MOLSHREDDER_H5MD_FIXTURE "${CMAKE_CURRENT_BINARY_DIR}/trajectory.h5md")
+  set(MOLSHREDDER_H5MD_FIXED_FIXTURE
+      "${CMAKE_CURRENT_BINARY_DIR}/trajectory-fixed.h5md")
+  set(MOLSHREDDER_H5MD_AMBIGUOUS_FIXTURE
+      "${CMAKE_CURRENT_BINARY_DIR}/trajectory-ambiguous.h5md")
+  set(MOLSHREDDER_H5MD_PARTIAL_FIXTURE
+      "${CMAKE_CURRENT_BINARY_DIR}/trajectory-partial-periodic.h5md")
+  set(MOLSHREDDER_H5MD_MISSING_FIXTURE
+      "${CMAKE_CURRENT_BINARY_DIR}/trajectory-missing.h5md")
+  set(MOLSHREDDER_H5MD_DYNAMIC_ID_FIXTURE
+      "${CMAKE_CURRENT_BINARY_DIR}/trajectory-dynamic-id.h5md")
+  add_test(
+    NAME io.h5md_fixture_setup
+    COMMAND molshredder_h5md_fixture_generator
+      "${MOLSHREDDER_H5MD_FIXTURE}"
+      "${MOLSHREDDER_H5MD_FIXED_FIXTURE}"
+      "${MOLSHREDDER_H5MD_AMBIGUOUS_FIXTURE}"
+      "${MOLSHREDDER_H5MD_PARTIAL_FIXTURE}"
+      "${MOLSHREDDER_H5MD_MISSING_FIXTURE}"
+      "${MOLSHREDDER_H5MD_DYNAMIC_ID_FIXTURE}"
+  )
+  set_tests_properties(
+    io.h5md_fixture_setup PROPERTIES FIXTURES_SETUP h5md_fixture
+  )
+
+  add_executable(
+    molshredder_amber_netcdf_fixture_generator
+    tests/support/amber_netcdf_fixture_generator.cpp
+  )
+  target_compile_features(
+    molshredder_amber_netcdf_fixture_generator PRIVATE cxx_std_20
+  )
+  target_link_libraries(
+    molshredder_amber_netcdf_fixture_generator PRIVATE netCDF::netcdf
+  )
+  molshredder_enable_warnings(molshredder_amber_netcdf_fixture_generator)
+  set(MOLSHREDDER_AMBER_NETCDF_FIXTURE
+      "${CMAKE_CURRENT_BINARY_DIR}/trajectory.nc")
+  set(MOLSHREDDER_AMBER_NETCDF_COMPRESSED_FIXTURE
+      "${CMAKE_CURRENT_BINARY_DIR}/trajectory-compressed.ncdf")
+  set(MOLSHREDDER_AMBER_NETCDF_BAD_FIXTURE
+      "${CMAKE_CURRENT_BINARY_DIR}/trajectory-bad-convention.nc")
+  set(MOLSHREDDER_AMBER_NETCDF_PARTIAL_CELL_FIXTURE
+      "${CMAKE_CURRENT_BINARY_DIR}/trajectory-partial-cell.nc")
+  set(MOLSHREDDER_AMBER_NETCDF_MISSING_DATA_FIXTURE
+      "${CMAKE_CURRENT_BINARY_DIR}/trajectory-missing-data.nc")
+  add_test(
+    NAME io.amber_netcdf_fixture_setup
+    COMMAND molshredder_amber_netcdf_fixture_generator
+      "${MOLSHREDDER_AMBER_NETCDF_FIXTURE}"
+      "${MOLSHREDDER_AMBER_NETCDF_COMPRESSED_FIXTURE}"
+      "${MOLSHREDDER_AMBER_NETCDF_BAD_FIXTURE}"
+      "${MOLSHREDDER_AMBER_NETCDF_PARTIAL_CELL_FIXTURE}"
+      "${MOLSHREDDER_AMBER_NETCDF_MISSING_DATA_FIXTURE}"
+  )
+  set_tests_properties(
+    io.amber_netcdf_fixture_setup
+    PROPERTIES FIXTURES_SETUP amber_netcdf_fixture
+  )
+
+  add_executable(
+    molshredder_binpos_fixture_generator
+    tests/support/binpos_fixture_generator.cpp
+  )
+  target_compile_features(
+    molshredder_binpos_fixture_generator PRIVATE cxx_std_20
+  )
+  molshredder_enable_warnings(molshredder_binpos_fixture_generator)
+  set(
+    MOLSHREDDER_BINPOS_FIXTURE
+    "${CMAKE_CURRENT_BINARY_DIR}/trajectory.binpos"
+  )
+  add_test(
+    NAME io.binpos_fixture_setup
+    COMMAND
+      molshredder_binpos_fixture_generator "${MOLSHREDDER_BINPOS_FIXTURE}"
+  )
+  set_tests_properties(
+    io.binpos_fixture_setup
+    PROPERTIES FIXTURES_SETUP binpos_fixture
+  )
+
+  add_executable(
+    molshredder_mrc_fixture_generator
+    tests/support/mrc_fixture_generator.cpp
+  )
+  target_compile_features(molshredder_mrc_fixture_generator PRIVATE cxx_std_20)
+  molshredder_enable_warnings(molshredder_mrc_fixture_generator)
+  set(MOLSHREDDER_MRC_FIXTURE "${CMAKE_CURRENT_BINARY_DIR}/density.mrc")
+  set(MOLSHREDDER_MRC_BIG_FIXTURE
+      "${CMAKE_CURRENT_BINARY_DIR}/density-big.ccp4")
+  add_test(
+    NAME io.mrc_fixture_setup
+    COMMAND molshredder_mrc_fixture_generator
+      "${MOLSHREDDER_MRC_FIXTURE}"
+      "${MOLSHREDDER_MRC_BIG_FIXTURE}"
+  )
+  set_tests_properties(
+    io.mrc_fixture_setup PROPERTIES FIXTURES_SETUP mrc_fixture
+  )
+endif()
 
 add_library(molshredder_core STATIC)
 add_library(MolShredder::Core ALIAS molshredder_core)
@@ -76,15 +265,37 @@ target_sources(
     src/command/serialization.cpp
     src/core/version.cpp
     src/io/mmcif_reader.cpp
+    src/io/mmcif_writer.cpp
+    src/io/bcif_reader.cpp
+    src/io/amber_netcdf_reader.cpp
+    src/io/amber_ascii_reader.cpp
+    src/io/binpos_reader.cpp
+    src/io/lammps_dump_reader.cpp
+    src/io/molfile_reader.cpp
+    src/io/mol2_reader.cpp
+    src/io/psf_reader.cpp
+    src/io/prmtop_reader.cpp
+    src/io/gro_reader.cpp
+    src/io/g96_reader.cpp
+    src/io/h5md_reader.cpp
+    src/io/vtf_reader.cpp
+    src/io/format_capabilities.cpp
     src/io/dcd_reader.cpp
     src/io/trr_reader.cpp
     src/io/xtc_reader.cpp
+    src/io/rst7_reader.cpp
     src/io/pdb_reader.cpp
+    src/io/pqr_reader.cpp
     src/io/structure_reader.cpp
+    src/io/structure_writer.cpp
+    src/io/xyz_reader.cpp
     src/io/trajectory_reader.cpp
+    src/io/mrc_reader.cpp
+    src/io/volume_reader.cpp
     src/model/coordinates.cpp
     src/model/molecular_system.cpp
     src/model/topology.cpp
+    src/model/volume.cpp
     src/render/reference_renderer.cpp
     src/render/representation.cpp
     src/selection/evaluator.cpp
@@ -120,10 +331,14 @@ target_sources(
       include/molshredder/command/result.hpp
       include/molshredder/command/serialization.hpp
       include/molshredder/io/structure_reader.hpp
+      include/molshredder/io/structure_writer.hpp
+      include/molshredder/io/format_capabilities.hpp
       include/molshredder/io/trajectory_reader.hpp
+      include/molshredder/io/volume_reader.hpp
       include/molshredder/model/coordinates.hpp
       include/molshredder/model/molecular_system.hpp
       include/molshredder/model/topology.hpp
+      include/molshredder/model/volume.hpp
       include/molshredder/render/packet.hpp
       include/molshredder/render/reference_renderer.hpp
       include/molshredder/render/representation.hpp
@@ -141,7 +356,19 @@ target_sources(
 )
 
 target_compile_features(molshredder_core PUBLIC cxx_std_20)
-target_link_libraries(molshredder_core PUBLIC Threads::Threads)
+target_link_libraries(
+  molshredder_core PUBLIC Threads::Threads netCDF::netcdf
+                           ${MOLSHREDDER_HDF5_TARGET}
+)
+target_include_directories(
+  molshredder_core
+  PRIVATE
+    "${msgpack-cxx_SOURCE_DIR}/include"
+    "${msgpack-cxx_BINARY_DIR}/include"
+)
+target_compile_definitions(
+  molshredder_core PRIVATE MSGPACK_NO_BOOST MSGPACK_DEFAULT_API_VERSION=3
+)
 target_compile_definitions(
   molshredder_core
   PRIVATE MOLSHREDDER_VERSION="${PROJECT_VERSION}"
@@ -204,6 +431,7 @@ molshredder_enable_warnings(molshredder_cli)
 add_executable(molshredder apps/cli/main.cpp)
 target_compile_features(molshredder PRIVATE cxx_std_20)
 target_link_libraries(molshredder PRIVATE MolShredder::Cli)
+set_target_properties(molshredder PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
 molshredder_enable_warnings(molshredder)
 
 pybind11_add_module(molshredder_python MODULE src/python/module.cpp)
@@ -212,6 +440,7 @@ set_target_properties(
   PROPERTIES
     OUTPUT_NAME molshredder
     CXX_EXTENSIONS OFF
+    INSTALL_RPATH_USE_LINK_PATH TRUE
 )
 target_compile_features(molshredder_python PRIVATE cxx_std_20)
 target_link_libraries(molshredder_python PRIVATE MolShredder::Core)
@@ -244,6 +473,9 @@ if(MOLSHREDDER_BUILD_DESKTOP)
       Qt6::GuiPrivate
       Qt6::Qml
       Qt6::Quick
+  )
+  set_target_properties(
+    molshredder_desktop PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE
   )
   molshredder_enable_warnings(molshredder_desktop)
   set_source_files_properties(
@@ -342,6 +574,45 @@ if(MOLSHREDDER_BUILD_DESKTOP)
         PASS_REGULAR_EXPRESSION "MolShredder desktop camera ready: representation=spheres atoms=3"
     )
     add_test(
+      NAME desktop.bcif_open_smoke
+      COMMAND
+        molshredder_desktop --smoke
+        "--open=${MOLSHREDDER_BCIF_FIXTURE}"
+        "--representation=sticks"
+    )
+    add_test(
+      NAME desktop.opendx_open_smoke
+      COMMAND
+        molshredder_desktop --smoke
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/potential.dx"
+    )
+    set_tests_properties(
+      desktop.opendx_open_smoke
+      PROPERTIES
+        TIMEOUT 10
+        PASS_REGULAR_EXPRESSION "MolShredder desktop volume loaded: voxels=12 dimensions=2x2x3"
+    )
+    add_test(
+      NAME desktop.mrc_open_smoke
+      COMMAND
+        molshredder_desktop --smoke
+        "--open=${MOLSHREDDER_MRC_FIXTURE}"
+    )
+    set_tests_properties(
+      desktop.mrc_open_smoke
+      PROPERTIES
+        TIMEOUT 10
+        FIXTURES_REQUIRED mrc_fixture
+        PASS_REGULAR_EXPRESSION "MolShredder desktop volume loaded: voxels=12 dimensions=2x2x3 format=mrc"
+    )
+    set_tests_properties(
+      desktop.bcif_open_smoke
+      PROPERTIES
+        TIMEOUT 10
+        FIXTURES_REQUIRED bcif_fixture
+        PASS_REGULAR_EXPRESSION "MolShredder desktop loaded: atoms=2 representation=sticks"
+    )
+    add_test(
       NAME desktop.gpu_picking_smoke
       COMMAND
         molshredder_desktop --picking-smoke
@@ -382,6 +653,232 @@ if(MOLSHREDDER_BUILD_DESKTOP)
         FIXTURES_REQUIRED desktop_trajectory_fixture
         TIMEOUT 10
         PASS_REGULAR_EXPRESSION "MolShredder desktop trajectory ready: frames=4 scheduler=qt mode=loop"
+    )
+    add_test(
+      NAME desktop.xyz_save_smoke
+      COMMAND
+        molshredder_desktop --smoke --save-all --save-smoke
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/multiframe.xyz"
+        "--save=${CMAKE_CURRENT_BINARY_DIR}/desktop_saved.xyz"
+        "--representation=spheres"
+    )
+    set_tests_properties(
+      desktop.xyz_save_smoke
+      PROPERTIES
+        TIMEOUT 10
+        PASS_REGULAR_EXPRESSION "MolShredder desktop XYZ save ready: atoms=3 frames=2 loss-report=true"
+    )
+    add_test(
+      NAME desktop.pdb_save_smoke
+      COMMAND
+        molshredder_desktop --smoke --save-all --save-smoke
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/synthetic_multimodel.pdb"
+        "--save=${CMAKE_CURRENT_BINARY_DIR}/desktop_saved.pdb"
+        "--representation=sticks"
+    )
+    set_tests_properties(
+      desktop.pdb_save_smoke
+      PROPERTIES
+        TIMEOUT 10
+        PASS_REGULAR_EXPRESSION "MolShredder desktop PDB save ready: atoms=3 frames=2 loss-report=true"
+    )
+    add_test(
+      NAME desktop.mmcif_save_smoke
+      COMMAND
+        molshredder_desktop --smoke --save-all --save-smoke
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/synthetic_multimodel.cif"
+        "--save=${CMAKE_CURRENT_BINARY_DIR}/desktop_saved.cif"
+        "--representation=sticks"
+    )
+    set_tests_properties(
+      desktop.mmcif_save_smoke
+      PROPERTIES
+        TIMEOUT 10
+        PASS_REGULAR_EXPRESSION "MolShredder desktop MMCIF save ready: atoms=3 frames=2 loss-report=true"
+    )
+    add_test(
+      NAME desktop.pqr_save_smoke
+      COMMAND
+        molshredder_desktop --smoke --save-smoke
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/electrostatics.pqr"
+        "--save=${CMAKE_CURRENT_BINARY_DIR}/desktop_saved.pqr"
+        "--representation=spheres"
+    )
+    set_tests_properties(
+      desktop.pqr_save_smoke
+      PROPERTIES
+        TIMEOUT 10
+        PASS_REGULAR_EXPRESSION "MolShredder desktop PQR save ready: atoms=3 frames=1 loss-report=true"
+    )
+    add_test(
+      NAME desktop.sdf_save_smoke
+      COMMAND
+        molshredder_desktop --smoke --save-smoke
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/chemistry.sdf"
+        "--save=${CMAKE_CURRENT_BINARY_DIR}/desktop_saved.sdf"
+        "--representation=sticks"
+    )
+    set_tests_properties(
+      desktop.sdf_save_smoke
+      PROPERTIES
+        TIMEOUT 10
+        PASS_REGULAR_EXPRESSION "MolShredder desktop SDF save ready: atoms=2 frames=1 loss-report=true"
+    )
+    add_test(
+      NAME desktop.mol2_save_smoke
+      COMMAND
+        molshredder_desktop --smoke --save-smoke
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/chemistry.mol2"
+        "--save=${CMAKE_CURRENT_BINARY_DIR}/desktop_saved.mol2"
+        "--representation=sticks"
+    )
+    set_tests_properties(
+      desktop.mol2_save_smoke
+      PROPERTIES
+        TIMEOUT 10
+        PASS_REGULAR_EXPRESSION "MolShredder desktop MOL2 save ready: atoms=6 frames=1 loss-report=true"
+    )
+    add_test(
+      NAME desktop.gro_save_smoke
+      COMMAND
+        molshredder_desktop --smoke --save-smoke
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/trajectory.gro"
+        "--save=${CMAKE_CURRENT_BINARY_DIR}/desktop_saved.gro"
+        "--representation=sticks"
+    )
+    set_tests_properties(
+      desktop.gro_save_smoke
+      PROPERTIES
+        TIMEOUT 10
+        PASS_REGULAR_EXPRESSION "MolShredder desktop GRO save ready: atoms=2 frames=1 loss-report=true"
+    )
+    add_test(
+      NAME desktop.g96_save_smoke
+      COMMAND
+        molshredder_desktop --smoke --save-all --save-smoke
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/trajectory.g96"
+        "--save=${CMAKE_CURRENT_BINARY_DIR}/desktop_saved.g96"
+        "--representation=sticks"
+    )
+    set_tests_properties(
+      desktop.g96_save_smoke
+      PROPERTIES
+        TIMEOUT 10
+        PASS_REGULAR_EXPRESSION "MolShredder desktop G96 save ready: atoms=2 frames=2 loss-report=true"
+    )
+    add_test(
+      NAME desktop.vtf_open_smoke
+      COMMAND
+        molshredder_desktop --smoke
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/coarse_grained.vtf"
+        "--representation=sticks"
+    )
+    set_tests_properties(
+      desktop.vtf_open_smoke
+      PROPERTIES
+        TIMEOUT 10
+        PASS_REGULAR_EXPRESSION "MolShredder desktop loaded: atoms=3 representation=sticks"
+    )
+    add_test(
+      NAME desktop.psf_save_smoke
+      COMMAND
+        molshredder_desktop --smoke --save-smoke
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/topology.psf"
+        "--save=${CMAKE_CURRENT_BINARY_DIR}/desktop_saved.psf"
+    )
+    set_tests_properties(
+      desktop.psf_save_smoke
+      PROPERTIES
+        TIMEOUT 10
+        PASS_REGULAR_EXPRESSION "MolShredder desktop PSF save ready: atoms=4 frames=0 loss-report=true"
+    )
+    add_test(
+      NAME desktop.amber_open_smoke
+      COMMAND
+        molshredder_desktop --smoke --amber-smoke
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/topology.prmtop"
+        "--trajectory=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/frame.rst7"
+        "--representation=sticks"
+    )
+    set_tests_properties(
+      desktop.amber_open_smoke
+      PROPERTIES
+        TIMEOUT 10
+        PASS_REGULAR_EXPRESSION "MolShredder desktop Amber ready: atoms=4 frames=1 representation=sticks"
+    )
+    add_test(
+      NAME desktop.amber_mdcrd_smoke
+      COMMAND
+        molshredder_desktop --smoke --amber-mdcrd-smoke
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/topology.prmtop"
+        "--trajectory=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/trajectory.mdcrd"
+        "--representation=sticks"
+    )
+    add_test(
+      NAME desktop.amber_netcdf_smoke
+      COMMAND
+        molshredder_desktop --smoke --amber-netcdf-smoke
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/topology.prmtop"
+        "--trajectory=${MOLSHREDDER_AMBER_NETCDF_FIXTURE}"
+        "--representation=sticks"
+    )
+    set_tests_properties(
+      desktop.amber_netcdf_smoke
+      PROPERTIES
+        TIMEOUT 10
+        FIXTURES_REQUIRED amber_netcdf_fixture
+        PASS_REGULAR_EXPRESSION "MolShredder desktop Amber NetCDF ready: atoms=4 frames=2 representation=sticks"
+    )
+    add_test(
+      NAME desktop.h5md_smoke
+      COMMAND
+        molshredder_desktop --smoke --h5md-smoke
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/lammps_topology.pdb"
+        "--trajectory=${MOLSHREDDER_H5MD_FIXTURE}"
+        "--representation=sticks"
+    )
+    set_tests_properties(
+      desktop.h5md_smoke
+      PROPERTIES
+        TIMEOUT 10
+        FIXTURES_REQUIRED h5md_fixture
+        PASS_REGULAR_EXPRESSION "MolShredder desktop H5MD ready: atoms=3 frames=2 mapping=source-id unit=angstrom"
+    )
+    set_tests_properties(
+      desktop.amber_mdcrd_smoke
+      PROPERTIES
+        TIMEOUT 10
+        PASS_REGULAR_EXPRESSION "MolShredder desktop Amber MDCRD ready: atoms=4 frames=2 representation=sticks"
+    )
+    add_test(
+      NAME desktop.lammps_smoke
+      COMMAND
+        molshredder_desktop --smoke --lammps-smoke
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/lammps_topology.pdb"
+        "--trajectory=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/trajectory.lammpstrj"
+        "--trajectory-unit=angstrom"
+        "--representation=sticks"
+    )
+    set_tests_properties(
+      desktop.lammps_smoke
+      PROPERTIES
+        TIMEOUT 10
+        PASS_REGULAR_EXPRESSION "MolShredder desktop LAMMPS ready: atoms=3 frames=2 mapping=source-id unit=angstrom"
+    )
+    add_test(
+      NAME desktop.binpos_smoke
+      COMMAND
+        molshredder_desktop --smoke --binpos-smoke
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/lammps_topology.pdb"
+        "--trajectory=${MOLSHREDDER_BINPOS_FIXTURE}"
+        "--representation=sticks"
+    )
+    set_tests_properties(
+      desktop.binpos_smoke
+      PROPERTIES
+        TIMEOUT 10
+        FIXTURES_REQUIRED binpos_fixture
+        PASS_REGULAR_EXPRESSION "MolShredder desktop BINPOS ready: atoms=3 frames=2 precision=float32"
     )
   endif()
 endif()
@@ -451,9 +948,65 @@ if(BUILD_TESTING)
   molshredder_enable_warnings(molshredder_molecular_system_tests)
   add_test(NAME model.molecular_system COMMAND molshredder_molecular_system_tests)
 
+  add_executable(molshredder_volume_tests tests/model/volume_test.cpp)
+  target_compile_features(molshredder_volume_tests PRIVATE cxx_std_20)
+  target_link_libraries(molshredder_volume_tests PRIVATE MolShredder::Core)
+  molshredder_enable_warnings(molshredder_volume_tests)
+  add_test(NAME model.volume COMMAND molshredder_volume_tests)
+
+  add_executable(
+    molshredder_opendx_reader_tests
+    tests/io/opendx_reader_test.cpp
+  )
+  target_compile_features(
+    molshredder_opendx_reader_tests PRIVATE cxx_std_20
+  )
+  target_link_libraries(
+    molshredder_opendx_reader_tests PRIVATE MolShredder::Core
+  )
+  molshredder_enable_warnings(molshredder_opendx_reader_tests)
+  add_test(
+    NAME io.opendx_reader
+    COMMAND molshredder_opendx_reader_tests
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/potential.dx"
+  )
+
+  add_executable(
+    molshredder_mrc_reader_tests
+    tests/io/mrc_reader_test.cpp
+  )
+  target_compile_features(molshredder_mrc_reader_tests PRIVATE cxx_std_20)
+  target_link_libraries(
+    molshredder_mrc_reader_tests PRIVATE MolShredder::Core
+  )
+  molshredder_enable_warnings(molshredder_mrc_reader_tests)
+  add_test(
+    NAME io.mrc_reader
+    COMMAND molshredder_mrc_reader_tests
+      "${MOLSHREDDER_MRC_FIXTURE}"
+      "${MOLSHREDDER_MRC_BIG_FIXTURE}"
+  )
+  set_tests_properties(io.mrc_reader PROPERTIES FIXTURES_REQUIRED mrc_fixture)
+
   add_executable(
     molshredder_structure_reader_tests
     tests/io/structure_reader_test.cpp
+  )
+
+  add_executable(
+    molshredder_format_capability_tests
+    tests/io/format_capabilities_test.cpp
+  )
+  target_compile_features(
+    molshredder_format_capability_tests PRIVATE cxx_std_20
+  )
+  target_link_libraries(
+    molshredder_format_capability_tests PRIVATE MolShredder::Core
+  )
+  molshredder_enable_warnings(molshredder_format_capability_tests)
+  add_test(
+    NAME io.format_capabilities
+    COMMAND molshredder_format_capability_tests
   )
   target_compile_features(
     molshredder_structure_reader_tests
@@ -470,6 +1023,45 @@ if(BUILD_TESTING)
       molshredder_structure_reader_tests
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/synthetic_multimodel.pdb"
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/synthetic_multimodel.cif"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/electrostatics.pqr"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/chemistry.sdf"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/chemistry.mol2"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/trajectory.gro"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/trajectory.g96"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/topology.psf"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/topology.prmtop"
+  )
+
+  add_executable(molshredder_vtf_reader_tests tests/io/vtf_reader_test.cpp)
+  target_compile_features(molshredder_vtf_reader_tests PRIVATE cxx_std_20)
+  target_link_libraries(molshredder_vtf_reader_tests PRIVATE MolShredder::Core)
+  molshredder_enable_warnings(molshredder_vtf_reader_tests)
+  add_test(NAME io.vtf_reader COMMAND molshredder_vtf_reader_tests)
+
+  add_executable(
+    molshredder_structure_writer_tests
+    tests/io/structure_writer_test.cpp
+  )
+  target_compile_features(
+    molshredder_structure_writer_tests PRIVATE cxx_std_20
+  )
+  target_link_libraries(
+    molshredder_structure_writer_tests PRIVATE MolShredder::Core
+  )
+  molshredder_enable_warnings(molshredder_structure_writer_tests)
+  add_test(
+    NAME io.structure_writer
+    COMMAND
+      molshredder_structure_writer_tests
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/synthetic_multimodel.pdb"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/synthetic_multimodel.cif"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/electrostatics.pqr"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/chemistry.sdf"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/chemistry.mol2"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/trajectory.gro"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/trajectory.g96"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/topology.psf"
+      "${CMAKE_CURRENT_BINARY_DIR}"
   )
 
   add_executable(
@@ -506,6 +1098,134 @@ if(BUILD_TESTING)
   add_test(
     NAME io.xtc_reader
     COMMAND molshredder_xtc_reader_tests "${CMAKE_CURRENT_BINARY_DIR}"
+  )
+
+  add_executable(
+    molshredder_rst7_reader_tests
+    tests/io/rst7_reader_test.cpp
+  )
+  target_compile_features(molshredder_rst7_reader_tests PRIVATE cxx_std_20)
+  target_link_libraries(molshredder_rst7_reader_tests PRIVATE MolShredder::Core)
+  molshredder_enable_warnings(molshredder_rst7_reader_tests)
+  add_test(
+    NAME io.rst7_reader
+    COMMAND molshredder_rst7_reader_tests
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/frame.rst7"
+      "${CMAKE_CURRENT_BINARY_DIR}"
+  )
+
+  add_executable(
+    molshredder_amber_ascii_reader_tests
+    tests/io/amber_ascii_reader_test.cpp
+  )
+  target_compile_features(
+    molshredder_amber_ascii_reader_tests PRIVATE cxx_std_20
+  )
+  target_link_libraries(
+    molshredder_amber_ascii_reader_tests PRIVATE MolShredder::Core
+  )
+  molshredder_enable_warnings(molshredder_amber_ascii_reader_tests)
+  add_test(
+    NAME io.amber_ascii_reader
+    COMMAND
+      molshredder_amber_ascii_reader_tests
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/trajectory.mdcrd"
+      "${CMAKE_CURRENT_BINARY_DIR}"
+  )
+
+  add_executable(
+    molshredder_binpos_reader_tests
+    tests/io/binpos_reader_test.cpp
+  )
+  target_compile_features(
+    molshredder_binpos_reader_tests PRIVATE cxx_std_20
+  )
+  target_link_libraries(
+    molshredder_binpos_reader_tests PRIVATE MolShredder::Core
+  )
+  molshredder_enable_warnings(molshredder_binpos_reader_tests)
+  add_test(
+    NAME io.binpos_reader
+    COMMAND
+      molshredder_binpos_reader_tests
+      "${MOLSHREDDER_BINPOS_FIXTURE}"
+      "${CMAKE_CURRENT_BINARY_DIR}"
+  )
+  set_tests_properties(
+    io.binpos_reader PROPERTIES FIXTURES_REQUIRED binpos_fixture
+  )
+
+  add_executable(
+    molshredder_amber_netcdf_reader_tests
+    tests/io/amber_netcdf_reader_test.cpp
+  )
+  target_compile_features(
+    molshredder_amber_netcdf_reader_tests PRIVATE cxx_std_20
+  )
+  target_link_libraries(
+    molshredder_amber_netcdf_reader_tests PRIVATE MolShredder::Core
+  )
+  molshredder_enable_warnings(molshredder_amber_netcdf_reader_tests)
+  add_test(
+    NAME io.amber_netcdf_reader
+    COMMAND molshredder_amber_netcdf_reader_tests
+      "${MOLSHREDDER_AMBER_NETCDF_FIXTURE}"
+      "${MOLSHREDDER_AMBER_NETCDF_COMPRESSED_FIXTURE}"
+      "${MOLSHREDDER_AMBER_NETCDF_BAD_FIXTURE}"
+      "${MOLSHREDDER_AMBER_NETCDF_PARTIAL_CELL_FIXTURE}"
+      "${MOLSHREDDER_AMBER_NETCDF_MISSING_DATA_FIXTURE}"
+  )
+  set_tests_properties(
+    io.amber_netcdf_reader PROPERTIES FIXTURES_REQUIRED amber_netcdf_fixture
+  )
+
+  add_executable(
+    molshredder_bcif_reader_tests tests/io/bcif_reader_test.cpp
+  )
+  target_compile_features(molshredder_bcif_reader_tests PRIVATE cxx_std_20)
+  target_link_libraries(molshredder_bcif_reader_tests PRIVATE MolShredder::Core)
+  molshredder_enable_warnings(molshredder_bcif_reader_tests)
+  add_test(
+    NAME io.bcif_reader
+    COMMAND molshredder_bcif_reader_tests
+      "${MOLSHREDDER_BCIF_FIXTURE}"
+      "${MOLSHREDDER_BCIF_OLD_FIXTURE}"
+  )
+  set_tests_properties(io.bcif_reader PROPERTIES FIXTURES_REQUIRED bcif_fixture)
+
+  add_executable(molshredder_h5md_reader_tests tests/io/h5md_reader_test.cpp)
+  target_compile_features(molshredder_h5md_reader_tests PRIVATE cxx_std_20)
+  target_link_libraries(molshredder_h5md_reader_tests PRIVATE MolShredder::Core)
+  molshredder_enable_warnings(molshredder_h5md_reader_tests)
+  add_test(
+    NAME io.h5md_reader
+    COMMAND molshredder_h5md_reader_tests
+      "${MOLSHREDDER_H5MD_FIXTURE}"
+      "${MOLSHREDDER_H5MD_FIXED_FIXTURE}"
+      "${MOLSHREDDER_H5MD_AMBIGUOUS_FIXTURE}"
+      "${MOLSHREDDER_H5MD_PARTIAL_FIXTURE}"
+      "${MOLSHREDDER_H5MD_MISSING_FIXTURE}"
+      "${MOLSHREDDER_H5MD_DYNAMIC_ID_FIXTURE}"
+  )
+  set_tests_properties(io.h5md_reader PROPERTIES FIXTURES_REQUIRED h5md_fixture)
+
+  add_executable(
+    molshredder_lammps_dump_reader_tests
+    tests/io/lammps_dump_reader_test.cpp
+  )
+  target_compile_features(
+    molshredder_lammps_dump_reader_tests PRIVATE cxx_std_20
+  )
+  target_link_libraries(
+    molshredder_lammps_dump_reader_tests PRIVATE MolShredder::Core
+  )
+  molshredder_enable_warnings(molshredder_lammps_dump_reader_tests)
+  add_test(
+    NAME io.lammps_dump_reader
+    COMMAND
+      molshredder_lammps_dump_reader_tests
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/trajectory.lammpstrj"
+      "${CMAKE_CURRENT_BINARY_DIR}"
   )
 
   add_executable(molshredder_scene_tests tests/scene/scene_test.cpp)
@@ -677,6 +1397,35 @@ if(BUILD_TESTING)
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/synthetic_multimodel.pdb"
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/application/fixtures/pbc_distance.pdb"
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/application/fixtures/hydrogen_bond.pdb"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/electrostatics.pqr"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/chemistry.sdf"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/chemistry.mol2"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/trajectory.gro"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/trajectory.g96"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/topology.psf"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/topology.prmtop"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/frame.rst7"
+  )
+
+  add_executable(
+    molshredder_volume_workspace_tests
+    tests/application/volume_workspace_test.cpp
+  )
+  target_compile_features(
+    molshredder_volume_workspace_tests PRIVATE cxx_std_20
+  )
+  target_link_libraries(
+    molshredder_volume_workspace_tests PRIVATE MolShredder::Gui
+  )
+  molshredder_enable_warnings(molshredder_volume_workspace_tests)
+  add_test(
+    NAME application.volume_workspace
+    COMMAND molshredder_volume_workspace_tests
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/potential.dx"
+            "${MOLSHREDDER_MRC_FIXTURE}"
+  )
+  set_tests_properties(
+    application.volume_workspace PROPERTIES FIXTURES_REQUIRED mrc_fixture
   )
 
   add_executable(
@@ -863,6 +1612,143 @@ if(BUILD_TESTING)
       "$<TARGET_FILE:molshredder_python>"
       "$<TARGET_FILE:molshredder>"
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/synthetic_multimodel.pdb"
+  )
+
+  add_test(
+    NAME frontend.save_parity
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/save_frontend_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "$<TARGET_FILE:molshredder>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/synthetic_multimodel.pdb"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/synthetic_multimodel.cif"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/multiframe.xyz"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/electrostatics.pqr"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/chemistry.sdf"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/chemistry.mol2"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/trajectory.gro"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/trajectory.g96"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/topology.psf"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/topology.prmtop"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/frame.rst7"
+      "${CMAKE_CURRENT_BINARY_DIR}"
+  )
+
+  add_test(
+    NAME frontend.mdcrd_parity
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/mdcrd_frontend_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "$<TARGET_FILE:molshredder>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/topology.prmtop"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/trajectory.mdcrd"
+      "${CMAKE_CURRENT_BINARY_DIR}"
+  )
+
+  add_test(
+    NAME frontend.amber_netcdf_parity
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/amber_netcdf_frontend_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "$<TARGET_FILE:molshredder>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/topology.prmtop"
+      "${MOLSHREDDER_AMBER_NETCDF_FIXTURE}"
+      "${CMAKE_CURRENT_BINARY_DIR}"
+  )
+  set_tests_properties(
+    frontend.amber_netcdf_parity
+    PROPERTIES FIXTURES_REQUIRED amber_netcdf_fixture
+  )
+
+  add_test(
+    NAME frontend.h5md_parity
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/h5md_frontend_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "$<TARGET_FILE:molshredder>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/lammps_topology.pdb"
+      "${MOLSHREDDER_H5MD_FIXTURE}"
+      "${CMAKE_CURRENT_BINARY_DIR}"
+  )
+  set_tests_properties(
+    frontend.h5md_parity PROPERTIES FIXTURES_REQUIRED h5md_fixture
+  )
+
+  add_test(
+    NAME frontend.bcif_parity
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/bcif_frontend_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "$<TARGET_FILE:molshredder>"
+      "${MOLSHREDDER_BCIF_FIXTURE}"
+  )
+  set_tests_properties(
+    frontend.bcif_parity PROPERTIES FIXTURES_REQUIRED bcif_fixture
+  )
+
+  add_test(
+    NAME frontend.opendx_parity
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/opendx_frontend_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "$<TARGET_FILE:molshredder>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/potential.dx"
+  )
+
+  add_test(
+    NAME frontend.mrc_parity
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/mrc_frontend_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "$<TARGET_FILE:molshredder>"
+      "${MOLSHREDDER_MRC_FIXTURE}"
+  )
+  set_tests_properties(
+    frontend.mrc_parity PROPERTIES FIXTURES_REQUIRED mrc_fixture
+  )
+
+  add_test(
+    NAME frontend.vtf_parity
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/vtf_frontend_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "$<TARGET_FILE:molshredder>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/coarse_grained.vtf"
+  )
+
+  add_test(
+    NAME frontend.lammps_parity
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/lammps_frontend_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "$<TARGET_FILE:molshredder>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/lammps_topology.pdb"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/trajectory.lammpstrj"
+      "${CMAKE_CURRENT_BINARY_DIR}"
+  )
+
+  add_test(
+    NAME frontend.binpos_parity
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/binpos_frontend_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "$<TARGET_FILE:molshredder>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/lammps_topology.pdb"
+      "${MOLSHREDDER_BINPOS_FIXTURE}"
+      "${CMAKE_CURRENT_BINARY_DIR}"
+  )
+  set_tests_properties(
+    frontend.binpos_parity PROPERTIES FIXTURES_REQUIRED binpos_fixture
   )
 
   add_test(NAME cli.version COMMAND molshredder --version)

@@ -11,6 +11,7 @@ Scene (immutable versioned snapshot)
 └── root, NodeId 0
     ├── group
     │   └── molecular_system ── shared_ptr<const MolecularSystem>
+    ├── volume ── shared_ptr<const VolumeGrid>
     └── group
 ```
 
@@ -21,11 +22,11 @@ version이 증가한다. `NodeId`는 lineage 전체에서 단조 증가하며 �
 
 Node는 다음 상태를 가진다.
 
-- `root`, `group`, `molecular_system` kind
+- `root`, `group`, `molecular_system`, `volume` kind
 - parent와 순서가 보존되는 child list
 - 사용자-facing name과 local visibility
 - translation, normalized quaternion rotation, positive nonzero scale의 local transform
-- system node의 immutable `MolecularSystem` ownership
+- system node의 immutable `MolecularSystem` 또는 volume node의 immutable `VolumeGrid` ownership
 
 Sibling name은 중복될 수 있다. Identity는 name이 아니라 `NodeId`다. Reparent는 명시적 child
 position을 지원하고 cycle/root mutation/out-of-range insertion을 거부한다. Subtree 삭제는 해당
@@ -33,7 +34,8 @@ node를 selection에서도 제거한다. Multi-selection은 정렬된 ID set으�
 `effectively_visible()`은 모든 ancestor visibility를 반영하고 `world_transform()`은 root부터 local
 matrix를 합성한다.
 
-현재 snapshot에는 representation, measurement, map/volume와 per-frame transform node가 없다.
+현재 snapshot에는 representation, measurement와 per-frame transform node가 없다. Volume payload node는
+있지만 isosurface/slice/direct-volume representation component는 아직 없다.
 Analysis presenter의 point/atom-anchor marker는 view-model artifact이며 아직 Scene node가 아니다.
 해당 payload는 각 vertical slice에서 새 `NodeKind` 또는 별도 component store로 추가하며 stable
 ID와 snapshot lifetime을 유지한다.

@@ -1,0 +1,13 @@
+# Combined VTF topology and trajectory fixture
+atom default type CG resname BEAD radius 1.2 mass 2.0
+atom 0:2 name B resid 1 chain A segid SYS
+atom 0 name C atomicnumber 6
+atom 1:2 name O atomicnumber 8
+bond 0::2
+unitcell 10 11 12 80 90 100
+timestep ordered
+0 0 0
+1 0 0
+2 0 0
+timestep indexed
+1 4 5 6

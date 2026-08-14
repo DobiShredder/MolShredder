@@ -1,6 +1,8 @@
+#include <cmath>
 #include <filesystem>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -32,13 +34,181 @@ molshredder::application::DispatchOutcome trigger(
 int main(int argc, char** argv) {
   using namespace molshredder;
   bool passed = true;
-  if (argc != 4) {
-    std::cerr << "expected general, PBC, and H-bond PDB fixture paths\n";
+  if (argc != 12) {
+    std::cerr <<
+        "expected general, PBC, H-bond PDB, PQR, SDF, MOL2, GRO, G96, PSF, PRMTOP and RST7 fixture paths\n";
     return 1;
   }
   const std::filesystem::path fixture{argv[1]};
   const std::filesystem::path pbc_fixture{argv[2]};
   const std::filesystem::path hbond_fixture{argv[3]};
+  const std::filesystem::path pqr_fixture{argv[4]};
+  const std::filesystem::path sdf_fixture{argv[5]};
+  const std::filesystem::path mol2_fixture{argv[6]};
+  const std::filesystem::path gro_fixture{argv[7]};
+  const std::filesystem::path g96_fixture{argv[8]};
+  const std::filesystem::path psf_fixture{argv[9]};
+  const std::filesystem::path prmtop_fixture{argv[10]};
+  const std::filesystem::path rst7_fixture{argv[11]};
+
+  {
+    auto amber_workspace = std::make_shared<application::Workspace>();
+    auto amber_registry = application::make_default_registry(amber_workspace);
+    const application::Dispatcher amber_dispatcher{amber_registry};
+    const gui::ActionAdapter amber_gui{amber_dispatcher};
+    const auto loaded = trigger(
+        amber_gui, "load",
+        {{"path", prmtop_fixture.string()}, {"file-format", "prmtop"},
+         {"name", "amber"}});
+    const auto attached = trigger(
+        amber_gui, "traj load",
+        {{"path", rst7_fixture.string()}, {"file-format", "rst7"},
+         {"cache-mib", "1"}, {"prefetch-frames", "0"}});
+    const auto shown = trigger(
+        amber_gui, "show",
+        {{"representation", "sticks"}, {"selection", "all"}});
+    const auto* object = amber_workspace->active_object();
+    passed &= expect(
+        loaded.succeeded() && attached.succeeded() && shown.succeeded() &&
+            object != nullptr && object->system->coordinates()->frame_count() ==
+                                     1U &&
+            object->trajectory.has_value() &&
+            object->trajectory->format == io::TrajectoryFormat::rst7 &&
+            object->representations.size() == 1U,
+        "shared GUI operation must attach RST7 coordinates to PRMTOP and render them");
+  }
+
+  {
+    auto psf_workspace = std::make_shared<application::Workspace>();
+    auto psf_registry = application::make_default_registry(psf_workspace);
+    const application::Dispatcher psf_dispatcher{psf_registry};
+    const gui::ActionAdapter psf_gui{psf_dispatcher};
+    const auto loaded = trigger(
+        psf_gui, "load",
+        {{"path", psf_fixture.string()}, {"file-format", "psf"},
+         {"name", "topology"}});
+    const auto shown = trigger(
+        psf_gui, "show",
+        {{"representation", "lines"}, {"selection", "all"}});
+    passed &= expect(
+        loaded.succeeded() && psf_workspace->active_object() != nullptr &&
+            psf_workspace->active_object()->system->coordinates()->frame_count() ==
+                0U &&
+            !shown.succeeded() &&
+            std::get<operation::Error>(shown.envelope.payload).code ==
+                operation::ErrorCode::not_found,
+        "shared GUI action must load PSF topology without inventing coordinates");
+  }
+
+  {
+    auto g96_workspace = std::make_shared<application::Workspace>();
+    const auto loaded = g96_workspace->load_structure(
+        g96_fixture, std::string{"gromos"}, io::StructureFormat::auto_detect);
+    passed &= expect(
+        loaded.has_value() && loaded.value().objects.size() == 1U &&
+            loaded.value().objects[0].object_name == "gromos" &&
+            loaded.value().objects[0].frame_count == 2U &&
+            g96_workspace->active_object() != nullptr &&
+            g96_workspace->active_object()->system->coordinates()->
+                    frame_count() == 2U,
+        "multi-frame G96 must load through the shared Workspace path");
+  }
+
+  {
+    auto gro_workspace = std::make_shared<application::Workspace>();
+    const auto loaded = gro_workspace->load_structure(
+        gro_fixture, std::string{"gromacs"}, io::StructureFormat::auto_detect);
+    passed &= expect(
+        loaded.has_value() && loaded.value().objects.size() == 1U &&
+            loaded.value().objects[0].object_name == "gromacs" &&
+            loaded.value().objects[0].frame_count == 2U &&
+            gro_workspace->active_object() != nullptr &&
+            gro_workspace->active_object()->system->coordinates()->
+                    frame_count() == 2U,
+        "multi-frame GRO must load through the shared Workspace path");
+  }
+
+  {
+    auto mol2_workspace = std::make_shared<application::Workspace>();
+    const auto loaded = mol2_workspace->load_structure(
+        mol2_fixture, std::nullopt, io::StructureFormat::auto_detect);
+    passed &= expect(
+        loaded.has_value() && loaded.value().objects.size() == 2U &&
+            loaded.value().objects[0].object_name == "Acetamide" &&
+            loaded.value().objects[1].object_name == "Benzene" &&
+            mol2_workspace->object_count() == 2U &&
+            mol2_workspace->active_object() != nullptr &&
+            mol2_workspace->active_object()->system->name() == "Benzene",
+        "multi-molecule MOL2 must use the shared failure-atomic batch path");
+  }
+
+  {
+    auto chemistry_workspace = std::make_shared<application::Workspace>();
+    const auto loaded = chemistry_workspace->load_structure(
+        sdf_fixture, std::nullopt, io::StructureFormat::auto_detect);
+    passed &= expect(
+        loaded.has_value() && loaded.value().objects.size() == 2U &&
+            loaded.value().objects[0].object_name == "Charged aromatic" &&
+            loaded.value().objects[0].source_record_index == 0U &&
+            loaded.value().objects[1].object_name == "Nitrile" &&
+            loaded.value().objects[1].source_record_index == 1U &&
+            loaded.value().object_id == 2U &&
+            chemistry_workspace->object_count() == 2U &&
+            chemistry_workspace->active_object() != nullptr &&
+            chemistry_workspace->active_object()->system->name() == "Nitrile" &&
+            chemistry_workspace->scene()->node_count() == 3U,
+        "multi-record SDF must create ordered objects and activate the last record");
+    const auto previous_scene = chemistry_workspace->scene();
+    const auto duplicate = chemistry_workspace->load_structure(
+        sdf_fixture, std::nullopt, io::StructureFormat::sdf);
+    passed &= expect(
+        !duplicate.has_value() && chemistry_workspace->object_count() == 2U &&
+            chemistry_workspace->scene() == previous_scene &&
+            chemistry_workspace->active_object()->id == 2U,
+        "failed multi-record import must preserve the complete Workspace");
+    const auto empty_name = chemistry_workspace->load_structure(
+        sdf_fixture, std::string{}, io::StructureFormat::sdf);
+    passed &= expect(!empty_name.has_value() &&
+                         chemistry_workspace->object_count() == 2U &&
+                         chemistry_workspace->scene() == previous_scene,
+                     "explicit empty batch name must fail without mutation");
+
+    auto named_workspace = std::make_shared<application::Workspace>();
+    const auto named = named_workspace->load_structure(
+        sdf_fixture, std::string{"chemistry"}, io::StructureFormat::sdf);
+    passed &= expect(
+        named.has_value() && named.value().objects.size() == 2U &&
+            named.value().objects[0].object_name == "chemistry_1" &&
+            named.value().objects[1].object_name == "chemistry_2",
+        "explicit multi-record name must expand to deterministic unique names");
+  }
+
+  {
+    auto pqr_workspace = std::make_shared<application::Workspace>();
+    auto pqr_registry = application::make_default_registry(pqr_workspace);
+    const application::Dispatcher pqr_dispatcher{pqr_registry};
+    const gui::ActionAdapter pqr_gui{pqr_dispatcher};
+    const auto pqr_loaded = trigger(
+        pqr_gui, "load", {{"path", pqr_fixture.string()},
+                           {"name", "electrostatics"}});
+    const auto pqr_shown = trigger(
+        pqr_gui, "show", {{"representation", "spheres"},
+                           {"selection", "all"}});
+    const auto* pqr_object = pqr_workspace->active_object();
+    passed &= expect(
+        pqr_loaded.succeeded() && pqr_shown.succeeded() &&
+            pqr_object != nullptr && pqr_object->representations.size() == 1U &&
+            pqr_object->representations.front().packet.spheres.size() == 3U &&
+            std::abs(pqr_object->representations.front()
+                         .packet.spheres[0]
+                         .radius -
+                     1.55) < 1.0e-12 &&
+            std::abs(pqr_object->representations.front()
+                         .packet.spheres[2]
+                         .radius -
+                     1.8) < 1.0e-12,
+        "PQR radius property must drive sphere representation radii");
+  }
 
   auto workspace = std::make_shared<application::Workspace>();
   auto registry = application::make_default_registry(workspace);

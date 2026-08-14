@@ -196,7 +196,7 @@ std::optional<operation::Error> TopologyBuilder::add_angle(Angle angle) {
 }
 
 std::optional<operation::Error> TopologyBuilder::add_dihedral(
-    Dihedral dihedral) {
+    Dihedral dihedral, bool allow_duplicate_term) {
   if (!has_atom(dihedral.first) || !has_atom(dihedral.second) ||
       !has_atom(dihedral.third) || !has_atom(dihedral.fourth)) {
     return invalid("dihedral references an unknown atom");
@@ -221,7 +221,7 @@ std::optional<operation::Error> TopologyBuilder::add_dihedral(
                candidate.third == dihedral.third &&
                candidate.fourth == dihedral.fourth;
       });
-  if (duplicate != dihedrals_.end()) {
+  if (!allow_duplicate_term && duplicate != dihedrals_.end()) {
     return invalid("duplicate dihedral atoms");
   }
   dihedrals_.push_back(dihedral);
@@ -229,7 +229,7 @@ std::optional<operation::Error> TopologyBuilder::add_dihedral(
 }
 
 std::optional<operation::Error> TopologyBuilder::add_improper(
-    Improper improper) {
+    Improper improper, bool allow_duplicate_term) {
   if (!has_atom(improper.center) || !has_atom(improper.first) ||
       !has_atom(improper.second) || !has_atom(improper.third)) {
     return invalid("improper references an unknown atom");
@@ -246,7 +246,7 @@ std::optional<operation::Error> TopologyBuilder::add_improper(
                candidate.second == improper.second &&
                candidate.third == improper.third;
       });
-  if (duplicate != impropers_.end()) {
+  if (!allow_duplicate_term && duplicate != impropers_.end()) {
     return invalid("duplicate improper atoms");
   }
   impropers_.push_back(improper);

@@ -1,12 +1,14 @@
 #pragma once
 
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <optional>
+#include <string>
 
-#include <QQuickRhiItem>
 #include <QElapsedTimer>
 #include <QPointF>
+#include <QQuickRhiItem>
 #include <QString>
 #include <QTimer>
 #include <QUrl>
@@ -28,42 +30,42 @@ class MolecularViewport : public QQuickRhiItem {
   QML_NAMED_ELEMENT(MolecularViewport)
   Q_PROPERTY(float angle READ angle WRITE setAngle NOTIFY angleChanged)
   Q_PROPERTY(QString statusText READ statusText NOTIFY statusChanged)
-  Q_PROPERTY(QString representation READ representation NOTIFY
-                 representationChanged)
+  Q_PROPERTY(
+      QString representation READ representation NOTIFY representationChanged)
   Q_PROPERTY(qulonglong atomCount READ atomCount NOTIFY statusChanged)
   Q_PROPERTY(qulonglong primitiveCount READ primitiveCount NOTIFY statusChanged)
   Q_PROPERTY(QString selectionText READ selectionText NOTIFY selectionChanged)
   Q_PROPERTY(QVariantList objectItems READ objectItems NOTIFY objectsChanged)
   Q_PROPERTY(bool hasTrajectory READ hasTrajectory NOTIFY trajectoryChanged)
-  Q_PROPERTY(qulonglong trajectoryFrame READ trajectoryFrame NOTIFY
-                 trajectoryChanged)
+  Q_PROPERTY(
+      qulonglong trajectoryFrame READ trajectoryFrame NOTIFY trajectoryChanged)
   Q_PROPERTY(qulonglong trajectoryFrameCount READ trajectoryFrameCount NOTIFY
                  trajectoryChanged)
-  Q_PROPERTY(bool trajectoryPlaying READ trajectoryPlaying NOTIFY
-                 trajectoryChanged)
+  Q_PROPERTY(
+      bool trajectoryPlaying READ trajectoryPlaying NOTIFY trajectoryChanged)
   Q_PROPERTY(QString playbackMode READ playbackMode NOTIFY trajectoryChanged)
-  Q_PROPERTY(QString playbackDirection READ playbackDirection NOTIFY
-                 trajectoryChanged)
+  Q_PROPERTY(
+      QString playbackDirection READ playbackDirection NOTIFY trajectoryChanged)
   Q_PROPERTY(double trajectoryFps READ trajectoryFps NOTIFY trajectoryChanged)
 
- public:
-  explicit MolecularViewport(QQuickItem* parent = nullptr);
+public:
+  explicit MolecularViewport(QQuickItem *parent = nullptr);
 
-  [[nodiscard]] QQuickRhiItemRenderer* createRenderer() override;
+  [[nodiscard]] QQuickRhiItemRenderer *createRenderer() override;
 
   [[nodiscard]] float angle() const noexcept { return angle_; }
   void setAngle(float angle);
-  [[nodiscard]] const QString& statusText() const noexcept {
+  [[nodiscard]] const QString &statusText() const noexcept {
     return status_text_;
   }
-  [[nodiscard]] const QString& representation() const noexcept {
+  [[nodiscard]] const QString &representation() const noexcept {
     return representation_;
   }
   [[nodiscard]] qulonglong atomCount() const noexcept { return atom_count_; }
   [[nodiscard]] qulonglong primitiveCount() const noexcept {
     return primitive_count_;
   }
-  [[nodiscard]] const QString& selectionText() const noexcept {
+  [[nodiscard]] const QString &selectionText() const noexcept {
     return selection_text_;
   }
   [[nodiscard]] QVariantList objectItems() const;
@@ -77,26 +79,28 @@ class MolecularViewport : public QQuickRhiItem {
   [[nodiscard]] bool trajectoryPlaying() const noexcept {
     return trajectory_playing_;
   }
-  [[nodiscard]] const QString& playbackMode() const noexcept {
+  [[nodiscard]] const QString &playbackMode() const noexcept {
     return playback_mode_;
   }
-  [[nodiscard]] const QString& playbackDirection() const noexcept {
+  [[nodiscard]] const QString &playbackDirection() const noexcept {
     return playback_direction_;
   }
   [[nodiscard]] double trajectoryFps() const noexcept {
     return trajectory_fps_;
   }
 
-  Q_INVOKABLE bool loadStructure(const QUrl& url);
-  Q_INVOKABLE bool loadTrajectory(const QUrl& url);
+  Q_INVOKABLE bool loadStructure(const QUrl &url);
+  Q_INVOKABLE bool saveStructure(const QUrl &url, bool all_frames);
+  Q_INVOKABLE bool loadTrajectory(const QUrl &url,
+                                  const QString &coordinate_unit);
   Q_INVOKABLE bool seekTrajectory(qulonglong frame);
   Q_INVOKABLE bool setTrajectoryPlaying(bool playing);
   Q_INVOKABLE bool stepTrajectory(int direction);
-  Q_INVOKABLE bool setPlaybackMode(const QString& mode);
-  Q_INVOKABLE bool setPlaybackDirection(const QString& direction);
+  Q_INVOKABLE bool setPlaybackMode(const QString &mode);
+  Q_INVOKABLE bool setPlaybackDirection(const QString &direction);
   Q_INVOKABLE bool setTrajectoryFps(double frames_per_second);
   Q_INVOKABLE bool tickTrajectory(double elapsed_milliseconds);
-  Q_INVOKABLE bool setRepresentation(const QString& representation);
+  Q_INVOKABLE bool setRepresentation(const QString &representation);
   Q_INVOKABLE void orbit(double delta_x, double delta_y);
   Q_INVOKABLE void pan(double delta_x, double delta_y);
   Q_INVOKABLE void dolly(double delta);
@@ -106,13 +110,13 @@ class MolecularViewport : public QQuickRhiItem {
   Q_INVOKABLE bool setObjectVisible(qulonglong object_id, bool visible);
 
   void setRenderPacket(render::RenderPacket packet);
-  [[nodiscard]] const render::RenderPacket& renderPacket() const noexcept {
+  [[nodiscard]] const render::RenderPacket &renderPacket() const noexcept {
     return packet_;
   }
   [[nodiscard]] std::uint64_t packetRevision() const noexcept {
     return packet_revision_;
   }
-  [[nodiscard]] const scene::Camera* camera() const noexcept {
+  [[nodiscard]] const scene::Camera *camera() const noexcept {
     return camera_.has_value() ? &camera_.value() : nullptr;
   }
   [[nodiscard]] std::uint64_t cameraRevision() const noexcept {
@@ -123,10 +127,9 @@ class MolecularViewport : public QQuickRhiItem {
   }
   [[nodiscard]] QPointF pickPosition() const noexcept { return pick_position_; }
   void deliverPickResult(std::uint64_t request_revision,
-                         std::uint64_t packet_revision,
-                         std::uint64_t pick_id);
+                         std::uint64_t packet_revision, std::uint64_t pick_id);
 
- signals:
+signals:
   void angleChanged();
   void statusChanged();
   void representationChanged();
@@ -134,7 +137,7 @@ class MolecularViewport : public QQuickRhiItem {
   void objectsChanged();
   void trajectoryChanged();
 
- private:
+private:
   [[nodiscard]] bool rebuildRepresentation();
   [[nodiscard]] bool rebuildScenePacket();
   void syncActiveRepresentationName();
@@ -154,7 +157,8 @@ class MolecularViewport : public QQuickRhiItem {
   render::RenderPacket packet_;
   std::uint64_t packet_revision_{1U};
   float angle_{};
-  QString status_text_{QStringLiteral("Demo packet · open a PDB or mmCIF file")};
+  QString status_text_{
+      QStringLiteral("Demo packet · open a PDB or mmCIF file")};
   QString representation_{QStringLiteral("spheres")};
   qulonglong atom_count_{};
   qulonglong primitive_count_{};
@@ -174,4 +178,4 @@ class MolecularViewport : public QQuickRhiItem {
   double trajectory_fps_{30.0};
 };
 
-}  // namespace molshredder::desktop
+} // namespace molshredder::desktop

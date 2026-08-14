@@ -6,4 +6,6 @@ dependencies:
   - cmake>=3.25,<5
   - ninja>=1.11
   - qt6-main=6.8.3
+  - hdf5>=1.14,<3
+  - libnetcdf>=4.9,<5
   - spirv-tools

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -14,8 +15,11 @@
 #include "molshredder/analysis/secondary_structure.hpp"
 #include "molshredder/analysis/time_series.hpp"
 #include "molshredder/io/structure_reader.hpp"
+#include "molshredder/io/structure_writer.hpp"
 #include "molshredder/io/trajectory_reader.hpp"
+#include "molshredder/io/volume_reader.hpp"
 #include "molshredder/model/molecular_system.hpp"
+#include "molshredder/model/volume.hpp"
 #include "molshredder/operation/error.hpp"
 #include "molshredder/operation/result.hpp"
 #include "molshredder/operation/task_context.hpp"
@@ -54,6 +58,44 @@ struct WorkspaceObject {
   std::optional<TrajectoryState> trajectory;
 };
 
+struct WorkspaceVolume {
+  std::uint64_t id{};
+  scene::NodeId scene_node;
+  std::string name;
+  std::filesystem::path path;
+  io::VolumeFormat format{io::VolumeFormat::auto_detect};
+  std::shared_ptr<const model::VolumeGrid> grid;
+};
+
+struct VolumeLoadResult {
+  std::uint64_t object_id{};
+  std::string object_name;
+  io::VolumeFormat format{io::VolumeFormat::auto_detect};
+  model::VolumeShape shape;
+  std::size_t value_count{};
+  model::VolumePrecision precision{model::VolumePrecision::float64};
+  model::Vec3d origin;
+  std::array<model::Vec3d, 3U> deltas;
+  double minimum{};
+  double maximum{};
+  operation::LengthUnit coordinate_unit{operation::LengthUnit::angstrom};
+};
+
+struct WorkspaceVolumeInfo {
+  std::uint64_t id{};
+  std::uint64_t scene_node_id{};
+  std::string name;
+  model::VolumeShape shape;
+  std::size_t value_count{};
+  model::VolumePrecision precision{model::VolumePrecision::float64};
+  double minimum{};
+  double maximum{};
+  operation::LengthUnit coordinate_unit{operation::LengthUnit::angstrom};
+  bool active{};
+  bool visible{true};
+  bool effectively_visible{true};
+};
+
 struct TrajectoryLoadResult {
   std::uint64_t object_id{};
   io::TrajectoryFormat format{io::TrajectoryFormat::auto_detect};
@@ -80,12 +122,27 @@ struct TrajectoryFrameResult {
   trajectory::PrefetchSnapshot prefetch;
 };
 
+struct LoadedObjectResult {
+  std::uint64_t object_id{};
+  std::string object_name;
+  std::size_t atom_count{};
+  std::size_t frame_count{};
+  std::size_t source_record_index{};
+};
+
 struct LoadResult {
   std::uint64_t object_id{};
   std::string object_name;
   std::size_t atom_count{};
   std::size_t frame_count{};
   io::StructureFormat format{io::StructureFormat::auto_detect};
+  std::vector<LoadedObjectResult> objects;
+};
+
+struct SaveResult {
+  std::uint64_t object_id{};
+  std::filesystem::path path;
+  io::StructureWriteReport report;
 };
 
 struct WorkspaceObjectInfo {
@@ -227,31 +284,41 @@ struct HydrogenBondTimeSeriesResult {
 };
 
 class Workspace {
- public:
+public:
   Workspace();
 
-  [[nodiscard]] operation::Result<LoadResult> load_structure(
-      const std::filesystem::path& path, std::optional<std::string> name,
-      io::StructureFormat format);
+  [[nodiscard]] operation::Result<LoadResult>
+  load_structure(const std::filesystem::path &path,
+                 std::optional<std::string> name, io::StructureFormat format);
+  [[nodiscard]] operation::Result<VolumeLoadResult>
+  load_volume(const std::filesystem::path &path,
+              std::optional<std::string> name, io::VolumeFormat format,
+              operation::LengthUnit coordinate_unit);
+  [[nodiscard]] std::vector<WorkspaceVolumeInfo> list_volumes() const;
+  [[nodiscard]] operation::Result<SaveResult>
+  save_active_structure(const std::filesystem::path &path,
+                        io::StructureFormat format, bool all_frames,
+                        unsigned int decimal_places, std::string comment,
+                        bool overwrite, operation::TaskContext &context) const;
   [[nodiscard]] std::vector<WorkspaceObjectInfo> list_objects() const;
-  [[nodiscard]] operation::Result<WorkspaceObjectInfo> activate_object(
-      std::uint64_t object_id);
-  [[nodiscard]] operation::Result<WorkspaceObjectInfo> set_object_visibility(
-      std::uint64_t object_id, bool visible);
-  [[nodiscard]] std::optional<operation::Error> set_named_selection(
-      std::string name, std::string expression, bool dynamic);
-  [[nodiscard]] operation::Result<ShowResult> show(
-      render::RepresentationKind kind, std::string selection_expression,
-      bool replace_existing = false);
-  [[nodiscard]] operation::Result<CenterAnalysisResult> analyze_center(
-      std::string selection_expression, analysis::CenterMode mode);
+  [[nodiscard]] operation::Result<WorkspaceObjectInfo>
+  activate_object(std::uint64_t object_id);
+  [[nodiscard]] operation::Result<WorkspaceObjectInfo>
+  set_object_visibility(std::uint64_t object_id, bool visible);
+  [[nodiscard]] std::optional<operation::Error>
+  set_named_selection(std::string name, std::string expression, bool dynamic);
+  [[nodiscard]] operation::Result<ShowResult>
+  show(render::RepresentationKind kind, std::string selection_expression,
+       bool replace_existing = false);
+  [[nodiscard]] operation::Result<CenterAnalysisResult>
+  analyze_center(std::string selection_expression, analysis::CenterMode mode);
   [[nodiscard]] operation::Result<DistanceMeasurementRecord> measure_distance(
       std::string from_expression, std::string to_expression,
       analysis::DistanceBoundary boundary = analysis::DistanceBoundary::raw);
   [[nodiscard]] operation::Result<ContactAnalysisResult> analyze_contacts(
       std::string first_expression, std::string second_expression,
-      double cutoff, analysis::DistanceBoundary boundary,
-      bool same_selection, bool exclude_bonded = true,
+      double cutoff, analysis::DistanceBoundary boundary, bool same_selection,
+      bool exclude_bonded = true,
       operation::LengthUnit cutoff_unit = operation::LengthUnit::angstrom);
   [[nodiscard]] operation::Result<HydrogenBondAnalysisResult>
   analyze_hydrogen_bonds(
@@ -268,55 +335,59 @@ class Workspace {
                              analysis::CenterMode mode,
                              analysis::SeriesRange range,
                              analysis::MissingAtomPolicy missing_atom_policy,
-                             operation::TaskContext& context);
+                             operation::TaskContext &context);
   [[nodiscard]] operation::Result<DistanceTimeSeriesResult>
   analyze_distance_time_series(std::string from_expression,
                                std::string to_expression,
                                analysis::DistanceBoundary boundary,
                                analysis::SeriesRange range,
-                               operation::TaskContext& context);
+                               operation::TaskContext &context);
   [[nodiscard]] operation::Result<RmsdTimeSeriesResult>
   analyze_rmsd_time_series(std::string selection_expression,
                            std::string fit_selection_expression,
                            std::size_t reference_frame,
-                           analysis::SeriesRange range,
-                           analysis::FitMode fit,
+                           analysis::SeriesRange range, analysis::FitMode fit,
                            analysis::WeightMode weight_mode,
                            analysis::MissingAtomPolicy missing_atom_policy,
-                           operation::TaskContext& context);
+                           operation::TaskContext &context);
   [[nodiscard]] operation::Result<RmsfTimeSeriesResult>
   analyze_rmsf_time_series(std::string selection_expression,
                            std::string fit_selection_expression,
                            std::size_t reference_frame,
-                           analysis::SeriesRange range,
-                           analysis::FitMode fit,
+                           analysis::SeriesRange range, analysis::FitMode fit,
                            analysis::WeightMode weight_mode,
                            analysis::MissingAtomPolicy missing_atom_policy,
-                           operation::TaskContext& context);
+                           operation::TaskContext &context);
   [[nodiscard]] operation::Result<ContactTimeSeriesResult>
-  analyze_contact_time_series(
-      std::string first_expression, std::string second_expression,
-      double cutoff, operation::LengthUnit cutoff_unit,
-      analysis::DistanceBoundary boundary, bool same_selection,
-      bool exclude_bonded, bool collect_occupancy, analysis::SeriesRange range,
-      operation::TaskContext& context);
+  analyze_contact_time_series(std::string first_expression,
+                              std::string second_expression, double cutoff,
+                              operation::LengthUnit cutoff_unit,
+                              analysis::DistanceBoundary boundary,
+                              bool same_selection, bool exclude_bonded,
+                              bool collect_occupancy,
+                              analysis::SeriesRange range,
+                              operation::TaskContext &context);
   [[nodiscard]] operation::Result<HydrogenBondTimeSeriesResult>
-  analyze_hydrogen_bond_time_series(
-      std::string donor_expression, std::string acceptor_expression,
-      double cutoff, operation::LengthUnit cutoff_unit,
-      double maximum_angle_deviation_degrees,
-      analysis::DistanceBoundary boundary, bool same_selection,
-      bool collect_occupancy, analysis::SeriesRange range,
-      operation::TaskContext& context);
+  analyze_hydrogen_bond_time_series(std::string donor_expression,
+                                    std::string acceptor_expression,
+                                    double cutoff,
+                                    operation::LengthUnit cutoff_unit,
+                                    double maximum_angle_deviation_degrees,
+                                    analysis::DistanceBoundary boundary,
+                                    bool same_selection, bool collect_occupancy,
+                                    analysis::SeriesRange range,
+                                    operation::TaskContext &context);
   [[nodiscard]] operation::Result<TrajectoryLoadResult> load_trajectory(
-      const std::filesystem::path& path, io::TrajectoryFormat format,
-      std::size_t cache_budget_bytes,
-      std::size_t prefetch_frame_count = 4U);
-  [[nodiscard]] operation::Result<TrajectoryFrameResult> set_trajectory_frame(
-      std::size_t frame_index);
-  [[nodiscard]] operation::Result<TrajectoryFrameResult> play_trajectory(
-      trajectory::PlaybackMode mode,
-      trajectory::PlaybackDirection direction, std::size_t transitions);
+      const std::filesystem::path &path, io::TrajectoryFormat format,
+      std::size_t cache_budget_bytes, std::size_t prefetch_frame_count = 4U,
+      std::optional<operation::LengthUnit> coordinate_unit = std::nullopt,
+      std::optional<std::string> h5md_particle_group = std::nullopt);
+  [[nodiscard]] operation::Result<TrajectoryFrameResult>
+  set_trajectory_frame(std::size_t frame_index);
+  [[nodiscard]] operation::Result<TrajectoryFrameResult>
+  play_trajectory(trajectory::PlaybackMode mode,
+                  trajectory::PlaybackDirection direction,
+                  std::size_t transitions);
   [[nodiscard]] operation::Result<TrajectoryFrameResult>
   configure_trajectory_range(trajectory::PlaybackRange range,
                              trajectory::PlaybackMode mode,
@@ -324,38 +395,45 @@ class Workspace {
   [[nodiscard]] operation::Result<TrajectoryFrameResult> pause_trajectory();
   [[nodiscard]] operation::Result<TrajectoryFrameResult>
   set_trajectory_speed(double frames_per_second);
-  [[nodiscard]] operation::Result<TrajectoryFrameResult> tick_trajectory(
-      double elapsed_seconds);
+  [[nodiscard]] operation::Result<TrajectoryFrameResult>
+  tick_trajectory(double elapsed_seconds);
 
-  [[nodiscard]] const std::shared_ptr<const scene::Scene>& scene() const {
+  [[nodiscard]] const std::shared_ptr<const scene::Scene> &scene() const {
     return scene_;
   }
-  [[nodiscard]] const WorkspaceObject* active_object() const noexcept;
-  [[nodiscard]] const WorkspaceObject* object_by_scene_node(
-      std::uint64_t scene_node_id) const noexcept;
+  [[nodiscard]] const WorkspaceObject *active_object() const noexcept;
+  [[nodiscard]] const WorkspaceObject *
+  object_by_scene_node(std::uint64_t scene_node_id) const noexcept;
   [[nodiscard]] std::span<const WorkspaceObject> objects() const noexcept {
     return objects_;
+  }
+  [[nodiscard]] std::span<const WorkspaceVolume> volumes() const noexcept {
+    return volumes_;
   }
   [[nodiscard]] std::size_t object_count() const noexcept {
     return objects_.size();
   }
-  [[nodiscard]] const std::vector<DistanceMeasurementRecord>& measurements()
-      const noexcept {
+  [[nodiscard]] std::size_t volume_count() const noexcept {
+    return volumes_.size();
+  }
+  [[nodiscard]] const std::vector<DistanceMeasurementRecord> &
+  measurements() const noexcept {
     return measurements_;
   }
 
- private:
-  [[nodiscard]] WorkspaceObject* mutable_active_object() noexcept;
-  [[nodiscard]] operation::Result<
-      std::shared_ptr<const model::CoordinateFrame>>
-  active_frame(const WorkspaceObject& object) const;
+private:
+  [[nodiscard]] WorkspaceObject *mutable_active_object() noexcept;
+  [[nodiscard]] operation::Result<std::shared_ptr<const model::CoordinateFrame>>
+  active_frame(const WorkspaceObject &object) const;
 
   std::uint64_t next_object_id_{1U};
   std::uint64_t next_measurement_id_{1U};
   std::vector<WorkspaceObject> objects_;
   std::optional<std::size_t> active_index_;
+  std::vector<WorkspaceVolume> volumes_;
+  std::optional<std::size_t> active_volume_index_;
   std::shared_ptr<const scene::Scene> scene_;
   std::vector<DistanceMeasurementRecord> measurements_;
 };
 
-}  // namespace molshredder::application
+} // namespace molshredder::application

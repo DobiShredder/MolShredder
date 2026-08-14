@@ -54,6 +54,7 @@ enum class BondOrder : std::uint8_t {
   double_bond,
   triple,
   aromatic,
+  amide,
 };
 
 struct Bond {
@@ -189,9 +190,9 @@ class TopologyBuilder {
   [[nodiscard]] std::optional<operation::Error> add_bond(Bond bond);
   [[nodiscard]] std::optional<operation::Error> add_angle(Angle angle);
   [[nodiscard]] std::optional<operation::Error> add_dihedral(
-      Dihedral dihedral);
+      Dihedral dihedral, bool allow_duplicate_term = false);
   [[nodiscard]] std::optional<operation::Error> add_improper(
-      Improper improper);
+      Improper improper, bool allow_duplicate_term = false);
 
   [[nodiscard]] std::optional<operation::Error> add_property(
       std::string name, AtomPropertyColumn column,

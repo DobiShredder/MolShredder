@@ -15,14 +15,14 @@ operation::Error invalid(std::string message, std::string suggestion = {}) {
 }
 
 operation::Error missing(NodeId id) {
-  return operation::Error{
-      operation::ErrorCode::not_found,
-      "scene node does not exist: " + std::to_string(id.value),
-      "use a node ID from the current scene snapshot"};
+  return operation::Error{operation::ErrorCode::not_found,
+                          "scene node does not exist: " +
+                              std::to_string(id.value),
+                          "use a node ID from the current scene snapshot"};
 }
 
-void append_preorder(const std::map<NodeId, SceneNode>& nodes, NodeId id,
-                     std::vector<NodeId>& result) {
+void append_preorder(const std::map<NodeId, SceneNode> &nodes, NodeId id,
+                     std::vector<NodeId> &result) {
   const auto found = nodes.find(id);
   if (found == nodes.end()) {
     return;
@@ -33,9 +33,9 @@ void append_preorder(const std::map<NodeId, SceneNode>& nodes, NodeId id,
   }
 }
 
-}  // namespace
+} // namespace
 
-const SceneNode* Scene::find(NodeId id) const noexcept {
+const SceneNode *Scene::find(NodeId id) const noexcept {
   const auto found = nodes_.find(id);
   return found == nodes_.end() ? nullptr : &found->second;
 }
@@ -48,7 +48,7 @@ std::vector<NodeId> Scene::preorder() const {
 }
 
 bool Scene::effectively_visible(NodeId id) const noexcept {
-  const auto* node = find(id);
+  const auto *node = find(id);
   while (node != nullptr) {
     if (!node->visible()) {
       return false;
@@ -62,11 +62,11 @@ bool Scene::effectively_visible(NodeId id) const noexcept {
 }
 
 operation::Result<Matrix4d> Scene::world_transform(NodeId id) const {
-  const auto* node = find(id);
+  const auto *node = find(id);
   if (node == nullptr) {
     return operation::Result<Matrix4d>::failure(missing(id));
   }
-  std::vector<const SceneNode*> ancestry;
+  std::vector<const SceneNode *> ancestry;
   while (node != nullptr) {
     ancestry.push_back(node);
     node = node->parent().has_value() ? find(*node->parent()) : nullptr;
@@ -88,7 +88,7 @@ SceneBuilder::SceneBuilder() {
   nodes_.emplace(root.id_, std::move(root));
 }
 
-SceneBuilder SceneBuilder::from(const Scene& scene) {
+SceneBuilder SceneBuilder::from(const Scene &scene) {
   SceneBuilder builder;
   builder.base_version_ = scene.version_;
   builder.next_id_ = scene.next_id_;
@@ -97,38 +97,51 @@ SceneBuilder SceneBuilder::from(const Scene& scene) {
   return builder;
 }
 
-SceneNode* SceneBuilder::find(NodeId id) noexcept {
+SceneNode *SceneBuilder::find(NodeId id) noexcept {
   const auto found = nodes_.find(id);
   return found == nodes_.end() ? nullptr : &found->second;
 }
 
-const SceneNode* SceneBuilder::find(NodeId id) const noexcept {
+const SceneNode *SceneBuilder::find(NodeId id) const noexcept {
   const auto found = nodes_.find(id);
   return found == nodes_.end() ? nullptr : &found->second;
 }
 
-operation::Result<NodeId> SceneBuilder::add_group(NodeId parent,
-                                                   std::string name,
-                                                   Transform transform) {
+operation::Result<NodeId>
+SceneBuilder::add_group(NodeId parent, std::string name, Transform transform) {
   return add_node(parent, NodeKind::group, std::move(name), transform, nullptr);
 }
 
-operation::Result<NodeId> SceneBuilder::add_system(
-    NodeId parent, std::string name,
-    std::shared_ptr<const model::MolecularSystem> system,
-    Transform transform) {
+operation::Result<NodeId>
+SceneBuilder::add_system(NodeId parent, std::string name,
+                         std::shared_ptr<const model::MolecularSystem> system,
+                         Transform transform) {
   if (system == nullptr) {
     return operation::Result<NodeId>::failure(
         invalid("molecular-system scene node requires a system"));
   }
-  return add_node(parent, NodeKind::molecular_system, std::move(name), transform,
-                  std::move(system));
+  return add_node(parent, NodeKind::molecular_system, std::move(name),
+                  transform, std::move(system));
 }
 
-operation::Result<NodeId> SceneBuilder::add_node(
-    NodeId parent, NodeKind kind, std::string name, Transform transform,
-    std::shared_ptr<const model::MolecularSystem> system) {
-  auto* parent_node = find(parent);
+operation::Result<NodeId>
+SceneBuilder::add_volume(NodeId parent, std::string name,
+                         std::shared_ptr<const model::VolumeGrid> volume,
+                         Transform transform) {
+  if (volume == nullptr) {
+    return operation::Result<NodeId>::failure(
+        invalid("volume scene node requires a grid"));
+  }
+  return add_node(parent, NodeKind::volume, std::move(name), transform, nullptr,
+                  std::move(volume));
+}
+
+operation::Result<NodeId>
+SceneBuilder::add_node(NodeId parent, NodeKind kind, std::string name,
+                       Transform transform,
+                       std::shared_ptr<const model::MolecularSystem> system,
+                       std::shared_ptr<const model::VolumeGrid> volume) {
+  auto *parent_node = find(parent);
   if (parent_node == nullptr) {
     return operation::Result<NodeId>::failure(missing(parent));
   }
@@ -153,6 +166,7 @@ operation::Result<NodeId> SceneBuilder::add_node(
   node.parent_ = parent;
   node.local_transform_ = transform;
   node.system_ = std::move(system);
+  node.volume_ = std::move(volume);
   nodes_.emplace(id, std::move(node));
   parent_node = find(parent);
   parent_node->children_.push_back(id);
@@ -161,7 +175,7 @@ operation::Result<NodeId> SceneBuilder::add_node(
 
 std::optional<operation::Error> SceneBuilder::rename(NodeId id,
                                                      std::string name) {
-  auto* node = find(id);
+  auto *node = find(id);
   if (node == nullptr) {
     return missing(id);
   }
@@ -174,7 +188,7 @@ std::optional<operation::Error> SceneBuilder::rename(NodeId id,
 
 std::optional<operation::Error> SceneBuilder::set_visible(NodeId id,
                                                           bool visible) {
-  auto* node = find(id);
+  auto *node = find(id);
   if (node == nullptr) {
     return missing(id);
   }
@@ -182,9 +196,9 @@ std::optional<operation::Error> SceneBuilder::set_visible(NodeId id,
   return std::nullopt;
 }
 
-std::optional<operation::Error> SceneBuilder::set_transform(
-    NodeId id, Transform transform) {
-  auto* node = find(id);
+std::optional<operation::Error>
+SceneBuilder::set_transform(NodeId id, Transform transform) {
+  auto *node = find(id);
   if (node == nullptr) {
     return missing(id);
   }
@@ -197,8 +211,9 @@ std::optional<operation::Error> SceneBuilder::set_transform(
 
 std::optional<operation::Error> SceneBuilder::replace_system(
     NodeId id, std::shared_ptr<const model::MolecularSystem> system) {
-  auto* node = find(id);
-  if (node == nullptr) return missing(id);
+  auto *node = find(id);
+  if (node == nullptr)
+    return missing(id);
   if (node->kind_ != NodeKind::molecular_system) {
     return invalid("only molecular-system scene nodes can replace a system");
   }
@@ -211,7 +226,7 @@ std::optional<operation::Error> SceneBuilder::replace_system(
 
 bool SceneBuilder::is_descendant(NodeId possible_descendant,
                                  NodeId ancestor) const noexcept {
-  const auto* node = find(possible_descendant);
+  const auto *node = find(possible_descendant);
   while (node != nullptr && node->parent().has_value()) {
     if (*node->parent() == ancestor) {
       return true;
@@ -221,10 +236,11 @@ bool SceneBuilder::is_descendant(NodeId possible_descendant,
   return false;
 }
 
-std::optional<operation::Error> SceneBuilder::reparent(
-    NodeId id, NodeId new_parent, std::optional<std::size_t> position) {
-  auto* node = find(id);
-  auto* parent = find(new_parent);
+std::optional<operation::Error>
+SceneBuilder::reparent(NodeId id, NodeId new_parent,
+                       std::optional<std::size_t> position) {
+  auto *node = find(id);
+  auto *parent = find(new_parent);
   if (node == nullptr) {
     return missing(id);
   }
@@ -243,7 +259,7 @@ std::optional<operation::Error> SceneBuilder::reparent(
   if (position.has_value() && *position > future_child_count) {
     return invalid("scene child insertion position is out of range");
   }
-  auto* old_parent = find(old_parent_id);
+  auto *old_parent = find(old_parent_id);
   std::erase(old_parent->children_, id);
   parent = find(new_parent);
   const auto insertion = position.value_or(parent->children_.size());
@@ -255,7 +271,7 @@ std::optional<operation::Error> SceneBuilder::reparent(
 }
 
 std::optional<operation::Error> SceneBuilder::remove_subtree(NodeId id) {
-  auto* node = find(id);
+  auto *node = find(id);
   if (node == nullptr) {
     return missing(id);
   }
@@ -265,7 +281,7 @@ std::optional<operation::Error> SceneBuilder::remove_subtree(NodeId id) {
   const auto parent_id = *node->parent_;
   std::vector<NodeId> subtree;
   append_preorder(nodes_, id, subtree);
-  auto* parent = find(parent_id);
+  auto *parent = find(parent_id);
   std::erase(parent->children_, id);
   for (const auto child : subtree) {
     selection_.erase(child);
@@ -274,8 +290,8 @@ std::optional<operation::Error> SceneBuilder::remove_subtree(NodeId id) {
   return std::nullopt;
 }
 
-std::optional<operation::Error> SceneBuilder::set_selection(
-    std::vector<NodeId> ids) {
+std::optional<operation::Error>
+SceneBuilder::set_selection(std::vector<NodeId> ids) {
   std::set<NodeId> selection;
   for (const auto id : ids) {
     if (find(id) == nullptr) {
@@ -304,4 +320,4 @@ operation::Result<std::shared_ptr<const Scene>> SceneBuilder::build() const {
       std::move(scene));
 }
 
-}  // namespace molshredder::scene
+} // namespace molshredder::scene

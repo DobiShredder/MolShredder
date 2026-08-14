@@ -4,6 +4,7 @@ import MolShredder.Desktop
 
 Window {
     id: root
+    property string trajectoryCoordinateUnit: "angstrom"
     width: 1080
     height: 720
     visible: true
@@ -59,20 +60,50 @@ Window {
 
     FileDialog {
         id: structureDialog
-        title: "Open molecular structure"
+        title: "Open molecular structure or scalar volume"
         fileMode: FileDialog.OpenFile
-        nameFilters: ["Molecular structures (*.pdb *.ent *.cif *.mmcif)",
+        nameFilters: ["Molecular data (*.pdb *.ent *.cif *.mmcif *.bcif *.pqr *.mol *.mol2 *.psf *.prmtop *.parm7 *.top *.sdf *.sd *.gro *.g96 *.vtf *.xyz *.dx *.mrc *.map *.ccp4 *.mrcs)",
+                      "OpenDX scalar volumes (*.dx)",
+                      "MRC/CCP4 scalar volumes (*.mrc *.map *.ccp4 *.mrcs)",
                       "All files (*)"]
         onAccepted: viewport.loadStructure(selectedFile)
+    }
+
+    FileDialog {
+        id: saveDialog
+        title: "Save active molecular coordinates"
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: selectedNameFilter.index === 1 ? "pdb"
+                       : selectedNameFilter.index === 2 ? "cif"
+                       : selectedNameFilter.index === 3 ? "gro"
+                       : selectedNameFilter.index === 4 ? "g96"
+                       : selectedNameFilter.index === 5 ? "pqr"
+                       : selectedNameFilter.index === 6 ? "mol"
+                       : selectedNameFilter.index === 7 ? "mol2"
+                       : selectedNameFilter.index === 8 ? "psf"
+                       : selectedNameFilter.index === 9 ? "sdf" : "xyz"
+        nameFilters: ["XYZ coordinates (*.xyz)",
+                      "Protein Data Bank 3.3 (*.pdb *.ent)",
+                      "PDBx/mmCIF (*.cif *.mmcif)",
+                      "BinaryCIF (*.bcif)",
+                      "GROMACS structure/trajectory (*.gro)",
+                      "GROMOS-96 structure/trajectory (*.g96)",
+                      "PQR electrostatics (*.pqr)",
+                      "MDL MOL V2000 (*.mol)",
+                      "Tripos MOL2 (*.mol2)",
+                      "CHARMM/NAMD PSF topology (*.psf)",
+                      "SDF V2000 record (*.sdf *.sd)"]
+        onAccepted: viewport.saveStructure(selectedFile, false)
     }
 
     FileDialog {
         id: trajectoryDialog
         title: "Attach molecular dynamics trajectory"
         fileMode: FileDialog.OpenFile
-        nameFilters: ["MD trajectories (*.dcd *.xtc *.trr)",
+        nameFilters: ["MD trajectories/restarts (*.dcd *.xtc *.trr *.mdcrd *.crd *.nc *.ncdf *.netcdf *.h5md *.rst7 *.restrt *.inpcrd *.inprst *.lammpstrj *.lammpstraj *.dump *.binpos)",
                       "All files (*)"]
-        onAccepted: viewport.loadTrajectory(selectedFile)
+        onAccepted: viewport.loadTrajectory(selectedFile,
+                                              root.trajectoryCoordinateUnit)
     }
 
     component ToolbarButton: Rectangle {
@@ -123,6 +154,19 @@ Window {
             ToolbarButton {
                 label: "Trajectory"
                 action: function() { trajectoryDialog.open() }
+            }
+            ToolbarButton {
+                label: root.trajectoryCoordinateUnit === "angstrom"
+                       ? "Traj Å" : "Traj nm"
+                action: function() {
+                    root.trajectoryCoordinateUnit =
+                        root.trajectoryCoordinateUnit === "angstrom"
+                        ? "nanometer" : "angstrom"
+                }
+            }
+            ToolbarButton {
+                label: "Save"
+                action: function() { saveDialog.open() }
             }
             ToolbarButton {
                 label: "Lines"
