@@ -178,8 +178,9 @@ conda activate molshredder
 conda env update -n molshredder -f environment.yml --prune
 ```
 
-GitHub Actions의 macOS/Linux/Windows matrix도 같은 `environment.yml`로 `molshredder`
-환경을 만든다. 각 단계는 shell activation에 의존하지 않고 `conda run`으로 실행한다.
-Configure 전에 환경의 Python prefix와 실제 HDF5/netCDF package-config directory를
-찾아 `CMAKE_PREFIX_PATH`, `HDF5_DIR`, `netCDF_DIR`와 `Python3_ROOT_DIR`에 전달한다.
-이 개발 환경 검증은 최종 installer의 shared-library closure 검증을 대체하지 않는다.
+수동으로 실행하는 GitHub Actions의 macOS/Linux/Windows matrix도 같은 `environment.yml`로
+`molshredder` 환경을 만든다. 각 단계는 shell activation에 의존하지 않고 `conda run`으로 실행한다.
+Configure에는 환경의 Python prefix를 `CMAKE_PREFIX_PATH`와 `Python3_ROOT_DIR`로 전달한다.
+HDF5는 OS별 package-config file 유무에 의존하지 않도록 CMake `FindHDF5` module로 header와
+shared library를 찾고, netCDF는 제공되는 package config를 사용한다. 이 개발 환경 검증은
+최종 installer의 shared-library closure 검증을 대체하지 않는다.
