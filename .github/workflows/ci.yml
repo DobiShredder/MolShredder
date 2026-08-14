@@ -32,46 +32,77 @@ jobs:
           environment-file: environment.yml
           channel-priority: strict
 
+      - name: Resolve conda environment
+        run: |
+          config_dir() {
+            conda run --no-capture-output -n molshredder python -c \
+              "from pathlib import Path; import sys; names=set(sys.argv[1:]); matches=[p.parent for p in Path(sys.prefix).rglob('*.cmake') if p.name in names]; assert matches, 'package config not found: ' + ', '.join(sorted(names)); print(matches[0])" \
+              "$@"
+          }
+          prefix="$(conda run --no-capture-output -n molshredder python -c 'import sys; print(sys.prefix)')"
+          hdf5_dir="$(config_dir HDF5Config.cmake hdf5-config.cmake)"
+          netcdf_dir="$(config_dir netCDFConfig.cmake netcdf-config.cmake)"
+          test -n "$prefix"
+          test -n "$hdf5_dir"
+          test -n "$netcdf_dir"
+          {
+            printf 'MOLSHREDDER_CONDA_PREFIX=%s\n' "$prefix"
+            printf 'MOLSHREDDER_HDF5_DIR=%s\n' "$hdf5_dir"
+            printf 'MOLSHREDDER_NETCDF_DIR=%s\n' "$netcdf_dir"
+          } >> "$GITHUB_ENV"
+          printf 'Conda prefix: %s\nHDF5 config: %s\nnetCDF config: %s\n' \
+            "$prefix" "$hdf5_dir" "$netcdf_dir"
+
       - name: Configure
         run: >-
+          conda run --no-capture-output -n molshredder
           cmake -S . -B build/ci
           -DBUILD_TESTING=ON
           -DMOLSHREDDER_WARNINGS_AS_ERRORS=ON
           -DCMAKE_BUILD_TYPE=Debug
-          -DCMAKE_PREFIX_PATH="$CONDA_PREFIX"
-          -DPython3_ROOT_DIR="$CONDA_PREFIX"
+          -DCMAKE_PREFIX_PATH="$MOLSHREDDER_CONDA_PREFIX"
+          -DHDF5_DIR="$MOLSHREDDER_HDF5_DIR"
+          -DnetCDF_DIR="$MOLSHREDDER_NETCDF_DIR"
+          -DPython3_ROOT_DIR="$MOLSHREDDER_CONDA_PREFIX"
 
       - name: Build
-        run: cmake --build build/ci --config Debug --parallel
+        run: >-
+          conda run --no-capture-output -n molshredder
+          cmake --build build/ci --config Debug --parallel
 
       - name: Test
-        run: ctest --test-dir build/ci -C Debug --output-on-failure
+        run: >-
+          conda run --no-capture-output -n molshredder
+          ctest --test-dir build/ci -C Debug --output-on-failure
 
       - name: Install staging
-        run: cmake --install build/ci --config Debug --prefix build/stage
+        run: >-
+          conda run --no-capture-output -n molshredder
+          cmake --install build/ci --config Debug --prefix build/stage
 
       - name: Smoke installed executable (Unix)
         if: runner.os != 'Windows'
         run: |
-          ./build/stage/bin/molshredder --version
-          ./build/stage/bin/molshredder system version --format json
+          conda run --no-capture-output -n molshredder ./build/stage/bin/molshredder --version
+          conda run --no-capture-output -n molshredder ./build/stage/bin/molshredder system version --format json
 
       - name: Smoke installed Python module (Unix)
         if: runner.os != 'Windows'
         run: >-
           PYTHONPATH=build/stage/lib/molshredder/python
+          conda run --no-capture-output -n molshredder
           python -c "import molshredder; assert molshredder.invoke('version')['status'] == 'ok'"
 
       - name: Smoke installed executable (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          .\build\stage\bin\molshredder.exe --version
-          .\build\stage\bin\molshredder.exe system version --format json
+          conda run --no-capture-output -n molshredder .\build\stage\bin\molshredder.exe --version
+          conda run --no-capture-output -n molshredder .\build\stage\bin\molshredder.exe system version --format json
 
       - name: Smoke installed Python module (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $env:PYTHONPATH = "build/stage/lib/molshredder/python"
-          python -c "import molshredder; assert molshredder.invoke('version')['status'] == 'ok'"
+          conda run --no-capture-output -n molshredder python -c "import molshredder; assert molshredder.invoke('version')['status'] == 'ok'"

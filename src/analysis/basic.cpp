@@ -83,8 +83,9 @@ operation::Result<MassValues> masses_from_property(
             result.values.push_back(static_cast<double>(value));
           }
           return true;
+        } else {
+          return false;
         }
-        return false;
       },
       property->values);
   if (!converted) {

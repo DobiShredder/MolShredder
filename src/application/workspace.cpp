@@ -77,12 +77,12 @@ atom_visuals(const model::Topology &topology) {
   }
   for (std::size_t index = 0; index < topology.atom_count(); ++index) {
     double radius{};
-    if (const auto *values =
+    if (const auto *double_values =
             std::get_if<std::vector<double>>(&property->values)) {
-      radius = (*values)[index];
-    } else if (const auto *values =
+      radius = (*double_values)[index];
+    } else if (const auto *float_values =
                    std::get_if<std::vector<float>>(&property->values)) {
-      radius = static_cast<double>((*values)[index]);
+      radius = static_cast<double>((*float_values)[index]);
     } else {
       return operation::Result<std::vector<render::AtomVisual>>::failure(
           invalid(std::string{property_name} +

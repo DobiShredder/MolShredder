@@ -26,7 +26,12 @@
 #include <vector>
 
 #ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #endif
 
@@ -1437,12 +1442,12 @@ optional_numeric_property(const model::Topology &topology,
   }
   std::vector<double> result;
   result.reserve(topology.atom_count());
-  if (const auto *values =
+  if (const auto *double_values =
           std::get_if<std::vector<double>>(&property->values)) {
-    result = *values;
-  } else if (const auto *values =
+    result = *double_values;
+  } else if (const auto *float_values =
                  std::get_if<std::vector<float>>(&property->values)) {
-    for (const auto value : *values)
+    for (const auto value : *float_values)
       result.push_back(value);
   } else {
     return operation::Result<std::vector<double>>::failure(invalid(
