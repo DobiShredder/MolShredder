@@ -50,8 +50,9 @@ int main(int argc, char *argv[]) {
   passed &= expect(aliases.size() == 9,
                    "foundation grammar v1 must expose nine shorthand aliases");
   passed &= expect(
-      file_descriptors.size() == 4U &&
+      file_descriptors.size() == 5U &&
           file_descriptors.front().canonical_name == "format list" &&
+          file_descriptors[3].canonical_name == "volume isosurface" &&
           file_descriptors.back().canonical_name == "save",
       "additive file grammar must expose format, volume and save commands");
 

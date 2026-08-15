@@ -91,5 +91,25 @@ int main(int argc, char **argv) {
   const auto listed = actions.trigger({"volume list", {}}, context);
   passed &= expect(listed.succeeded(),
                    "volume list must share the GUI/CLI/Python registry");
+
+  const auto isosurface = actions.trigger(
+      {"volume isosurface",
+       {{"level", "2.5"}, {"color", "orange"}, {"opacity", "0.5"}}},
+      context);
+  passed &= expect(isosurface.succeeded() &&
+                       workspace->volumes().back().representations.size() == 1U &&
+                       !workspace->volumes().back()
+                            .representations.front()
+                            .mesh_triangles.empty(),
+                   "shared action must create an active-volume isosurface");
+  const auto representation_count =
+      workspace->volumes().back().representations.size();
+  const auto invalid_isosurface = actions.trigger(
+      {"volume isosurface", {{"level", "2.5"}, {"opacity", "1.5"}}},
+      context);
+  passed &= expect(!invalid_isosurface.succeeded() &&
+                       workspace->volumes().back().representations.size() ==
+                           representation_count,
+                   "invalid isosurface actions must be failure-atomic");
   return passed ? 0 : 1;
 }

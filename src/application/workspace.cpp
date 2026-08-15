@@ -304,6 +304,7 @@ std::vector<WorkspaceVolumeInfo> Workspace::list_volumes() const {
         volume.id, volume.scene_node.value, volume.name, volume.grid->shape(),
         volume.grid->value_count(), volume.grid->scalars().precision(), minimum,
         maximum, volume.grid->metadata().coordinate_unit,
+        volume.representations.size(),
         active_volume_index_.has_value() && *active_volume_index_ == index,
         node != nullptr && node->visible(),
         scene_->effectively_visible(volume.scene_node)});
@@ -566,7 +567,7 @@ Workspace::load_volume(const std::filesystem::path &path,
   }
   const auto object_id = next_object_id_++;
   volumes_.push_back(WorkspaceVolume{object_id, node.value(), data.name, path,
-                                     document.value().format, data.grid});
+                                     document.value().format, data.grid, {}});
   active_volume_index_ = volumes_.size() - 1U;
   scene_ = next_scene.value();
   const auto [minimum, maximum] = data.grid->scalars().range();
@@ -575,6 +576,43 @@ Workspace::load_volume(const std::filesystem::path &path,
       data.grid->value_count(), data.grid->scalars().precision(),
       data.grid->origin(), data.grid->deltas(), minimum, maximum,
       data.grid->metadata().coordinate_unit});
+}
+
+WorkspaceVolume *Workspace::mutable_active_volume() noexcept {
+  return active_volume_index_.has_value()
+             ? &volumes_[active_volume_index_.value()]
+             : nullptr;
+}
+
+const WorkspaceVolume *Workspace::active_volume() const noexcept {
+  return active_volume_index_.has_value()
+             ? &volumes_[active_volume_index_.value()]
+             : nullptr;
+}
+
+operation::Result<VolumeIsosurfaceResult> Workspace::show_volume_isosurface(
+    double level, render::ColorRgba color, bool replace_existing,
+    operation::TaskContext &context) {
+  auto *volume = mutable_active_volume();
+  if (volume == nullptr) {
+    return operation::Result<VolumeIsosurfaceResult>::failure(operation::Error{
+        operation::ErrorCode::not_found, "no active volume object",
+        "load a volume with volume load first"});
+  }
+  const render::IsosurfaceRequest request{
+      volume->grid.get(), volume->scene_node.value, {level, color}, &context};
+  auto packet = render::build_isosurface(request);
+  if (!packet.has_value()) {
+    return operation::Result<VolumeIsosurfaceResult>::failure(packet.error());
+  }
+  if (replace_existing) volume->representations.clear();
+  const auto index = volume->representations.size();
+  const auto vertex_count = packet.value().mesh_vertices.size();
+  const auto triangle_count = packet.value().mesh_triangles.size();
+  const auto bounds = packet.value().bounds;
+  volume->representations.push_back(std::move(packet.value()));
+  return operation::Result<VolumeIsosurfaceResult>::success(
+      {volume->id, index, level, color, vertex_count, triangle_count, bounds});
 }
 
 operation::Result<SaveResult> Workspace::save_active_structure(

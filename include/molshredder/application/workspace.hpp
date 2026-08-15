@@ -25,6 +25,7 @@
 #include "molshredder/operation/task_context.hpp"
 #include "molshredder/render/packet.hpp"
 #include "molshredder/render/representation.hpp"
+#include "molshredder/render/volume_isosurface.hpp"
 #include "molshredder/scene/scene.hpp"
 #include "molshredder/selection/named_selection.hpp"
 #include "molshredder/trajectory/frame_cache.hpp"
@@ -65,6 +66,17 @@ struct WorkspaceVolume {
   std::filesystem::path path;
   io::VolumeFormat format{io::VolumeFormat::auto_detect};
   std::shared_ptr<const model::VolumeGrid> grid;
+  std::vector<render::RenderPacket> representations;
+};
+
+struct VolumeIsosurfaceResult {
+  std::uint64_t object_id{};
+  std::size_t representation_index{};
+  double level{};
+  render::ColorRgba color;
+  std::size_t vertex_count{};
+  std::size_t triangle_count{};
+  render::Bounds3d bounds;
 };
 
 struct VolumeLoadResult {
@@ -91,6 +103,7 @@ struct WorkspaceVolumeInfo {
   double minimum{};
   double maximum{};
   operation::LengthUnit coordinate_unit{operation::LengthUnit::angstrom};
+  std::size_t representation_count{};
   bool active{};
   bool visible{true};
   bool effectively_visible{true};
@@ -295,6 +308,10 @@ public:
               std::optional<std::string> name, io::VolumeFormat format,
               operation::LengthUnit coordinate_unit);
   [[nodiscard]] std::vector<WorkspaceVolumeInfo> list_volumes() const;
+  [[nodiscard]] operation::Result<VolumeIsosurfaceResult>
+  show_volume_isosurface(double level, render::ColorRgba color,
+                         bool replace_existing,
+                         operation::TaskContext &context);
   [[nodiscard]] operation::Result<SaveResult>
   save_active_structure(const std::filesystem::path &path,
                         io::StructureFormat format, bool all_frames,
@@ -402,6 +419,7 @@ public:
     return scene_;
   }
   [[nodiscard]] const WorkspaceObject *active_object() const noexcept;
+  [[nodiscard]] const WorkspaceVolume *active_volume() const noexcept;
   [[nodiscard]] const WorkspaceObject *
   object_by_scene_node(std::uint64_t scene_node_id) const noexcept;
   [[nodiscard]] std::span<const WorkspaceObject> objects() const noexcept {
@@ -423,6 +441,7 @@ public:
 
 private:
   [[nodiscard]] WorkspaceObject *mutable_active_object() noexcept;
+  [[nodiscard]] WorkspaceVolume *mutable_active_volume() noexcept;
   [[nodiscard]] operation::Result<std::shared_ptr<const model::CoordinateFrame>>
   active_frame(const WorkspaceObject &object) const;
 

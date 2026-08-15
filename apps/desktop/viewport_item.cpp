@@ -1428,14 +1428,14 @@ bool MolecularViewport::loadStructure(const QUrl &url) {
     }
     const auto &volume = workspace_->volumes().back();
     const auto shape = volume.grid->shape();
-    setStatus(QStringLiteral("%1 volume loaded · %2 × %3 × %4 voxels · "
-                             "isosurface display pending")
-                  .arg(is_opendx ? QStringLiteral("OpenDX")
-                                 : QStringLiteral("MRC/CCP4"))
-                  .arg(static_cast<qulonglong>(shape.x))
-                  .arg(static_cast<qulonglong>(shape.y))
-                  .arg(static_cast<qulonglong>(shape.z)),
-              atom_count_, primitive_count_);
+    const auto [minimum, maximum] = volume.grid->scalars().range();
+    has_volume_ = true;
+    volume_minimum_ = minimum;
+    volume_maximum_ = maximum;
+    volume_level_ = minimum + (maximum - minimum) * 0.5;
+    emit volumeChanged();
+    if (!setVolumeIsosurface(volume_level_)) return false;
+    resetView();
     qInfo("MolShredder desktop volume loaded: voxels=%llu "
           "dimensions=%llux%llux%llu format=%s",
           static_cast<unsigned long long>(volume.grid->value_count()),
@@ -2028,6 +2028,42 @@ bool MolecularViewport::rebuildRepresentation() {
   return true;
 }
 
+bool MolecularViewport::setVolumeIsosurface(double level) {
+  if (!std::isfinite(level) || workspace_->active_volume() == nullptr) {
+    setStatus(QStringLiteral("Open a scalar volume and provide a finite contour level"),
+              atom_count_, primitive_count_);
+    return false;
+  }
+  gui::Action action;
+  action.command_name = "volume isosurface";
+  action.parameters.emplace("level", std::to_string(level));
+  action.parameters.emplace("color", "cyan");
+  action.parameters.emplace("opacity", "0.72");
+  action.parameters.emplace("replace", "true");
+  operation::TaskContext context;
+  const auto shown = actions_.trigger(action, context);
+  if (!shown.succeeded()) {
+    setStatus(QStringLiteral("Isosurface failed: ") + outcome_error(shown),
+              atom_count_, primitive_count_);
+    return false;
+  }
+  volume_level_ = level;
+  has_volume_ = true;
+  emit volumeChanged();
+  if (!rebuildScenePacket()) return false;
+  const auto *volume = workspace_->active_volume();
+  const auto vertices = volume == nullptr || volume->representations.empty()
+                            ? 0U
+                            : volume->representations.back().mesh_vertices.size();
+  const auto triangles = volume == nullptr || volume->representations.empty()
+                             ? 0U
+                             : volume->representations.back().mesh_triangles.size();
+  qInfo("MolShredder desktop isosurface ready: level=%.6g vertices=%llu triangles=%llu",
+        level, static_cast<unsigned long long>(vertices),
+        static_cast<unsigned long long>(triangles));
+  return true;
+}
+
 void MolecularViewport::syncActiveRepresentationName() {
   const auto *object = workspace_->active_object();
   if (object == nullptr || object->representations.empty())
@@ -2041,7 +2077,8 @@ void MolecularViewport::syncActiveRepresentationName() {
 
 bool MolecularViewport::rebuildScenePacket() {
   const auto *active = workspace_->active_object();
-  if (active == nullptr) {
+  const auto *active_volume = workspace_->active_volume();
+  if (active == nullptr && active_volume == nullptr) {
     setStatus(QStringLiteral("Workspace has no active object"), 0U, 0U);
     return false;
   }
@@ -2056,21 +2093,37 @@ bool MolecularViewport::rebuildScenePacket() {
       append_packet(combined, representation.packet);
     }
   }
+  for (const auto &volume : workspace_->volumes()) {
+    if (!workspace_->scene()->effectively_visible(volume.scene_node)) continue;
+    ++visible_object_count;
+    for (const auto &representation : volume.representations) {
+      append_packet(combined, representation);
+    }
+  }
   const auto primitive_count =
       combined.lines.size() + combined.cylinders.size() +
       combined.spheres.size() + combined.mesh_triangles.size();
-  atom_count_ =
-      static_cast<qulonglong>(active->system->topology()->atom_count());
+  atom_count_ = active == nullptr
+                    ? 0U
+                    : static_cast<qulonglong>(
+                          active->system->topology()->atom_count());
   primitive_count_ = static_cast<qulonglong>(primitive_count);
   setRenderPacket(std::move(combined));
-  setStatus(
-      QString::fromStdString(active->system->name()) + QStringLiteral(" · ") +
-          representation_ + QStringLiteral(" · ") +
-          QString::number(atom_count_) + QStringLiteral(" active atoms · ") +
-          QString::number(visible_object_count) +
-          QStringLiteral(" visible objects · ") +
-          QString::number(primitive_count_) + QStringLiteral(" primitives"),
-      atom_count_, primitive_count_);
+  const auto label = active != nullptr
+                         ? QString::fromStdString(active->system->name()) +
+                               QStringLiteral(" · ") + representation_ +
+                               QStringLiteral(" · ") +
+                               QString::number(atom_count_) +
+                               QStringLiteral(" active atoms")
+                         : QString::fromStdString(active_volume->name) +
+                               QStringLiteral(" · isosurface ") +
+                               QString::number(volume_level_, 'g', 6);
+  setStatus(label + QStringLiteral(" · ") +
+                QString::number(visible_object_count) +
+                QStringLiteral(" visible objects · ") +
+                QString::number(primitive_count_) +
+                QStringLiteral(" primitives"),
+            atom_count_, primitive_count_);
   emit objectsChanged();
   return true;
 }

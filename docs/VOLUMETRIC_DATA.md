@@ -1,6 +1,6 @@
 # Volumetric data foundation
 
-상태: typed scalar grid와 OpenDX/MRC2014/CCP4 read-only vertical slice
+상태: typed scalar grid, OpenDX/MRC2014/CCP4 read-only I/O와 isosurface vertical slice
 
 MolShredder의 volume은 molecular coordinate frame에 억지로 넣지 않는 독립 data model이다.
 `model::VolumeGrid`는 다음 값을 소유한다.
@@ -43,6 +43,8 @@ OpenDX regular grid에는 coordinate unit field가 없으므로 기본값은 APB
 invoke "volume load" --path "potential.dx" --name "electrostatic" \
   --file-format "opendx" --coordinate-unit "angstrom"
 invoke "volume list"
+invoke "volume isosurface" --level "0.5" --color "cyan" \
+  --opacity "0.72" --replace "true"
 invoke "format list" --family "volume"
 ```
 
@@ -59,8 +61,22 @@ result = molshredder.invoke("volume load", {
 })
 ```
 
-Desktop Open dialog도 `.dx`를 같은 operation으로 읽는다. 현재는 dimensions와 voxel count를 status에
-표시하고 typed volume scene node를 유지하지만 화면 geometry를 생성하지 않는다.
+Desktop Open dialog도 `.dx`를 같은 operation으로 읽고 scalar range midpoint의 isosurface를 자동으로
+생성한다. 하단 contour panel의 `−`, `Midpoint`, `+`도 같은 registry action을 호출한다.
+
+## Isosurface contract
+
+`volume isosurface`는 active volume에서 backend-neutral indexed mesh를 만든다. `level`은 필수 finite
+scalar이며 `color`는 `blue|cyan|green|magenta|orange|red|white|yellow`, `opacity`는 `[0, 1]`이다.
+`--replace true`는 새 mesh 생성이 성공한 뒤 기존 volume representation을 교체한다. 실패나 cancellation은
+기존 packet을 보존한다.
+
+커널은 cube마다 고정된 여섯 tetrahedron을 사용하는 deterministic marching tetrahedra v1이다. 교차
+grid edge를 전역 key로 공유하고, non-orthogonal delta basis의 inverse transpose로 scalar gradient를
+world-space normal로 변환한다. 면은 낮은 scalar 방향을 향하는 vertex normal과 일치하도록 winding한다.
+결과는 vertex/triangle count, bounds, level/color와 algorithm provenance를 반환한다. Grid 한 축이 2보다
+작거나 level이 scalar range 밖이면 오류가 아닌 empty mesh다. 긴 계산은 x-slab마다 cancellation과
+progress를 확인한다.
 
 ## MRC2014/CCP4 contract
 
@@ -100,7 +116,7 @@ MRC2014는 data block handedness를 보편적으로 확정하지 않으므로 re
 - XPLOR/CNS, cube, DSN6/BRIX, Situs, CHGCAR
 - MRC complex transform mode 3/4, packed 4-bit mode 101과 CCP4 skew transform
 - MRC extended-header payload 해석, image/volume-stack 분리와 handedness override
-- isosurface, mesh, slice, field line와 direct volume ray marching
+- slice, field line와 direct volume ray marching
 - map arithmetic/resampling, electrostatic potential surface coloring과 trajectory-dependent volume
 - volume object의 session persistence, rename/delete/visibility command
 

@@ -47,6 +47,10 @@ class MolecularViewport : public QQuickRhiItem {
   Q_PROPERTY(
       QString playbackDirection READ playbackDirection NOTIFY trajectoryChanged)
   Q_PROPERTY(double trajectoryFps READ trajectoryFps NOTIFY trajectoryChanged)
+  Q_PROPERTY(bool hasVolume READ hasVolume NOTIFY volumeChanged)
+  Q_PROPERTY(double volumeLevel READ volumeLevel NOTIFY volumeChanged)
+  Q_PROPERTY(double volumeMinimum READ volumeMinimum NOTIFY volumeChanged)
+  Q_PROPERTY(double volumeMaximum READ volumeMaximum NOTIFY volumeChanged)
 
 public:
   explicit MolecularViewport(QQuickItem *parent = nullptr);
@@ -88,6 +92,10 @@ public:
   [[nodiscard]] double trajectoryFps() const noexcept {
     return trajectory_fps_;
   }
+  [[nodiscard]] bool hasVolume() const noexcept { return has_volume_; }
+  [[nodiscard]] double volumeLevel() const noexcept { return volume_level_; }
+  [[nodiscard]] double volumeMinimum() const noexcept { return volume_minimum_; }
+  [[nodiscard]] double volumeMaximum() const noexcept { return volume_maximum_; }
 
   Q_INVOKABLE bool loadStructure(const QUrl &url);
   Q_INVOKABLE bool saveStructure(const QUrl &url, bool all_frames);
@@ -101,6 +109,7 @@ public:
   Q_INVOKABLE bool setTrajectoryFps(double frames_per_second);
   Q_INVOKABLE bool tickTrajectory(double elapsed_milliseconds);
   Q_INVOKABLE bool setRepresentation(const QString &representation);
+  Q_INVOKABLE bool setVolumeIsosurface(double level);
   Q_INVOKABLE void orbit(double delta_x, double delta_y);
   Q_INVOKABLE void pan(double delta_x, double delta_y);
   Q_INVOKABLE void dolly(double delta);
@@ -136,6 +145,7 @@ signals:
   void selectionChanged();
   void objectsChanged();
   void trajectoryChanged();
+  void volumeChanged();
 
 private:
   [[nodiscard]] bool rebuildRepresentation();
@@ -176,6 +186,10 @@ private:
   QString playback_mode_{QStringLiteral("once")};
   QString playback_direction_{QStringLiteral("forward")};
   double trajectory_fps_{30.0};
+  bool has_volume_{};
+  double volume_level_{};
+  double volume_minimum_{};
+  double volume_maximum_{};
 };
 
 } // namespace molshredder::desktop

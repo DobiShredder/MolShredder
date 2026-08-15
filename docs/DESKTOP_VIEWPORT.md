@@ -54,8 +54,9 @@ calculate playback transitions or decode frames.
 The Open dialog also accepts PQR, MOL/SDF V2000, Tripos MOL2, CHARMM/NAMD PSF, Amber PRMTOP,
 concatenated GROMACS GRO,
 ordered GROMOS-96 G96, VMD VTF, plain multi-frame XYZ, ASCII OpenDX and MRC/CCP4 maps. Volume files use the same
-canonical `volume load` action as CLI/Python and create a typed volume scene object. The status reports grid
-dimensions and voxel count, but no isosurface/slice/direct-volume geometry is rendered yet. Multi-record
+canonical `volume load` action as CLI/Python, create a typed volume scene object and immediately render the scalar
+range midpoint through canonical `volume isosurface`. The bottom contour panel moves the level by 5% of the range
+or restores the midpoint; every control replaces the active volume mesh through the shared action. Multi-record
 SDF and multi-molecule MOL2 create one ordered Workspace object per record and activate the last one. Save invokes the same
 canonical writer as CLI/Python and exports the active object as PDB, mmCIF, PQR, MOL, SDF, MOL2, PSF, GRO, G96 or XYZ based on the suffix;
 the status badge reports the semantic-loss item count. All-frame trajectory
@@ -137,10 +138,11 @@ A native G96 smoke loads two ordered block frames, renders sticks, exports all f
 action and reloads the output before clean shutdown.
 A native VTF Open smoke loads combined topology, chain bonds, a triclinic cell and sparse inherited trajectory frames
 through the same GUI action/Workspace operation used by CLI and Python, then renders sticks with the Metal backend.
-A native OpenDX smoke opens a skewed 2×2×3 float64 scalar grid through the shared volume action, verifies the
-Workspace grid geometry/value count and reaches the Metal event loop without replacing the current molecular render packet.
+A native OpenDX smoke opens a skewed 2×2×3 float64 scalar grid through the shared volume action, creates a midpoint
+isosurface and submits its indexed mesh through the Metal pipeline.
 A native MRC smoke opens a little-endian, axis-permuted triclinic 2×2×3 float32 map with an extended header,
-verifies logical dimensions/value count through the same Workspace action and reaches the Metal event loop.
+verifies logical dimensions/value count, creates its midpoint isosurface through the same Workspace action and
+reaches the Metal event loop.
 A native PSF smoke loads a zero-frame topology without treating absent coordinates as a load error, clears stale scene
 geometry, saves through the canonical GUI action and reloads the topology before clean shutdown. Attaching DCD/XTC/TRR/MDCRD/NetCDF/H5MD/RST7/LAMMPS/BINPOS
 creates the selected representation through the ordinary shared `show` operation.
@@ -157,8 +159,8 @@ analysis/sequence/representation panels, asynchronous file and cache-miss
 decoding, transparency,
 trajectory coordinate-only updates, culling/LOD and 10k/100k/1M GPU benchmarks
 remain open.
-Volume is currently data-only: isosurface extraction, slice/direct-volume rendering, volume picking and a volume
-object panel are still open.
+Volume slice/direct-volume rendering, volume picking and a volume object panel are still open. The current contour
+panel offers bounded step/midpoint controls but not editable numeric entry, color ramps or multiple contour rows.
 The object panel itself still lacks hierarchy, rename/delete/reorder, transform,
 solo/fixed/lock and per-representation child rows. The trajectory panel still
 lacks editable first/last/stride, physical-time display, topology mapping UI,

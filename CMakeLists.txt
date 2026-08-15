@@ -299,6 +299,7 @@ target_sources(
     src/model/volume.cpp
     src/render/reference_renderer.cpp
     src/render/representation.cpp
+    src/render/volume_isosurface.cpp
     src/selection/evaluator.cpp
     src/selection/expression.cpp
     src/selection/named_selection.cpp
@@ -343,6 +344,7 @@ target_sources(
       include/molshredder/render/packet.hpp
       include/molshredder/render/reference_renderer.hpp
       include/molshredder/render/representation.hpp
+      include/molshredder/render/volume_isosurface.hpp
       include/molshredder/selection/evaluator.hpp
       include/molshredder/selection/expression.hpp
       include/molshredder/selection/named_selection.hpp
@@ -591,7 +593,7 @@ if(MOLSHREDDER_BUILD_DESKTOP)
       desktop.opendx_open_smoke
       PROPERTIES
         TIMEOUT 10
-        PASS_REGULAR_EXPRESSION "MolShredder desktop volume loaded: voxels=12 dimensions=2x2x3"
+        PASS_REGULAR_EXPRESSION "MolShredder desktop isosurface ready: level=3.5 vertices="
     )
     add_test(
       NAME desktop.mrc_open_smoke
@@ -604,7 +606,7 @@ if(MOLSHREDDER_BUILD_DESKTOP)
       PROPERTIES
         TIMEOUT 10
         FIXTURES_REQUIRED mrc_fixture
-        PASS_REGULAR_EXPRESSION "MolShredder desktop volume loaded: voxels=12 dimensions=2x2x3 format=mrc"
+        PASS_REGULAR_EXPRESSION "MolShredder desktop isosurface ready: level=56 vertices="
     )
     set_tests_properties(
       desktop.bcif_open_smoke
@@ -1254,6 +1256,22 @@ if(BUILD_TESTING)
   add_test(NAME render.representation COMMAND molshredder_representation_tests)
 
   add_executable(
+    molshredder_volume_isosurface_tests
+    tests/render/volume_isosurface_test.cpp
+  )
+  target_compile_features(
+    molshredder_volume_isosurface_tests PRIVATE cxx_std_20
+  )
+  target_link_libraries(
+    molshredder_volume_isosurface_tests PRIVATE MolShredder::Core
+  )
+  molshredder_enable_warnings(molshredder_volume_isosurface_tests)
+  add_test(
+    NAME render.volume_isosurface
+    COMMAND molshredder_volume_isosurface_tests
+  )
+
+  add_executable(
     molshredder_representation_scaling_tests
     tests/render/representation_scaling_test.cpp
   )
@@ -1713,6 +1731,20 @@ if(BUILD_TESTING)
   )
   set_tests_properties(
     frontend.mrc_parity PROPERTIES FIXTURES_REQUIRED mrc_fixture
+  )
+
+  add_test(
+    NAME frontend.volume_isosurface_parity
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/volume_isosurface_frontend_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "$<TARGET_FILE:molshredder>"
+      "${MOLSHREDDER_MRC_FIXTURE}"
+  )
+  set_tests_properties(
+    frontend.volume_isosurface_parity
+    PROPERTIES FIXTURES_REQUIRED mrc_fixture
   )
 
   add_test(

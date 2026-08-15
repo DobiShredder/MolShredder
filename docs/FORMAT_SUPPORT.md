@@ -43,7 +43,7 @@ OpenDX reader는 `gridpositions`, origin, 세 delta vector, 동일한 `gridconne
 Angstrom 또는 사용자가 지정한 nanometer provenance를 기록하고 scalar unit은 발명하지 않는다.
 
 현재 binary/irregular/vector/multiple-field OpenDX와 writer는 명시적으로 지원하지 않는다. Typed grid와
-command/scene 연결은 완료됐지만 isosurface, slice와 direct volume rendering은 아직 없다. 자세한 계약은
+command/scene 및 marching-tetrahedra isosurface 연결은 완료됐지만 slice와 direct volume rendering은 아직 없다. 자세한 계약은
 [Volumetric data](VOLUMETRIC_DATA.md)에 둔다.
 
 ## MRC2014/CCP4 scalar volume

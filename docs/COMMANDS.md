@@ -14,6 +14,9 @@ molshredder volume load --path PATH [--name NAME]
                            [--file-format auto|dx|opendx|mrc|map|ccp4|mrcs]
                            [--coordinate-unit angstrom|nanometer]
 molshredder volume list
+molshredder volume isosurface --level NUMBER
+                           [--color blue|cyan|green|magenta|orange|red|white|yellow]
+                           [--opacity 0..1] [--replace false|true]
 molshredder save --path PATH [--file-format auto|pdb|mmcif|cif|mol|mol2|psf|pqr|sdf|gro|g96|xyz]
                  [--frames current|all] [--precision 0..15]
                  [--comment TEXT] [--overwrite false|true]
@@ -58,8 +61,9 @@ Additive `format list`와 `save` 문법, atomic output 및 semantic loss table�
   Angstrom이므로 `nanometer` 선택 시 geometry를 변환한다. MRC axis permutation과 origin/start policy는
   [Volumetric data](VOLUMETRIC_DATA.md)에 고정한다.
 - `volume list`: 현재 Workspace의 volume object ID/name, scene node, dimensions, value count, precision,
-  scalar range, coordinate unit, active/visibility를 typed table로 반환한다. Volume rendering command는 아직
-  없으며 load/list가 isosurface·slice의 선행 data contract다.
+  scalar range, coordinate unit, representation count와 active/visibility를 typed table로 반환한다.
+- `volume isosurface`: active volume의 contour mesh를 생성한다. 기본 cyan/불투명 style을 사용하며
+  `--replace true`가 기본이다. GUI, CLI와 Python은 같은 failure-atomic Workspace operation을 호출한다.
 - `select`: atom selection expression을 named selection으로 생성 또는 교체한다. `--update true`는
   frame/state 변화에 따라 다시 평가되는 selection을 뜻한다.
 - `show`: selection에 representation을 보이게 한다. 현재 choice는 lines/sticks/spheres와

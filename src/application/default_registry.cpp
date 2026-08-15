@@ -145,6 +145,24 @@ operation::Result<double> number_argument(const command::Arguments &arguments,
   return operation::Result<double>::success(parsed);
 }
 
+render::ColorRgba named_color(std::string_view name, float alpha) {
+  if (name == "blue") return {0.2F, 0.35F, 1.0F, alpha};
+  if (name == "green") return {0.2F, 0.8F, 0.35F, alpha};
+  if (name == "magenta") return {0.9F, 0.25F, 0.8F, alpha};
+  if (name == "orange") return {1.0F, 0.5F, 0.15F, alpha};
+  if (name == "red") return {0.95F, 0.2F, 0.2F, alpha};
+  if (name == "white") return {1.0F, 1.0F, 1.0F, alpha};
+  if (name == "yellow") return {1.0F, 0.85F, 0.2F, alpha};
+  return {0.2F, 0.65F, 1.0F, alpha};
+}
+
+command::Value color_value(render::ColorRgba color) {
+  return command::Value::Array{static_cast<double>(color.red),
+                               static_cast<double>(color.green),
+                               static_cast<double>(color.blue),
+                               static_cast<double>(color.alpha)};
+}
+
 operation::Result<analysis::SeriesRange>
 series_range(const command::Arguments &arguments, const Workspace &workspace) {
   const auto first = size_argument(arguments, "first");
@@ -513,7 +531,8 @@ command::Registry make_default_registry(std::shared_ptr<Workspace> workspace) {
         table.columns = {"object_id",       "name",         "active",
                          "visible",         "dimensions",   "value_count",
                          "precision",       "minimum",      "maximum",
-                         "coordinate_unit", "scene_node_id"};
+                         "coordinate_unit", "representations",
+                         "scene_node_id"};
         command::Value::Array items;
         items.reserve(volumes.size());
         command::Value active_object_id{nullptr};
@@ -526,7 +545,9 @@ command::Registry make_default_registry(std::shared_ptr<Workspace> workspace) {
           table.rows.push_back({volume.id, volume.name, volume.active,
                                 volume.visible, shape_text(volume.shape),
                                 volume.value_count, precision, volume.minimum,
-                                volume.maximum, unit, volume.scene_node_id});
+                                volume.maximum, unit,
+                                volume.representation_count,
+                                volume.scene_node_id});
           items.emplace_back(command::Value::Object{
               {"active", volume.active},
               {"coordinate_unit", unit},
@@ -537,6 +558,7 @@ command::Registry make_default_registry(std::shared_ptr<Workspace> workspace) {
               {"name", volume.name},
               {"object_id", volume.id},
               {"precision", precision},
+              {"representation_count", volume.representation_count},
               {"scene_node_id", volume.scene_node_id},
               {"value_count", volume.value_count},
               {"visible", volume.visible}});
@@ -549,6 +571,42 @@ command::Registry make_default_registry(std::shared_ptr<Workspace> workspace) {
               {"volume_count", volumes.size()},
               {"volumes", std::move(items)}},
              std::move(table)});
+      };
+    } else if (canonical_name == "volume isosurface") {
+      handler = [workspace](const Arguments &arguments, TaskContext &context) {
+        const auto level = number_argument(arguments, "level");
+        const auto opacity = number_argument(arguments, "opacity");
+        if (!level.has_value()) return Result<Response>::failure(level.error());
+        if (!opacity.has_value())
+          return Result<Response>::failure(opacity.error());
+        if (opacity.value() < 0.0 || opacity.value() > 1.0) {
+          return Result<Response>::failure(operation::Error{
+              operation::ErrorCode::invalid_argument,
+              "--opacity must be between 0 and 1",
+              "provide an opacity in the inclusive range [0, 1]"});
+        }
+        const auto color = named_color(arguments.at("color"),
+                                       static_cast<float>(opacity.value()));
+        const auto shown = workspace->show_volume_isosurface(
+            level.value(), color, arguments.at("replace") == "true", context);
+        if (!shown.has_value())
+          return Result<Response>::failure(shown.error());
+        command::Value bounds{nullptr};
+        if (!shown.value().bounds.empty) {
+          bounds = command::Value::Object{
+              {"maximum", vector_value(shown.value().bounds.maximum)},
+              {"minimum", vector_value(shown.value().bounds.minimum)}};
+        }
+        return Result<Response>::success(
+            {"created volume isosurface",
+             {{"algorithm", "marching-tetrahedra"},
+              {"bounds", std::move(bounds)},
+              {"color", color_value(shown.value().color)},
+              {"level", shown.value().level},
+              {"object_id", shown.value().object_id},
+              {"representation_index", shown.value().representation_index},
+              {"triangle_count", shown.value().triangle_count},
+              {"vertex_count", shown.value().vertex_count}}});
       };
     } else if (canonical_name == "object list") {
       handler = [workspace](const Arguments &, TaskContext &) {

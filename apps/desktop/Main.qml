@@ -332,6 +332,60 @@ Window {
     }
 
     Rectangle {
+        id: volumePanel
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 20
+        width: 430
+        height: 72
+        visible: viewport.hasVolume && !viewport.hasTrajectory
+        radius: 9
+        color: "#e6101827"
+        border.color: "#506889"
+        z: 3
+
+        Text {
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.leftMargin: 14
+            text: "Contour " + Number(viewport.volumeLevel).toPrecision(5)
+            color: "#d8e8fa"
+            font.pixelSize: 14
+        }
+
+        Row {
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.rightMargin: 12
+            spacing: 8
+
+            ToolbarButton {
+                label: "−"
+                action: function() {
+                    const step = (viewport.volumeMaximum - viewport.volumeMinimum) / 20
+                    viewport.setVolumeIsosurface(
+                        Math.max(viewport.volumeMinimum, viewport.volumeLevel - step))
+                }
+            }
+            ToolbarButton {
+                label: "Midpoint"
+                action: function() {
+                    viewport.setVolumeIsosurface(
+                        (viewport.volumeMinimum + viewport.volumeMaximum) / 2)
+                }
+            }
+            ToolbarButton {
+                label: "+"
+                action: function() {
+                    const step = (viewport.volumeMaximum - viewport.volumeMinimum) / 20
+                    viewport.setVolumeIsosurface(
+                        Math.min(viewport.volumeMaximum, viewport.volumeLevel + step))
+                }
+            }
+        }
+    }
+
+    Rectangle {
         id: objectPanel
         anchors.right: parent.right
         anchors.top: parent.top
@@ -443,7 +497,7 @@ Window {
         anchors.left: parent.left
         anchors.bottom: parent.bottom
         anchors.leftMargin: 20
-        anchors.bottomMargin: viewport.hasTrajectory ? 132 : 20
+        anchors.bottomMargin: viewport.hasTrajectory ? 132 : viewport.hasVolume ? 108 : 20
         width: statusLabel.implicitWidth + 28
         height: statusLabel.implicitHeight + 18
         radius: 8
@@ -463,7 +517,7 @@ Window {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         anchors.rightMargin: 20
-        anchors.bottomMargin: viewport.hasTrajectory ? 132 : 20
+        anchors.bottomMargin: viewport.hasTrajectory ? 132 : viewport.hasVolume ? 108 : 20
         width: selectionLabel.implicitWidth + 28
         height: selectionLabel.implicitHeight + 18
         radius: 8

@@ -34,8 +34,8 @@ node를 selection에서도 제거한다. Multi-selection은 정렬된 ID set으�
 `effectively_visible()`은 모든 ancestor visibility를 반영하고 `world_transform()`은 root부터 local
 matrix를 합성한다.
 
-현재 snapshot에는 representation, measurement와 per-frame transform node가 없다. Volume payload node는
-있지만 isosurface/slice/direct-volume representation component는 아직 없다.
+현재 snapshot에는 representation, measurement와 per-frame transform node가 없다. Volume payload node의
+isosurface packet은 Workspace가 소유하며 slice/direct-volume representation component는 아직 없다.
 Analysis presenter의 point/atom-anchor marker는 view-model artifact이며 아직 Scene node가 아니다.
 해당 payload는 각 vertical slice에서 새 `NodeKind` 또는 별도 component store로 추가하며 stable
 ID와 snapshot lifetime을 유지한다.

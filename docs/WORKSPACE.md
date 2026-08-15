@@ -9,8 +9,8 @@ application state와 core kernel을 호출한다.
 
 Workspace는 immutable scene snapshot, ordered molecular objects, ordered scalar volume objects, 각각의
 active index와 공유되는 다음 object ID를 소유한다. Molecular object는 `MolecularSystem`, scene node,
-named selections와 representation record를 묶고 volume object는 `VolumeGrid`, source path와 scene node를
-묶는다. 두 종류는 하나의 object-name/ID namespace를 사용한다.
+named selections와 representation record를 묶고 volume object는 `VolumeGrid`, source path, scene node와
+isosurface packet list를 묶는다. 두 종류는 하나의 object-name/ID namespace를 사용한다.
 Structure reader가 둘 이상의 frame을 반환하면 Workspace는 그 coordinate source를 공통 bounded cache,
 playback timeline과 prefetch controller에 자동 등록한다. 따라서 multi-model PDB/mmCIF, GRO/G96/VTF/XYZ는
 별도 `traj load` 없이 GUI timeline과 `traj frame`/trajectory analysis에서 같은 state를 사용한다.
@@ -35,8 +35,9 @@ analysis는 좌표를 발명하지 않고 actionable `not_found`를 반환한다
 Workspace에 commit한다. Duplicate molecular/volume name이나 read/build 실패는 기존 scene, object vector,
 active index와 next ID를 바꾸지 않는다. Molecular active object와 active volume은 독립적이므로 potential
 map을 load해도 현재 molecular representation과 trajectory state를 폐기하지 않는다. `volume list`는
-dimensions, precision, scalar range, coordinate unit과 scene visibility를 동일 GUI/CLI/Python result로
-노출한다. Volume rendering과 volume session persistence는 아직 없다.
+dimensions, precision, scalar range, coordinate unit, representation count와 scene visibility를 동일
+GUI/CLI/Python result로 노출한다. `volume isosurface`는 mesh를 먼저 완성한 뒤 append/replace를 commit한다.
+Volume session persistence는 아직 없다.
 
 ## Command sequence
 
@@ -49,6 +50,7 @@ invoke "measure distance" --from "index 1" --to "index 2" --mode "atom" --pbc "r
 invoke "volume load" --file-format "opendx" --name "potential" --path "potential.dx" \
   --coordinate-unit "angstrom"
 invoke "volume list"
+invoke "volume isosurface" --level "0.5" --color "cyan" --replace "true"
 ```
 
 MRC/CCP4도 같은 sequence에서 `--file-format mrc|map|ccp4|mrcs`로 load할 수 있으며 OpenDX와
