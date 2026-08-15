@@ -108,6 +108,7 @@ TopologyBuilder TopologyBuilder::from(const Topology& topology) {
   builder.angles_ = topology.angles_;
   builder.dihedrals_ = topology.dihedrals_;
   builder.impropers_ = topology.impropers_;
+  builder.cmap_terms_ = topology.cmap_terms_;
   builder.properties_ = topology.properties_.columns_;
   builder.source_metadata_ = topology.source_metadata_;
   builder.base_version_ = topology.version_;
@@ -253,6 +254,28 @@ std::optional<operation::Error> TopologyBuilder::add_improper(
   return std::nullopt;
 }
 
+std::optional<operation::Error> TopologyBuilder::add_cmap_term(
+    CmapTerm term, bool allow_duplicate_term) {
+  if (std::any_of(term.atoms.begin(), term.atoms.end(),
+                  [this](AtomIndex atom) { return !has_atom(atom); })) {
+    return invalid("CMAP term references an unknown atom");
+  }
+  if (!distinct(term.atoms[0], term.atoms[1], term.atoms[2], term.atoms[3]) ||
+      !distinct(term.atoms[4], term.atoms[5], term.atoms[6], term.atoms[7])) {
+    return invalid("each CMAP dihedral must contain four distinct atoms");
+  }
+  const auto duplicate =
+      std::find_if(cmap_terms_.begin(), cmap_terms_.end(),
+                   [&term](const CmapTerm& candidate) {
+                     return candidate.atoms == term.atoms;
+                   });
+  if (!allow_duplicate_term && duplicate != cmap_terms_.end()) {
+    return invalid("duplicate CMAP term atoms");
+  }
+  cmap_terms_.push_back(std::move(term));
+  return std::nullopt;
+}
+
 std::optional<operation::Error> TopologyBuilder::add_property(
     std::string name, AtomPropertyColumn column, PropertyMetadata metadata) {
   if (name.empty()) {
@@ -304,6 +327,7 @@ operation::Result<std::shared_ptr<const Topology>> TopologyBuilder::build()
   topology->angles_ = angles_;
   topology->dihedrals_ = dihedrals_;
   topology->impropers_ = impropers_;
+  topology->cmap_terms_ = cmap_terms_;
   topology->properties_.row_count_ = atoms_.size();
   topology->properties_.columns_ = properties_;
   topology->source_metadata_ = source_metadata_;

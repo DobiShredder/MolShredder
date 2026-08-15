@@ -458,7 +458,8 @@ operation::Result<StructureDocument> read_psf(std::string_view content,
   };
   for (const auto &[name, arity] :
        std::vector<std::pair<std::string_view, std::size_t>>{
-           {"NBOND", 2U}, {"NTHETA", 3U}, {"NPHI", 4U}, {"NIMPHI", 4U}}) {
+           {"NBOND", 2U}, {"NTHETA", 3U}, {"NPHI", 4U}, {"NIMPHI", 4U},
+           {"NCRTERM", 8U}}) {
     const auto *section = find_section(name);
     if (section == nullptr)
       continue;
@@ -484,9 +485,13 @@ operation::Result<StructureDocument> read_psf(std::string_view content,
       } else if (name == "NPHI") {
         error = builder.add_dihedral(
             {indices[0], indices[1], indices[2], indices[3]}, true);
-      } else {
+      } else if (name == "NIMPHI") {
         error = builder.add_improper(
             {indices[0], indices[1], indices[2], indices[3]}, true);
+      } else {
+        model::CmapTerm term;
+        std::copy(indices.begin(), indices.end(), term.atoms.begin());
+        error = builder.add_cmap_term(std::move(term), true);
       }
       if (error.has_value())
         return Result<StructureDocument>::failure(*error);
@@ -494,10 +499,10 @@ operation::Result<StructureDocument> read_psf(std::string_view content,
   }
 
   const std::set<std::string, std::less<>> auxiliary{
-      "NTITLE", "NATOM", "NBOND", "NTHETA", "NPHI", "NIMPHI",
+      "NTITLE", "NATOM", "NBOND", "NTHETA", "NPHI", "NIMPHI", "NCRTERM",
       "NDON",   "NACC",  "NNB",   "NGRP",   "MOLNT"};
   const std::set<std::string, std::less<>> unsupported_sections{
-      "NCRTERM", "NCMAP", "NUMLP", "NUMLPH", "NUMANISO"};
+      "NCMAP", "NUMLP", "NUMLPH", "NUMANISO"};
   for (const auto &section : sections) {
     if (unsupported_sections.contains(section.name) && section.count != 0U) {
       return Result<StructureDocument>::failure(

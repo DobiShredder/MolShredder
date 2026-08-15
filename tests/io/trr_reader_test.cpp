@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "molshredder/io/trajectory_reader.hpp"
+#include "molshredder/io/trajectory_writer.hpp"
 
 namespace {
 
@@ -229,6 +230,63 @@ int main(int argc, char** argv) {
                          force->second.metadata.unit ==
                              "kJ mol^-1 angstrom^-1",
                      "TRR force must convert from per-nm to per-angstrom");
+
+    io::TrajectoryWriteOptions write_options;
+    write_options.format = io::TrajectoryFormat::trr;
+    operation::TaskContext write_context;
+    const auto serialized = io::serialize_trajectory_frame(
+        *frame.value(), write_options, write_context);
+    passed &= expect(
+        serialized.has_value() && serialized.value().report.has_time &&
+            serialized.value().report.has_velocities &&
+            serialized.value().report.has_forces &&
+            serialized.value().report.has_unit_cell &&
+            serialized.value().report.precision == io::TrrPrecision::float32,
+        "TRR writer must preserve float32 trajectory channels");
+    const auto roundtrip_path = directory / "roundtrip.trr";
+    std::error_code ignored;
+    std::filesystem::remove(roundtrip_path, ignored);
+    const auto written = io::write_trajectory_frame_file(
+        roundtrip_path, *frame.value(), write_options, false, write_context);
+    const auto copy = io::open_trr(roundtrip_path, 2U);
+    passed &= expect(written.has_value() && copy.has_value(),
+                     "atomic TRR output must read back");
+    if (copy.has_value()) {
+      const auto copied = copy.value()->read_frame(0U);
+      const auto &copied_positions = std::get<std::vector<model::Vec3f>>(
+          copied.value()->positions().values());
+      const auto &copied_velocities = std::get<std::vector<model::Vec3f>>(
+          copied.value()->velocities()->values());
+      const auto copied_force =
+          copied.value()->metadata().atom_properties.find("force_z");
+      passed &= expect(
+          near(copied_positions[1].z, 32.0) &&
+              near(copied_velocities[0].x, 4.0) &&
+              near(std::get<std::vector<float>>(copied_force->second.values)[1],
+                   12.0) &&
+              copied.value()->metadata().source_step == 20U &&
+              near(copied.value()->metadata().physical_time->value, 2.5) &&
+              copied.value()->metadata().fields.at("trr.lambda").find("0.500") !=
+                  std::string::npos,
+          "TRR read-write-read must preserve coordinates, velocity, force, "
+          "step, time and lambda");
+    }
+    const auto collision = io::write_trajectory_frame_file(
+        roundtrip_path, *frame.value(), write_options, false, write_context);
+    passed &= expect(!collision.has_value(),
+                     "TRR writer must reject implicit overwrite");
+    operation::TaskContext cancelled_context;
+    cancelled_context.cancellation.request_cancel();
+    const auto cancelled_path = directory / "cancelled.trr";
+    std::filesystem::remove(cancelled_path, ignored);
+    const auto cancelled = io::write_trajectory_frame_file(
+        cancelled_path, *frame.value(), write_options, false,
+        cancelled_context);
+    passed &= expect(!cancelled.has_value() &&
+                         cancelled.error().code ==
+                             operation::ErrorCode::cancelled &&
+                         !std::filesystem::exists(cancelled_path),
+                     "cancelled TRR export must not publish a partial file");
   }
   passed &= expect(!opened.value()->read_frame(2U).has_value(),
                    "out-of-range TRR frame must fail");
@@ -242,6 +300,23 @@ int main(int argc, char** argv) {
                        !precise->metadata().unit_cell.has_value() &&
                        !precise->velocities().has_value(),
                    "double TRR precision and absent optional channels must survive");
+  {
+    io::TrajectoryWriteOptions options;
+    options.format = io::TrajectoryFormat::trr;
+    operation::TaskContext context;
+    const auto output = directory / "roundtrip_double.trr";
+    std::error_code ignored;
+    std::filesystem::remove(output, ignored);
+    const auto written = io::write_trajectory_frame_file(
+        output, *precise, options, false, context);
+    const auto copy = io::open_trr(output).value()->read_frame(0U).value();
+    const auto &copy_values =
+        std::get<std::vector<model::Vec3d>>(copy->positions().values());
+    passed &= expect(written.has_value() &&
+                         written.value().precision == io::TrrPrecision::float64 &&
+                         near(copy_values[0].x, 1.23456789, 1.0e-10),
+                     "TRR writer must retain float64 precision");
+  }
   passed &= expect(io::open_trr(mixed_path).value()->metadata().precision ==
                        io::TrrPrecision::mixed,
                    "mixed per-frame precision must be reported");
@@ -257,6 +332,35 @@ int main(int argc, char** argv) {
                        !io::open_trr(truncated_path).has_value() &&
                        !io::open_trr(directory / "missing.trr").has_value(),
                    "topology mismatch, legacy, truncated and missing TRR must fail");
+
+  model::FrameMetadata incomplete_metadata;
+  incomplete_metadata.source_step = 1U;
+  incomplete_metadata.physical_time =
+      model::PhysicalTime{0.0, model::TimeUnit::picosecond};
+  incomplete_metadata.fields.emplace("trr.lambda", "0");
+  model::PropertyMetadata force_metadata;
+  force_metadata.unit = "kJ mol^-1 angstrom^-1";
+  incomplete_metadata.atom_properties.emplace(
+      "force_x", model::AtomProperty{std::vector<float>{1.0F},
+                                      std::move(force_metadata)});
+  const auto incomplete = model::CoordinateFrame::create(
+      model::CoordinateBuffer{std::vector<model::Vec3f>(1U)}, std::nullopt, {},
+      std::move(incomplete_metadata));
+  io::TrajectoryWriteOptions strict_options;
+  strict_options.format = io::TrajectoryFormat::trr;
+  operation::TaskContext strict_context;
+  passed &= expect(
+      !io::serialize_trajectory_frame(*incomplete.value(), strict_options,
+                                      strict_context)
+           .has_value(),
+      "TRR writer must reject incomplete force triplets");
+  const auto untyped = model::CoordinateFrame::create(
+      model::CoordinateBuffer{std::vector<model::Vec3f>(1U)});
+  passed &= expect(
+      !io::serialize_trajectory_frame(*untyped.value(), strict_options,
+                                      strict_context)
+           .has_value(),
+      "TRR writer must not invent step, time or lambda metadata");
 
   return passed ? 0 : 1;
 }

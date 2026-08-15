@@ -29,6 +29,7 @@ struct Section {
   char kind{};
   std::size_t width{};
   std::size_t header_line{};
+  std::vector<std::string> comments;
   std::vector<SourceLine> data;
 };
 
@@ -130,9 +131,18 @@ parse_sections(std::string_view content, std::string_view source) {
                                      : "duplicate Amber %FLAG: " + name));
       }
       auto inserted =
-          sections.emplace(name, Section{name, 0, 0U, line->number, {}});
+          sections.emplace(name, Section{name, 0, 0U, line->number, {}, {}});
       current = &inserted.first->second;
       awaiting_format = true;
+      continue;
+    }
+    if (upper.starts_with("%COMMENT")) {
+      if (current == nullptr || !awaiting_format) {
+        return Result<std::map<std::string, Section, std::less<>>>::failure(
+            parse_error(source, line->number, "unexpected Amber %COMMENT"));
+      }
+      current->comments.push_back(
+          trim(std::string_view{cleaned}.substr(8U)));
       continue;
     }
     if (upper.starts_with("%FORMAT")) {
@@ -672,6 +682,17 @@ operation::Result<StructureDocument> read_prmtop(std::string_view content,
                               std::to_string(sections.size()));
   builder.set_source_metadata("amber.charge_scale", "18.2223");
   builder.set_source_metadata("amber.force_parameters", "not-modeled");
+  for (const auto &[name, section] : sections) {
+    if (section.comments.empty())
+      continue;
+    std::string joined;
+    for (const auto &comment : section.comments) {
+      if (!joined.empty())
+        joined.push_back('\n');
+      joined += comment;
+    }
+    builder.set_source_metadata("amber.comment." + name, std::move(joined));
+  }
   if (box_dimensions.has_value()) {
     builder.set_source_metadata("amber.box_angle_degrees",
                                 std::to_string((*box_dimensions)[0]));

@@ -572,6 +572,36 @@ command::Registry make_default_registry(std::shared_ptr<Workspace> workspace) {
               {"volumes", std::move(items)}},
              std::move(table)});
       };
+    } else if (canonical_name == "volume save") {
+      handler = [workspace](const Arguments &arguments, TaskContext &context) {
+        const auto saved = workspace->save_active_volume(
+            arguments.at("path"), volume_format(arguments.at("file-format")),
+            arguments.at("overwrite") == "true", context);
+        if (!saved.has_value())
+          return Result<Response>::failure(saved.error());
+        command::Table table;
+        table.columns = {"channel", "count", "message"};
+        std::uint64_t lost_item_count{};
+        for (const auto &loss : saved.value().report.losses) {
+          table.rows.push_back({loss.channel, loss.count, loss.message});
+          lost_item_count += loss.count;
+        }
+        return Result<Response>::success(
+            {"saved volume " + saved.value().path.string(),
+             {{"byte_count", saved.value().report.byte_count},
+              {"dimensions", shape_value(saved.value().report.shape)},
+              {"format",
+               std::string{io::to_string(saved.value().report.format)}},
+              {"loss_channel_count",
+               static_cast<std::uint64_t>(saved.value().report.losses.size())},
+              {"loss_item_count", lost_item_count},
+              {"object_id", saved.value().object_id},
+              {"path", saved.value().path.string()},
+              {"precision", std::string{volume_precision_name(
+                                saved.value().report.precision)}},
+              {"value_count", saved.value().report.value_count}},
+             std::move(table)});
+      };
     } else if (canonical_name == "volume isosurface") {
       handler = [workspace](const Arguments &arguments, TaskContext &context) {
         const auto level = number_argument(arguments, "level");
@@ -1562,6 +1592,53 @@ command::Registry make_default_registry(std::shared_ptr<Workspace> workspace) {
         fields.emplace("prefetch_state", std::string{trajectory::to_string(
                                              loaded.value().prefetch.state)});
         return Result<Response>::success(std::move(response));
+      };
+    } else if (canonical_name == "traj save") {
+      handler = [workspace](const Arguments &arguments, TaskContext &context) {
+        std::string title;
+        if (const auto found = arguments.find("title");
+            found != arguments.end()) {
+          title = found->second;
+        }
+        const auto saved = workspace->save_active_trajectory_frame(
+            arguments.at("path"),
+            trajectory_format(arguments.at("file-format")), std::move(title),
+            arguments.at("overwrite") == "true", context);
+        if (!saved.has_value())
+          return Result<Response>::failure(saved.error());
+        command::Table table;
+        table.columns = {"channel", "count", "message"};
+        std::uint64_t lost_item_count{};
+        for (const auto &loss : saved.value().report.losses) {
+          table.rows.push_back({loss.channel, loss.count, loss.message});
+          lost_item_count += loss.count;
+        }
+        return Result<Response>::success(
+            {"saved trajectory frame " + saved.value().path.string(),
+             {{"atom_count",
+               static_cast<std::uint64_t>(saved.value().report.atom_count)},
+              {"byte_count", saved.value().report.byte_count},
+              {"format",
+               std::string{io::to_string(saved.value().report.format)}},
+              {"frame_index", saved.value().frame_index},
+              {"has_temperature", saved.value().report.has_temperature},
+              {"has_forces", saved.value().report.has_forces},
+              {"has_time", saved.value().report.has_time},
+              {"has_unit_cell", saved.value().report.has_unit_cell},
+              {"has_velocities", saved.value().report.has_velocities},
+              {"precision",
+               saved.value().report.precision.has_value()
+                   ? command::Value{*saved.value().report.precision ==
+                                            io::TrrPrecision::float32
+                                        ? "float32"
+                                        : "float64"}
+                   : command::Value{nullptr}},
+              {"loss_channel_count",
+               static_cast<std::uint64_t>(saved.value().report.losses.size())},
+              {"loss_item_count", lost_item_count},
+              {"object_id", saved.value().object_id},
+              {"path", saved.value().path.string()}},
+             std::move(table)});
       };
     } else if (canonical_name == "traj frame") {
       handler = [workspace](const Arguments &arguments, TaskContext &) {

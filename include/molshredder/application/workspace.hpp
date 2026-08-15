@@ -17,7 +17,9 @@
 #include "molshredder/io/structure_reader.hpp"
 #include "molshredder/io/structure_writer.hpp"
 #include "molshredder/io/trajectory_reader.hpp"
+#include "molshredder/io/trajectory_writer.hpp"
 #include "molshredder/io/volume_reader.hpp"
+#include "molshredder/io/volume_writer.hpp"
 #include "molshredder/model/molecular_system.hpp"
 #include "molshredder/model/volume.hpp"
 #include "molshredder/operation/error.hpp"
@@ -156,6 +158,19 @@ struct SaveResult {
   std::uint64_t object_id{};
   std::filesystem::path path;
   io::StructureWriteReport report;
+};
+
+struct VolumeSaveResult {
+  std::uint64_t object_id{};
+  std::filesystem::path path;
+  io::VolumeWriteReport report;
+};
+
+struct TrajectorySaveResult {
+  std::uint64_t object_id{};
+  std::size_t frame_index{};
+  std::filesystem::path path;
+  io::TrajectoryWriteReport report;
 };
 
 struct WorkspaceObjectInfo {
@@ -312,6 +327,10 @@ public:
   show_volume_isosurface(double level, render::ColorRgba color,
                          bool replace_existing,
                          operation::TaskContext &context);
+  [[nodiscard]] operation::Result<VolumeSaveResult>
+  save_active_volume(const std::filesystem::path &path,
+                     io::VolumeFormat format, bool overwrite,
+                     operation::TaskContext &context) const;
   [[nodiscard]] operation::Result<SaveResult>
   save_active_structure(const std::filesystem::path &path,
                         io::StructureFormat format, bool all_frames,
@@ -399,6 +418,11 @@ public:
       std::size_t cache_budget_bytes, std::size_t prefetch_frame_count = 4U,
       std::optional<operation::LengthUnit> coordinate_unit = std::nullopt,
       std::optional<std::string> h5md_particle_group = std::nullopt);
+  [[nodiscard]] operation::Result<TrajectorySaveResult>
+  save_active_trajectory_frame(const std::filesystem::path &path,
+                               io::TrajectoryFormat format,
+                               std::string title, bool overwrite,
+                               operation::TaskContext &context) const;
   [[nodiscard]] operation::Result<TrajectoryFrameResult>
   set_trajectory_frame(std::size_t frame_index);
   [[nodiscard]] operation::Result<TrajectoryFrameResult>

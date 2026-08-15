@@ -828,7 +828,8 @@ write_mmcif(std::ostream &output, const model::Topology &topology,
   losses.add("higher_connectivity",
              static_cast<std::uint64_t>(topology.angles().size() +
                                         topology.dihedrals().size() +
-                                        topology.impropers().size()),
+                                        topology.impropers().size() +
+                                        topology.cmap_terms().size()),
              "mmCIF coordinate output does not preserve force-field angle, "
              "dihedral or improper terms");
   losses.add("velocity", velocity_frames,

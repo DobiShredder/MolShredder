@@ -291,8 +291,10 @@ target_sources(
     src/io/structure_writer.cpp
     src/io/xyz_reader.cpp
     src/io/trajectory_reader.cpp
+    src/io/trajectory_writer.cpp
     src/io/mrc_reader.cpp
     src/io/volume_reader.cpp
+    src/io/volume_writer.cpp
     src/model/coordinates.cpp
     src/model/molecular_system.cpp
     src/model/topology.cpp
@@ -336,7 +338,9 @@ target_sources(
       include/molshredder/io/structure_writer.hpp
       include/molshredder/io/format_capabilities.hpp
       include/molshredder/io/trajectory_reader.hpp
+      include/molshredder/io/trajectory_writer.hpp
       include/molshredder/io/volume_reader.hpp
+      include/molshredder/io/volume_writer.hpp
       include/molshredder/model/coordinates.hpp
       include/molshredder/model/molecular_system.hpp
       include/molshredder/model/topology.hpp
@@ -975,6 +979,24 @@ if(BUILD_TESTING)
   )
 
   add_executable(
+    molshredder_opendx_writer_tests
+    tests/io/opendx_writer_test.cpp
+  )
+  target_compile_features(
+    molshredder_opendx_writer_tests PRIVATE cxx_std_20
+  )
+  target_link_libraries(
+    molshredder_opendx_writer_tests PRIVATE MolShredder::Core
+  )
+  molshredder_enable_warnings(molshredder_opendx_writer_tests)
+  add_test(
+    NAME io.opendx_writer
+    COMMAND molshredder_opendx_writer_tests
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/potential.dx"
+      "${CMAKE_CURRENT_BINARY_DIR}"
+  )
+
+  add_executable(
     molshredder_mrc_reader_tests
     tests/io/mrc_reader_test.cpp
   )
@@ -988,6 +1010,18 @@ if(BUILD_TESTING)
     COMMAND molshredder_mrc_reader_tests
       "${MOLSHREDDER_MRC_FIXTURE}"
       "${MOLSHREDDER_MRC_BIG_FIXTURE}"
+  )
+
+  add_executable(
+    molshredder_mrc_writer_tests
+    tests/io/mrc_writer_test.cpp
+  )
+  target_compile_features(molshredder_mrc_writer_tests PRIVATE cxx_std_20)
+  target_link_libraries(molshredder_mrc_writer_tests PRIVATE MolShredder::Core)
+  molshredder_enable_warnings(molshredder_mrc_writer_tests)
+  add_test(
+    NAME io.mrc_writer
+    COMMAND molshredder_mrc_writer_tests "${CMAKE_CURRENT_BINARY_DIR}"
   )
   set_tests_properties(io.mrc_reader PROPERTIES FIXTURES_REQUIRED mrc_fixture)
 
@@ -1090,6 +1124,7 @@ if(BUILD_TESTING)
     NAME io.trr_reader
     COMMAND molshredder_trr_reader_tests "${CMAKE_CURRENT_BINARY_DIR}"
   )
+  set_tests_properties(io.trr_reader PROPERTIES FIXTURES_SETUP trr_fixture)
 
   add_executable(
     molshredder_xtc_reader_tests
@@ -1664,6 +1699,32 @@ if(BUILD_TESTING)
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/topology.prmtop"
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/trajectory.mdcrd"
       "${CMAKE_CURRENT_BINARY_DIR}"
+  )
+
+  add_test(
+    NAME frontend.rst7_writer_parity
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/rst7_writer_frontend_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "$<TARGET_FILE:molshredder>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/topology.prmtop"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/frame.rst7"
+      "${CMAKE_CURRENT_BINARY_DIR}"
+  )
+
+  add_test(
+    NAME frontend.trr_writer_parity
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/trr_writer_frontend_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "$<TARGET_FILE:molshredder>"
+      "${CMAKE_CURRENT_BINARY_DIR}/synthetic_float.trr"
+      "${CMAKE_CURRENT_BINARY_DIR}"
+  )
+  set_tests_properties(
+    frontend.trr_writer_parity PROPERTIES FIXTURES_REQUIRED trr_fixture
   )
 
   add_test(

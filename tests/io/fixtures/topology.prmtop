@@ -1,5 +1,6 @@
 %VERSION  VERSION_STAMP = V0001.000  DATE = 08/14/26  18:30:00
 %FLAG TITLE
+%COMMENT generated fixture title
 %FORMAT(20a4)
 MolShredder Amber topology fixture
 %FLAG POINTERS
@@ -12,6 +13,8 @@ MolShredder Amber topology fixture
 %FORMAT(20a4)
 N   CA  C   O   
 %FLAG CHARGE
+%COMMENT Amber charge in internal electrostatic units
+%COMMENT converted with the historical scale
 %FORMAT(5E16.8)
   0.00000000E+00  0.18222300E+02 -0.18222300E+02  0.00000000E+00
 %FLAG ATOMIC_NUMBER

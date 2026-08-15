@@ -119,6 +119,13 @@ int main() {
                                 atom_indices[2], atom_indices[3]})
                        .has_value(),
                    "exact duplicate improper must fail");
+  const CmapTerm cmap{{atom_indices[0], atom_indices[1], atom_indices[2],
+                       atom_indices[3], atom_indices[1], atom_indices[2],
+                       atom_indices[3], atom_indices[0]}};
+  passed &= expect(!builder.add_cmap_term(cmap).has_value(),
+                   "valid two-dihedral CMAP term must add");
+  passed &= expect(builder.add_cmap_term(cmap).has_value(),
+                   "exact duplicate CMAP term must fail");
 
   passed &= expect(!builder.add_property(
                         "selected", BooleanColumn{{1, 1, 0, 1}})
@@ -173,7 +180,8 @@ int main() {
                      "bond endpoints must use canonical stable indices");
     passed &= expect(topology.angles().size() == 1 &&
                          topology.dihedrals().size() == 1 &&
-                         topology.impropers().size() == 1,
+                         topology.impropers().size() == 1 &&
+                         topology.cmap_terms().size() == 1,
                      "higher-order connectivity must be preserved");
     passed &= expect(topology.properties().row_count() == 4 &&
                          topology.properties().names() ==

@@ -121,6 +121,7 @@ int main(int argc, char **argv) {
   std::string mode0_payload;
   std::string mode6_payload(24U, '\0');
   std::string mode12_payload(24U, '\0');
+  std::string mode16_payload(36U, '\0');
   for (std::size_t index = 0; index < 12U; ++index) {
     mode0_payload.push_back(index == 0U ? static_cast<char>(0x80U)
                                         : static_cast<char>(index));
@@ -128,6 +129,9 @@ int main(int argc, char **argv) {
             static_cast<std::uint16_t>(60000U + index));
     put_u16(mode12_payload, index * 2U,
             index == 0U ? 0x3e00U : static_cast<std::uint16_t>(0U));
+    mode16_payload[index * 3U] = static_cast<char>(index);
+    mode16_payload[index * 3U + 1U] = static_cast<char>(index + 3U);
+    mode16_payload[index * 3U + 2U] = static_cast<char>(index + 6U);
   }
   const auto mode0 =
       io::read_volume(mode_variant(source, 0, mode0_payload), mrc_options());
@@ -135,13 +139,37 @@ int main(int argc, char **argv) {
       io::read_volume(mode_variant(source, 6, mode6_payload), mrc_options());
   const auto mode12 =
       io::read_volume(mode_variant(source, 12, mode12_payload), mrc_options());
+  const auto mode16 =
+      io::read_volume(mode_variant(source, 16, mode16_payload), mrc_options());
   passed &= expect(
       mode0.has_value() && mode6.has_value() && mode12.has_value() &&
+          mode16.has_value() &&
           mode0.value().volumes.front().grid->value(0U, 0U, 0U) == -128.0 &&
           mode0.value().volumes.front().grid->value(1U, 1U, 2U) == 11.0 &&
           mode6.value().volumes.front().grid->value(1U, 1U, 2U) == 60011.0 &&
-          mode12.value().volumes.front().grid->value(0U, 0U, 0U) == 1.5,
-      "MRC signed byte, unsigned 16-bit and IEEE binary16 modes must decode");
+          mode12.value().volumes.front().grid->value(0U, 0U, 0U) == 1.5 &&
+          mode16.value().volumes.front().grid->value(0U, 0U, 0U) == 3.0 &&
+          mode16.value().volumes.front().grid->metadata().fields.at(
+              "mrc_rgb_conversion") == "arithmetic_mean",
+      "MRC signed byte, unsigned 16-bit, IEEE binary16 and RGB modes must "
+      "decode");
+
+  auto imod_unsigned_bytes = mode_variant(source, 0, mode0_payload);
+  put_i32(imod_unsigned_bytes, 152U, 1146047817);
+  put_i32(imod_unsigned_bytes, 156U, 0);
+  const auto imod_unsigned = io::read_volume(imod_unsigned_bytes, mrc_options());
+  auto imod_signed_bytes = imod_unsigned_bytes;
+  put_i32(imod_signed_bytes, 156U, 1);
+  const auto imod_signed = io::read_volume(imod_signed_bytes, mrc_options());
+  passed &= expect(
+      imod_unsigned.has_value() && imod_signed.has_value() &&
+          imod_unsigned.value().volumes.front().grid->value(0U, 0U, 0U) ==
+              128.0 &&
+          imod_signed.value().volumes.front().grid->value(0U, 0U, 0U) ==
+              -128.0 &&
+          imod_unsigned.value().volumes.front().grid->metadata().fields.at(
+              "mrc_mode_0_signedness") == "unsigned_imod",
+      "IMOD mode-0 flags must select unsigned or signed byte decoding");
 
   auto unknown_stamp = source;
   unknown_stamp[212U] = '\0';

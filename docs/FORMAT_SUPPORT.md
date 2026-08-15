@@ -1,14 +1,16 @@
 # Structure and volume format support
 
 상태: versioned native read/write foundation
-검증 기준일: 2026-08-14
+검증 기준일: 2026-08-16
 
 MolShredder core는 native PDB, PDBx/mmCIF, BinaryCIF 0.3.x, PQR, MDL MOL V2000, SDF V2000, Tripos MOL2,
 CHARMM/NAMD PSF, Amber PRMTOP/RST7/MDCRD/NetCDF, GROMACS GRO, GROMOS-96 G96, VMD VTF 및 plain XYZ structure/coordinate reader와
 PDB/PDBx-mmCIF/PQR/MOL/SDF/MOL2/PSF/GRO/G96/XYZ writer를 제공한다.
-APBS-compatible ASCII OpenDX와 MRC2014/CCP4 regular scalar grid는 독립 typed volume object로 read-only 지원한다.
+APBS-compatible ASCII OpenDX와 MRC2014/CCP4 regular scalar grid는 독립 typed volume object로
+read/write한다.
 Structure public API는 `molshredder/io/structure_reader.hpp`와 `structure_writer.hpp`이고 trajectory
-attach API는 `trajectory_reader.hpp`, volume API는 `volume_reader.hpp`다. Structure와 volume은 memory
+I/O API는 `trajectory_reader.hpp`와 `trajectory_writer.hpp`, volume API는 `volume_reader.hpp`와
+`volume_writer.hpp`다. Structure와 volume은 memory
 content 또는 file path를 읽고, writable structure format은
 memory 또는 failure-atomic file로 쓸 수 있다. Format을
 명시하거나 첫 meaningful record로 자동 판별한다. Reader는 application object ID를 만들지 않고
@@ -42,14 +44,17 @@ OpenDX reader는 `gridpositions`, origin, 세 delta vector, 동일한 `gridconne
 근사하지 않으므로 skewed delta도 그대로 보존한다. Format에 coordinate unit이 없기 때문에 기본 APBS
 Angstrom 또는 사용자가 지정한 nanometer provenance를 기록하고 scalar unit은 발명하지 않는다.
 
-현재 binary/irregular/vector/multiple-field OpenDX와 writer는 명시적으로 지원하지 않는다. Typed grid와
+Writer는 float32/float64, skewed delta, singleton axis와 z-fastest scalar order를 보존하며 coordinate/scalar
+unit 및 auxiliary metadata의 비표현을 typed loss로 보고하고 failure-atomic file publish를 사용한다.
+현재 binary/irregular/vector/multiple-field OpenDX와 out-of-core I/O는 명시적으로 지원하지 않는다. Typed grid와
 command/scene 및 marching-tetrahedra isosurface 연결은 완료됐지만 slice와 direct volume rendering은 아직 없다. 자세한 계약은
 [Volumetric data](VOLUMETRIC_DATA.md)에 둔다.
 
 ## MRC2014/CCP4 scalar volume
 
 MRC reader는 1024-byte header와 `NSYMBT` extended-header offset을 bounds-check하고 `MACHST`에 따라
-little/big-endian scalar mode 0/1/2/6/12를 float32 grid로 복원한다. `MAPC/MAPR/MAPS` permutation을
+little/big-endian scalar mode 0/1/2/6/12와 mode 16 RGB grayscale을 float32 grid로 복원한다. IMOD
+stamp/flag가 있는 mode 0은 signed/unsigned 의미를 보존한다. `MAPC/MAPR/MAPS` permutation을
 logical X/Y/Z shape와 z-fastest buffer로 재배열하며, cell length/angle와 sampling count에서 triclinic delta를
 계산한다. Nonzero ORIGIN을 우선하고 그렇지 않으면 permuted start index를 사용하며 충돌은 metadata에 남긴다.
 
@@ -57,11 +62,21 @@ Complex mode 3/4, packed mode 101, CCP4 skew transform과 extended-header payloa
 않는다. MRC2014 handedness ambiguity는 임의 반전하지 않고 provenance로 노출한다. Header statistics는
 source metadata이고 authoritative scalar range는 실제 decoded values에서 계산한다.
 
+Writer는 canonical crystallographic basis를 little-endian mode 2 MRC2014로 출력하고 logical z-fastest
+buffer를 column-fastest disk order로 재배열한다. Angstrom geometry, space group과 scalar statistics를
+기록하며 float32 narrowing, handedness, scalar unit, metadata와 label normalization은 typed loss다.
+Arbitrarily rotated basis는 silent projection하지 않고 OpenDX export를 안내한다. File publish는
+failure-atomic이며 overwrite와 cancellation을 지원한다.
+
 Static source values는 typed topology property에, model별 occupancy/B-factor와 missingness는 frame
 property에 보존한다. `.`와 `?`인 numeric mmCIF value나 blank PDB value를 임의의 과학 값으로
 대체하지 않고 finite placeholder와 별도의 `*_present` boolean column으로 표현한다. Later model은
 model 1의 immutable atom identity에 맞춰 배치하며 누락은 허용하지만 새 atom이나 duplicate
 identity는 오류다.
+
+PDB reader는 HEADER deposition date와 REMARK, 구조로 직접 소비하지 않는 record 및 CONECT 원문을
+`molecule_remarks` metadata로 보존한다. 이는 VMD molfile molecule-metadata channel과 대응하지만 원문 record를
+구조 의미로 자동 해석했다는 뜻은 아니다.
 
 PDB writer는 selected current/all frame을 순차적으로 wwPDB 3.3 fixed-column record로 출력한다. Atom serial,
 atom/residue/chain/altLoc/insertion/segment identity, element/formal charge, optional occupancy/B-factor, later-model
@@ -75,6 +90,10 @@ mmCIF lexer/writer는 CIF 1.1의 data block, case-insensitive data name, key/val
 single/double quote, line-start semicolon text field, comment 및 `.`/`?` missing token을 처리한다.
 Loop는 한 category의 column만 가져야 하며 value 수가 column 수의 양의 배수인지 검증한다.
 여러 `data_` block은 document 안의 여러 structure로 반환한다.
+긴 label/auth chain과 quoted atom identifier는 고정 ABI field로 자르지 않고 원문 string으로 보존한다.
+VMD의 historical `mmcif` 0.2 registration은 callback이 동작하지 않는 stub이고, `pdbx` 0.14가 별도 실제
+구현이다. Native 경로는 두 registration의 일반 structure/writer 기능을 대체하지만 PDBx의 실험적
+`_ihm_sphere_obj_site` raw graphics는 아직 scene object로 가져오지 않는다.
 
 mmCIF writer는 active structure를 한 data block으로 내보내며 `_atom_site`의 label/auth identity, model number,
 coordinate, occupancy/B-factor, formal charge와 `_struct_conn` endpoint/order를 기록한다. 첫 model complete와
@@ -103,7 +122,9 @@ charge radius` 10/11-field form을 읽는다. Charge는 elementary charge, radiu
 float64 property로 보존한다. PQR에 element field가 없으므로 conventional atom name, elemental
 residue와 명확한 halogen/iron name에서 conservative inference한다. Sphere representation은 이 `pqr.radius`
 property를 실제 반지름으로 사용한다. PQR의 Poisson–Boltzmann radius를 일반
-van der Waals radius와 같은 property로 모호하게 합치지 않는다. Multi-model record는 암묵적으로 flatten하지 않는다.
+van der Waals radius와 같은 property로 모호하게 합치지 않는다. VMD PQR 0.6과 호환되는 optional
+`CRYST1 a b c alpha beta gamma` record는 Å 단위 triclinic cell로 보존하며 duplicate, non-finite 또는
+degenerate cell을 거부한다. Multi-model record는 암묵적으로 flatten하지 않는다.
 
 MOL/SDF reader는 V2000 fixed-width counts/atom/bond block을 읽고 `M  CHG`, `M  ISO`, `M  RAD`를
 typed chemistry로 반영한다. Single/double/triple/aromatic bond order를 구분하며 현재 core가 표현하지 못하는
@@ -120,35 +141,42 @@ reader는 duplicate tag를 거부하고 writer는 deterministic key order로 정
 
 MOL2 reader는 각 `@<TRIPOS>MOLECULE` record의 declared ATOM/BOND/SUBSTRUCTURE count를 실제 row와 먼저
 대조한다. ATOM의 ID/name/Cartesian coordinate/SYBYL type/substructure/optional charge/status, BOND의
-ID/endpoints/type/status, SUBSTRUCTURE chain과 `CRYSIN`을 typed topology/frame data로 보존한다. `NO_CHARGES`와
+ID/endpoints/type/status, SUBSTRUCTURE chain과 `CRYSIN`을 typed topology/frame data로 보존한다. `nc`는 실제
+topology bond로 만들지 않고 ID/endpoint/status provenance로 보존한다. `NO_CHARGES`와
 명시적 zero charge를 `partial_charge_present`로 구분한다. Multi-molecule document는 Workspace에서 SDF와 같은
 failure-atomic ordered object batch가 된다.
 
 MOL2 writer는 exactly one selected frame과 모든 atom의 explicit `mol2.atom_type`을 요구한다. Valid positive
 source atom/bond ID, original bond endpoint order, substructure ID/name/chain, charge/status, aromatic/amide bond와
-triclinic cell을 보존한다. 일반 element/name만으로 SYBYL typing을 발명하지 않는다. Residue에서 정규화한
+retained `nc` record 및 triclinic cell을 보존한다. 일반 element/name만으로 SYBYL typing을 발명하지 않는다. Residue에서 정규화한
 SUBSTRUCTURE row, 생략한 optional section과 표현하지 못하는 property는 loss report에 포함한다.
 
 PSF reader는 첫 `PSF` header와 `NTITLE`/`NATOM`을 요구하고 standard CHARMM/X-PLOR, `NAMD`
 whitespace-delimited 및 `EXT` identity 폭을 처리한다. Atom ID, segment, residue ID와 insertion, residue/atom name,
 force-field atom type, elementary charge와 dalton mass를 typed topology로 만든다. `NBOND`, `NTHETA`, `NPHI`,
-`NIMPHI`의 ordered atom reference를 검증하며 X-PLOR의 duplicate dihedral/improper term multiplicity도 보존한다.
+`NIMPHI` 및 `NCRTERM` 8-atom CMAP의 ordered atom reference를 검증하며 X-PLOR의 duplicate
+dihedral/improper/CMAP term multiplicity도 보존한다.
 PSF에는 좌표가 없으므로 atom count가 일치하는 zero-frame coordinate source를 명시적으로 만들고, 이후
 `traj load` 또는 GUI Attach trajectory로 DCD/XTC/TRR/MDCRD/NetCDF/H5MD/RST7/LAMMPS/BINPOS를 붙인다. 좌표가 생기기 전 representation/analysis는
 actionable `not_found`로 실패하고 GUI는 topology가 정상적으로 로드됐음을 별도로 표시한다.
 
+TRR은 indexed random-access read와 current-frame write를 지원한다. Writer는 float32/64 coordinate,
+optional velocity/force/triclinic cell, signed step, physical time, lambda와 nre를 portable XDR로 보존한다.
+Source step/time/lambda가 없거나 force axis가 일부만 있으면 scientific zero를 발명하지 않고 실패하며,
+multi-frame append와 virial/pressure/energy block은 아직 지원하지 않는다.
+
 PSF writer는 coordinate frame을 요구하거나 출력하지 않고 `PSF EXT XPLOR` topology를 생성한다. 모든 atom에
 explicit `psf.atom_type`, `partial_charge`, `mass`가 있어야 하며 일반 element로 force-field typing을 발명하지
 않는다. Bond order, coordinate frame, chain/alternate-location/formal charge 및 unmodeled auxiliary section은 typed
-loss report에 기록한다. 현재 model이 보존하지 못하는 non-empty CMAP cross-term, lone-pair, Drude/CHEQ data는
+loss report에 기록한다. CMAP이 있으면 header와 `NCRTERM`으로 보존한다. 현재 model이 보존하지 못하는 lone-pair, Drude/CHEQ data는
 조용히 버리지 않고 reader에서 `unsupported`로 거부한다.
 
 ## Amber PRMTOP/RST7/MDCRD/NetCDF family
 
 | Format | 역할 | 보존 channel | 현재 방향 |
 |---|---|---|---|
-| PRMTOP/parm7 | force-field topology | atom/residue name, atomic number, Amber atom type/index, charge, mass, bond/angle/proper/improper multiplicity, GB radius/screen, BOX_DIMENSIONS template | read-only, zero frame |
-| RST7/restrt/inpcrd | restart coordinate | one-frame Cartesian Å, optional AKMA velocity→Å/ps, time ps, temperature K, 3/6-value unit cell | `traj load` read-only |
+| PRMTOP/parm7 | force-field topology | atom/residue name, atomic number, Amber atom type/index, charge, mass, bond/angle/proper/improper multiplicity, GB radius/screen, BOX_DIMENSIONS template, section comment provenance | read-only, zero frame |
+| RST7/restrt/inpcrd | restart coordinate | one-frame Cartesian Å, optional AKMA velocity→Å/ps, time ps, temperature K, 3/6-value unit cell | `traj load` read, `traj save` current-frame write |
 | MDCRD/CRD | formatted trajectory | multi-frame Cartesian Å, optional 3/6-value unit cell, frame title | indexed random-access read-only |
 | NetCDF | binary trajectory | Cartesian Å, velocity Å/ps, force kcal/mol/Å, time ps, temperature K, triclinic cell, scale factor와 integer compression | netCDF-C random-access read-only |
 | H5MD | HDF5 particle trajectory | SI-unit-normalized position/velocity/force, ID/presence, mass/charge/species/image, step/time, orthorhombic/triclinic box | HDF5 hyperslab random-access read-only; arbitrary observables/partial-periodic box 미지원 |
@@ -158,7 +186,9 @@ loss report에 기록한다. 현재 model이 보존하지 못하는 non-empty CM
 PRMTOP parser는 `%VERSION`, `%FLAG`, `%FORMAT`의 fixed-width A/I/E/F field를 읽고 POINTERS와 실제
 identity/connectivity record count를 대조한다. `CHARGE`는 Amber 공식 18.2223 scale을 elementary charge로
 정규화한다. Dihedral coordinate index는 absolute-index/3 규칙으로 atom을 찾고 fourth field sign으로
-proper/improper를 구분한다. Chamber `CHARMM_*` section과 perturbation topology는 현재 model로 축소하지 않고
+proper/improper를 구분한다. `%FLAG`와 `%FORMAT` 사이의 ordered `%COMMENT`는
+`amber.comment.<SECTION>` provenance로 보존하며, section 밖의 comment는 malformed input으로 거부한다.
+Chamber `CHARMM_*` section과 perturbation topology는 현재 model로 축소하지 않고
 `unsupported`로 거부한다. 전체 force constant/Lennard-Jones/exclusion array는 아직 model에 보존되지 않으므로
 writer를 제공하지 않는다.
 
@@ -166,6 +196,9 @@ RST7은 active topology atom count를 요구하고 한 frame을 in-memory source
 20.455 scale을 적용해 Å/ps로 만들며 source unit/scale을 frame metadata에 남긴다. 6-value box는
 length/alpha/beta/gamma로 triclinic cell을 구성하고 legacy 3-value box는 90-degree cell로 처리한다.
 1–2 atom restart에서 optional block이 velocity인지 box인지 구별되지 않으면 과학 값을 추정하지 않고 실패한다.
+Writer는 coordinate/velocity/time/temperature/cell을 typed frame metadata에서 가져오고 velocity scale을
+Amber raw unit으로 되돌린다. Fixed F12.7 precision과 저장할 수 없는 frame metadata는 loss report로 노출하며,
+missing atom, untyped velocity time unit, temperature-without-time 및 ambiguous small-system output은 거부한다.
 
 MDCRD는 title 뒤의 `3*N`개 폭 8 실수를 한 줄 최대 10개씩 읽고 open 시 frame byte offset만 보존한다.
 `read_frame(i)`는 요청 frame만 다시 열어 decode하므로 coordinate memory는 O(atom count), index는 O(frame count)다.
@@ -184,6 +217,8 @@ GRO writer는 current 또는 all frame을 쓸 수 있으며 position precision 1
 0..99999 numbering 범위를 벗어나면 hard error다. Bond/charge와 임의 property는 GRO가 표현하지 못하므로
 typed loss report에 포함한다. File writer는 frame을 순차 처리하지만 현재 GRO reader/source 자체는 전체
 concatenated trajectory를 memory에 보유하므로 대형 MD trajectory에는 XTC/TRR/DCD attach path를 우선한다.
+Title의 `t=`는 typed physical time과 동기화한다. Comment override도 frame별 time을 유지하며 parseable title
+time만 있고 typed time이 없는 모순은 그대로 재출력하지 않고 오류로 처리한다.
 
 G96 reader는 mandatory `TITLE` 뒤의 frame block 순서를 검증한다. 각 frame은 optional `TIMESTEP`, required
 `POSITION` 또는 `POSITIONRED`, optional matching `VELOCITY`/`VELOCITYRED`, optional `BOX`로 구성된다.
@@ -196,6 +231,8 @@ G96 writer는 mandatory `TITLE` 한 번과 selected current/all frame을 full bl
 F15.9, TIMESTEP time은 GROMACS writer 관행의 F15.6을 사용한다. `--precision`과 fixed precision의 차이,
 missing step 합성/step-only omission, source ID normalization 및 표현할 수 없는 topology/property를 loss report로
 반환한다. Reader는 현재 전체 text와 frame을 memory에 보유하므로 대형 trajectory에는 indexed XTC/TRR/DCD를 우선한다.
+VMD 1.4 callback과 달리 공식 GROMACS block 순서에 있는 initial `POSITIONRED`, velocity, source step과 physical
+time을 보존한다. VMD callback이 추가로 인식하는 `REFPOSITION`과 compressed wrapper는 아직 지원하지 않는다.
 
 VTF reader는 공식 VTF 2.4 syntax의 default atom template, 누적 atom property, atom ID/range, direct/chain bond,
 line continuation, ordered/indexed coordinate block과 frame별 unit cell을 읽는다. Name/type/residue/segment/chain,
@@ -218,7 +255,8 @@ loss table로 반환한다. Missing atom처럼 valid plain XYZ로 표현할 수 
 PQR writer는 exactly one selected frame과 numeric `partial_charge`/`pqr.radius` property를 요구한다.
 `pqr.radius`가 없는 다른 format object은 explicit numeric `vdw_radius`를 fallback export source로 쓸 수 있다.
 없는 charge/radius를 element default로 발명하지 않는다. Connectivity, formal charge, explicit element,
-altLoc/iCode/segID, 추가 property와 frame metadata는 typed loss report에 기록한다.
+altLoc/iCode/segID, 추가 property와 frame metadata는 typed loss report에 기록한다. Unit cell이 있으면
+`CRYST1` geometry를 기록하고 알 수 없는 space group/Z는 `P 1`/`1`로 내보낸 사실을 typed loss로 보고한다.
 
 ## Validation과 오류
 
@@ -241,7 +279,7 @@ Reader는 다음을 입력 경계에서 거부한다.
 - missing/out-of-order G96 block/END, malformed F15 vector/TIMESTEP/BOX, negative identity, position/velocity mode·count·identity
   mismatch 및 concatenated frame topology mutation
 - missing/duplicate PSF section, title/atom/connectivity count mismatch, duplicate/unknown atom ID, inconsistent residue
-  identity, invalid charge/mass/reference, extra Drude/CHEQ atom field와 unsupported non-empty CMAP/lone-pair section
+  identity, invalid charge/mass/reference, malformed CMAP과 extra Drude/CHEQ atom field 및 unsupported non-empty lone-pair section
 - missing/duplicate PRMTOP flag/format, malformed fixed field, POINTERS/section count mismatch, invalid residue pointer,
   coordinate-index/reference/parameter index, Chamber section과 perturbation topology
 - malformed/truncated RST7 coordinate/optional block, non-finite value, atom-count mismatch, degenerate cell과
@@ -268,16 +306,16 @@ Parse error message에는 source name과 1-based line을 포함한다. File open
   `HELIX`/`SHEET`, sequence/assembly/transform, varying model cell과 full header dictionary를 아직 출력하지 않는다.
 - MOL/SDF는 enhanced stereo collection, query bond/atom, Sgroup, reaction record와 duplicate/ordered SDF
   tag를 아직 표현하지 않는다. SDF writer는 active object 한 record만 쓰며 multi-object batch export는 후속이다.
-- MOL2는 dummy/query/unknown/not-connected bond, FEATURE/SET/UNITY의 typed interpretation, substructure의 모든
+- MOL2는 dummy/query/unknown bond, FEATURE/SET/UNITY의 typed interpretation, substructure의 모든
   optional field와 multi-molecule batch export를 아직 지원하지 않는다. Writer는 explicit SYBYL type이 없는
   다른 format object를 거부하며 atom typing operation은 별도 후속 기능이다.
 - PSF는 coordinates, bond order와 force-field parameter value를 저장하지 않는다. Reader는 auxiliary
   donor/acceptor/exclusion/group section의 count만 provenance로 남기며 이를 아직 analysis semantics로 사용하지
-  않는다. Writer는 EXT identity 폭과 6-character atom type을 요구한다. CMAP, lone-pair, Drude/CHEQ와 CHARMM
+  않는다. Writer는 EXT identity 폭과 6-character atom type을 요구한다. Lone-pair, Drude/CHEQ와 CHARMM
   numeric atom-type table 연동은 후속 model 확장 범위다.
 - PRMTOP reader는 standard Amber topology만 지원한다. Force parameter/Lennard-Jones/exclusion/polarization array,
   Chamber와 perturbation semantics는 아직 공통 energy model에 보존하지 않으며 PRMTOP writer도 없다.
-  RST7은 single-frame in-memory reader이고 writer/NetCDF restart 및 1–2 atom optional-block override는 아직 없다.
+  RST7은 single-frame in-memory read/write이고 NetCDF restart 및 1–2 atom optional-block override는 아직 없다.
   MDCRD writer, compressed stream, REMD/RXSGLD header와 small-system ambiguity override도 아직 없다.
 - GRO identity는 각 5-character field로 제한되고 connectivity나 explicit element를 저장하지 않는다. Reader는
   concatenated trajectory 전체를 memory에 보유하며 random-access indexing과 streaming은 아직 없다. Malformed

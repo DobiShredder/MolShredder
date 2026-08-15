@@ -140,6 +140,59 @@ std::string sanitized_comment(std::string value) {
   return value;
 }
 
+operation::Result<std::string>
+gro_title_with_time(std::string title,
+                    const std::optional<model::PhysicalTime> &physical_time) {
+  const auto marker = title.find("t=");
+  std::optional<std::pair<std::size_t, std::size_t>> existing_time;
+  std::optional<double> existing_time_value;
+  if (marker != std::string::npos) {
+    auto begin = marker + 2U;
+    while (begin < title.size() &&
+           std::isspace(static_cast<unsigned char>(title[begin])) != 0) {
+      ++begin;
+    }
+    double parsed{};
+    const auto result =
+        std::from_chars(title.data() + begin, title.data() + title.size(), parsed);
+    if (result.ec == std::errc{} && result.ptr != title.data() + begin &&
+        std::isfinite(parsed)) {
+      existing_time = std::pair{
+          begin, static_cast<std::size_t>(result.ptr - title.data())};
+      existing_time_value = parsed;
+    }
+  }
+  if (!physical_time.has_value()) {
+    if (existing_time.has_value()) {
+      return operation::Result<std::string>::failure(invalid(
+          "GRO title contains a parseable t= value but the frame has no "
+          "typed physical time",
+          "assign physical_time or remove the t= value from the title"));
+    }
+    return operation::Result<std::string>::success(std::move(title));
+  }
+  auto picoseconds = physical_time->value;
+  if (physical_time->unit == model::TimeUnit::femtosecond)
+    picoseconds /= 1000.0;
+  if (!std::isfinite(picoseconds)) {
+    return operation::Result<std::string>::failure(
+        invalid("GRO physical time must be finite"));
+  }
+  std::ostringstream time_text;
+  time_text.imbue(std::locale::classic());
+  time_text << std::setprecision(15) << picoseconds;
+  if (existing_time.has_value()) {
+    if (*existing_time_value != picoseconds) {
+      title.replace(existing_time->first,
+                    existing_time->second - existing_time->first,
+                    time_text.str());
+    }
+  } else {
+    title += ", t= " + time_text.str();
+  }
+  return operation::Result<std::string>::success(std::move(title));
+}
+
 model::Vec3d position_at(const model::CoordinateFrame &frame,
                          std::size_t index) {
   return std::visit(
@@ -159,7 +212,8 @@ void collect_topology_losses(const model::Topology &topology,
       "XYZ does not store residue, chain, segment or insertion identity");
   const auto connectivity = topology.bonds().size() + topology.angles().size() +
                             topology.dihedrals().size() +
-                            topology.impropers().size();
+                            topology.impropers().size() +
+                            topology.cmap_terms().size();
   losses.add("connectivity", static_cast<std::uint64_t>(connectivity),
              "XYZ does not store bonds, bond order or higher connectivity");
   losses.add("atom_properties",
@@ -356,6 +410,47 @@ bool token_safe(std::string_view value) {
          });
 }
 
+double pdb_vector_length(const model::Vec3d &value) {
+  return std::sqrt(value.x * value.x + value.y * value.y + value.z * value.z);
+}
+
+double pdb_vector_dot(const model::Vec3d &first, const model::Vec3d &second) {
+  return first.x * second.x + first.y * second.y + first.z * second.z;
+}
+
+struct PdbCellParameters {
+  double a{};
+  double b{};
+  double c{};
+  double alpha{};
+  double beta{};
+  double gamma{};
+};
+
+PdbCellParameters pdb_cell_parameters(const model::UnitCell &cell,
+                                      double scale) {
+  const auto a = pdb_vector_length(cell.a);
+  const auto b = pdb_vector_length(cell.b);
+  const auto c = pdb_vector_length(cell.c);
+  const auto angle = [](const model::Vec3d &first, const model::Vec3d &second,
+                        double first_length, double second_length) {
+    const auto cosine = std::clamp(pdb_vector_dot(first, second) /
+                                       (first_length * second_length),
+                                   -1.0, 1.0);
+    return std::acos(cosine) * 180.0 / std::numbers::pi;
+  };
+  return {a * scale,
+          b * scale,
+          c * scale,
+          angle(cell.b, cell.c, b, c),
+          angle(cell.a, cell.c, a, c),
+          angle(cell.a, cell.b, a, b)};
+}
+
+std::optional<std::string> fixed_decimal_field(double value,
+                                               std::size_t width,
+                                               unsigned int precision);
+
 operation::Result<StructureWriteReport>
 write_pqr(std::ostream &output, const model::Topology &topology,
           const model::CoordinateSource &coordinates,
@@ -467,6 +562,23 @@ write_pqr(std::ostream &output, const model::Topology &topology,
       frame.metadata().coordinate_unit == operation::LengthUnit::nanometer
           ? 10.0
           : 1.0;
+  if (frame.metadata().unit_cell.has_value()) {
+    const auto cell = pdb_cell_parameters(*frame.metadata().unit_cell,
+                                          coordinate_scale);
+    const auto a = fixed_decimal_field(cell.a, 9U, 3U);
+    const auto b = fixed_decimal_field(cell.b, 9U, 3U);
+    const auto c = fixed_decimal_field(cell.c, 9U, 3U);
+    const auto alpha = fixed_decimal_field(cell.alpha, 7U, 2U);
+    const auto beta = fixed_decimal_field(cell.beta, 7U, 2U);
+    const auto gamma = fixed_decimal_field(cell.gamma, 7U, 2U);
+    if (!a.has_value() || !b.has_value() || !c.has_value() ||
+        !alpha.has_value() || !beta.has_value() || !gamma.has_value()) {
+      return operation::Result<StructureWriteReport>::failure(invalid(
+          "PQR unit-cell parameters do not fit CRYST1 fixed fields"));
+    }
+    output << "CRYST1" << *a << *b << *c << *alpha << *beta << *gamma
+           << " P 1           1" << '\n';
+  }
   const auto radius_scale = radius_unit == "nanometer" ? 10.0 : 1.0;
   for (std::size_t index = 0; index < topology.atom_count(); ++index) {
     const auto &atom = topology.atoms()[index];
@@ -495,7 +607,8 @@ write_pqr(std::ostream &output, const model::Topology &topology,
   LossCollector losses;
   const auto connectivity = topology.bonds().size() + topology.angles().size() +
                             topology.dihedrals().size() +
-                            topology.impropers().size();
+                            topology.impropers().size() +
+                            topology.cmap_terms().size();
   losses.add("connectivity", static_cast<std::uint64_t>(connectivity),
              "PQR does not store bonds, bond order or higher connectivity");
   std::uint64_t formal_charges{};
@@ -540,8 +653,11 @@ write_pqr(std::ostream &output, const model::Topology &topology,
       "PQR coordinates are decimal text rounded to the requested precision");
   losses.add("velocity", frame.velocities().has_value() ? 1U : 0U,
              "PQR does not store velocity vectors");
-  losses.add("unit_cell", frame.metadata().unit_cell.has_value() ? 1U : 0U,
-             "PQR does not store periodic unit cells");
+  if (frame.metadata().unit_cell.has_value()) {
+    losses.add("crystal_symmetry", 1U,
+               "PQR CRYST1 preserves unit-cell geometry but emits unknown "
+               "symmetry as P 1 and Z=1");
+  }
   losses.add("physical_time",
              frame.metadata().physical_time.has_value() ? 1U : 0U,
              "PQR does not store typed physical time");
@@ -669,43 +785,6 @@ frame_numeric_property(const model::CoordinateFrame &frame,
   error = invalid("PDB frame property " + std::string{name} +
                   " must be a float32 or float64 column");
   return std::nullopt;
-}
-
-double pdb_vector_length(const model::Vec3d &value) {
-  return std::sqrt(value.x * value.x + value.y * value.y + value.z * value.z);
-}
-
-double pdb_vector_dot(const model::Vec3d &first, const model::Vec3d &second) {
-  return first.x * second.x + first.y * second.y + first.z * second.z;
-}
-
-struct PdbCellParameters {
-  double a{};
-  double b{};
-  double c{};
-  double alpha{};
-  double beta{};
-  double gamma{};
-};
-
-PdbCellParameters pdb_cell_parameters(const model::UnitCell &cell,
-                                      double scale) {
-  const auto a = pdb_vector_length(cell.a);
-  const auto b = pdb_vector_length(cell.b);
-  const auto c = pdb_vector_length(cell.c);
-  const auto angle = [](const model::Vec3d &first, const model::Vec3d &second,
-                        double first_length, double second_length) {
-    const auto cosine = std::clamp(pdb_vector_dot(first, second) /
-                                       (first_length * second_length),
-                                   -1.0, 1.0);
-    return std::acos(cosine) * 180.0 / std::numbers::pi;
-  };
-  return {a * scale,
-          b * scale,
-          c * scale,
-          angle(cell.b, cell.c, b, c),
-          angle(cell.a, cell.c, a, c),
-          angle(cell.a, cell.b, a, b)};
 }
 
 bool cells_match(const std::optional<PdbCellParameters> &first,
@@ -1063,7 +1142,8 @@ write_pdb(std::ostream &output, const model::Topology &topology,
   losses.add("higher_connectivity",
              static_cast<std::uint64_t>(topology.angles().size() +
                                         topology.dihedrals().size() +
-                                        topology.impropers().size()),
+                                        topology.impropers().size() +
+                                        topology.cmap_terms().size()),
              "PDB output does not preserve angle, dihedral or improper terms");
   losses.add("velocity", velocity_frames,
              "PDB output does not store velocity vectors");
@@ -1715,7 +1795,8 @@ write_g96(std::ostream &output, const model::Topology &topology,
   losses.add("higher_connectivity",
              static_cast<std::uint64_t>(topology.angles().size() +
                                         topology.dihedrals().size() +
-                                        topology.impropers().size()),
+                                        topology.impropers().size() +
+                                        topology.cmap_terms().size()),
              "G96 does not store angles, dihedrals or impropers");
   const auto had_source_atom_number = std::any_of(
       topology.atoms().begin(), topology.atoms().end(),
@@ -1831,17 +1912,14 @@ write_gro(std::ostream &output, const model::Topology &topology,
     } else {
       title = sanitized_comment(
           source_value(topology, "gro.title").value_or("MolShredder"));
-      if (frame.metadata().physical_time.has_value()) {
-        const auto &time = *frame.metadata().physical_time;
-        const auto picoseconds = time.unit == model::TimeUnit::picosecond
-                                     ? time.value
-                                     : time.value / 1000.0;
-        std::ostringstream time_text;
-        time_text.imbue(std::locale::classic());
-        time_text << std::setprecision(15) << picoseconds;
-        title += ", t= " + time_text.str();
-      }
     }
+    const auto timed_title =
+        gro_title_with_time(std::move(title), frame.metadata().physical_time);
+    if (!timed_title.has_value()) {
+      return operation::Result<StructureWriteReport>::failure(
+          timed_title.error());
+    }
+    title = timed_title.value();
     output << title << '\n' << topology.atom_count() << '\n';
     const auto coordinate_scale =
         frame.metadata().coordinate_unit == operation::LengthUnit::angstrom
@@ -1958,7 +2036,8 @@ write_gro(std::ostream &output, const model::Topology &topology,
   losses.add("higher_connectivity",
              static_cast<std::uint64_t>(topology.angles().size() +
                                         topology.dihedrals().size() +
-                                        topology.impropers().size()),
+                                        topology.impropers().size() +
+                                        topology.cmap_terms().size()),
              "GRO does not store angles, dihedrals or impropers");
   const auto had_source_atom_number = std::any_of(
       topology.atoms().begin(), topology.atoms().end(),
@@ -2154,6 +2233,66 @@ write_mol2(std::ostream &output, const model::Topology &topology,
     }
   }
 
+  struct NotConnectedRecord {
+    std::int64_t id{};
+    std::int64_t first{};
+    std::int64_t second{};
+    std::string status;
+  };
+  std::vector<NotConnectedRecord> not_connected;
+  if (const auto count_text =
+          source_value(topology, "mol2.not_connected_count");
+      count_text.has_value()) {
+    std::size_t count{};
+    const auto [end, error] = std::from_chars(
+        count_text->data(), count_text->data() + count_text->size(), count);
+    if (error != std::errc{} || end != count_text->data() + count_text->size()) {
+      return operation::Result<StructureWriteReport>::failure(
+          invalid("MOL2 retained not-connected count is invalid"));
+    }
+    std::set<std::int64_t> atom_ids(output_atom_ids.begin(),
+                                    output_atom_ids.end());
+    std::set<std::int64_t> bond_ids(output_bond_ids.begin(),
+                                    output_bond_ids.end());
+    not_connected.reserve(count);
+    for (std::size_t index = 0; index < count; ++index) {
+      const auto prefix =
+          "mol2.not_connected." + std::to_string(index) + ".";
+      NotConnectedRecord record;
+      for (const auto &[field, target] :
+           {std::pair<std::string_view, std::int64_t *>{"id", &record.id},
+            {"first", &record.first}, {"second", &record.second}}) {
+        const auto value = source_value(topology, prefix + std::string{field});
+        if (!value.has_value()) {
+          return operation::Result<StructureWriteReport>::failure(invalid(
+              "MOL2 retained not-connected record is missing " +
+              std::string{field}));
+        }
+        const auto [value_end, value_error] = std::from_chars(
+            value->data(), value->data() + value->size(), *target);
+        if (value_error != std::errc{} ||
+            value_end != value->data() + value->size() || *target <= 0) {
+          return operation::Result<StructureWriteReport>::failure(invalid(
+              "MOL2 retained not-connected " + std::string{field} +
+              " is invalid"));
+        }
+      }
+      if (!bond_ids.insert(record.id).second ||
+          !atom_ids.contains(record.first) ||
+          !atom_ids.contains(record.second) || record.first == record.second) {
+        return operation::Result<StructureWriteReport>::failure(invalid(
+            "MOL2 retained not-connected record has duplicate or stale IDs"));
+      }
+      record.status =
+          source_value(topology, prefix + "status").value_or("");
+      if (record.status.find_first_of(" \t\r\n") != std::string::npos) {
+        return operation::Result<StructureWriteReport>::failure(
+            invalid("MOL2 retained not-connected status must be one token"));
+      }
+      not_connected.push_back(std::move(record));
+    }
+  }
+
   struct OutputSubstructure {
     std::int64_t id{};
     std::string name;
@@ -2198,7 +2337,8 @@ write_mol2(std::ostream &output, const model::Topology &topology,
   output << sanitized_comment(
                 source_value(topology, "mol2.name").value_or("MolShredder"))
          << '\n';
-  output << topology.atom_count() << ' ' << topology.bonds().size() << ' '
+  output << topology.atom_count() << ' '
+         << topology.bonds().size() + not_connected.size() << ' '
          << output_substructures.size() << " 0 0\n";
   output << source_value(topology, "mol2.molecule_type").value_or("SMALL")
          << '\n';
@@ -2292,6 +2432,13 @@ write_mol2(std::ostream &output, const model::Topology &topology,
     }
     output << '\n';
   }
+  for (const auto &record : not_connected) {
+    output << record.id << ' ' << record.first << ' ' << record.second
+           << " nc";
+    if (!record.status.empty())
+      output << ' ' << record.status;
+    output << '\n';
+  }
   output << "@<TRIPOS>SUBSTRUCTURE\n";
   for (const auto &[id, substructure] : output_substructures) {
     static_cast<void>(id);
@@ -2337,7 +2484,8 @@ write_mol2(std::ostream &output, const model::Topology &topology,
   losses.add("higher_connectivity",
              static_cast<std::uint64_t>(topology.angles().size() +
                                         topology.dihedrals().size() +
-                                        topology.impropers().size()),
+                                        topology.impropers().size() +
+                                        topology.cmap_terms().size()),
              "MOL2 writer emits atom/bond/substructure sections only");
   std::uint64_t other_properties{};
   for (const auto &name : topology.properties().names()) {
@@ -2488,7 +2636,10 @@ write_psf(std::ostream &output, const model::Topology &topology,
                 .value_or("MolShredder-generated X-PLOR PSF topology");
   }
   output.imbue(std::locale::classic());
-  output << "PSF EXT XPLOR\n\n"
+  output << "PSF EXT XPLOR";
+  if (!topology.cmap_terms().empty())
+    output << " CMAP";
+  output << "\n\n"
          << std::setw(10) << 1 << " !NTITLE\n REMARKS " << title << "\n\n"
          << std::setw(10) << topology.atom_count() << " !NATOM\n";
   LossCollector losses;
@@ -2573,6 +2724,13 @@ write_psf(std::ostream &output, const model::Topology &topology,
          << std::setw(8) << 1 << ' ' << std::setw(7) << 0 << " !NGRP\n"
          << std::setw(10) << 0 << std::setw(10) << 0 << std::setw(10) << 0
          << "\n\n";
+  values.clear();
+  for (const auto &term : topology.cmap_terms()) {
+    for (const auto atom : term.atoms)
+      values.push_back(atom.value);
+  }
+  write_header(topology.cmap_terms().size(), "NCRTERM: cross-terms");
+  write_values(values, 8U);
   if (!output) {
     return operation::Result<StructureWriteReport>::failure(
         io_error("failed while writing PSF output"));

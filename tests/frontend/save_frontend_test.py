@@ -50,8 +50,9 @@ def main() -> int:
             [item["id"] for item in writable["data"]["formats"]] ==
             ["pdb", "mmcif", "pqr", "mol", "sdf", "mol2", "psf", "gro", "g96", "xyz"] and
             "presence" in writable["data"]["formats"][0]["channels"] and
-            writable["data"]["formats"][2]["channels"][-2:] ==
-            ["partial_charge", "pqr_radius"] and
+            "partial_charge" in writable["data"]["formats"][2]["channels"] and
+            "pqr_radius" in writable["data"]["formats"][2]["channels"] and
+            "unit_cell" in writable["data"]["formats"][2]["channels"] and
             not writable["data"]["formats"][3]["multi_structure"] and
             writable["data"]["formats"][4]["multi_structure"] and
             writable["data"]["formats"][5]["multi_structure"] and
@@ -282,7 +283,8 @@ def main() -> int:
             "Python GRO load did not retain both frames")
     gro_arguments = {
         "path": str(gro_output), "file-format": "gro",
-        "frames": "all", "precision": "5", "overwrite": "true"
+        "frames": "all", "precision": "5", "overwrite": "true",
+        "comment": "frontend GRO"
     }
     python_gro_save = molshredder.invoke("save", gro_arguments)
     require(python_gro_save["status"] == "ok" and
@@ -304,7 +306,8 @@ def main() -> int:
         f'invoke "load" --file-format "gro" --name "gromacs" '
         f'--path "{gro_fixture}"\n'
         f'invoke "save" --file-format "gro" --frames "all" '
-        f'--overwrite "true" --path "{gro_output}" --precision "5"\n'
+        f'--comment "frontend GRO" --overwrite "true" '
+        f'--path "{gro_output}" --precision "5"\n'
         "exit\n"
     )
     gro_completed = subprocess.run(
@@ -321,7 +324,8 @@ def main() -> int:
             python_gro_save == gro_envelopes[-1],
             "CLI and Python GRO load/save envelopes diverged")
     gro_text = gro_output.read_text(encoding="utf-8")
-    require(gro_text.count("Synthetic water, t=") == 2 and
+    require(gro_text.count("frontend GRO, t=") == 2 and
+            "frontend GRO, t= 2.5" in gro_text and
             "  0.010000" in gro_text,
             "GRO frontend output lost frames, title or velocity")
 
@@ -428,8 +432,9 @@ def main() -> int:
             python_psf_save == psf_envelopes[-1],
             "CLI and Python PSF topology-only load/save envelopes diverged")
     psf_text = psf_output.read_text(encoding="utf-8")
-    require(psf_text.startswith("PSF EXT XPLOR\n") and
-            "!NATOM" in psf_text and "!NPHI" in psf_text,
+    require(psf_text.startswith("PSF EXT XPLOR CMAP\n") and
+            "!NATOM" in psf_text and "!NPHI" in psf_text and
+            "!NCRTERM" in psf_text,
             "PSF frontend output lost force-field topology sections")
 
     prmtop_loaded = molshredder.invoke(

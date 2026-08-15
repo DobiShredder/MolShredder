@@ -290,10 +290,17 @@ Result<StructureDocument> read_pdb(std::string_view content,
   bool inside_model = false;
   std::optional<model::UnitCell> unit_cell;
   std::string entry_id;
+  std::string deposition_date;
   std::string title;
   std::string space_group;
   std::string z_value;
   std::vector<ParsedConnection> connections;
+  std::string molecule_remarks;
+
+  const auto retain_molecule_remark = [&molecule_remarks](std::string_view line) {
+    molecule_remarks.append(line);
+    molecule_remarks.push_back('\n');
+  };
 
   std::size_t line_number = 0;
   std::size_t position = 0;
@@ -359,12 +366,14 @@ Result<StructureDocument> read_pdb(std::string_view content,
       z_value = trim(field(line, 66, 4));
     } else if (record == "HEADER") {
       entry_id = trim(field(line, 62, 4));
+      deposition_date = trim(field(line, 50, 9));
     } else if (record == "TITLE") {
       if (!title.empty()) {
         title.push_back(' ');
       }
       title += trim(field(line, 10, 70));
     } else if (record == "CONECT") {
+      retain_molecule_remark(line);
       const auto source_serial = parse_number<std::int64_t>(
           field(line, 6, 5), source_name, line_number, "CONECT source serial");
       if (!source_serial.has_value()) {
@@ -383,6 +392,12 @@ Result<StructureDocument> read_pdb(std::string_view content,
         connections.push_back(
             ParsedConnection{source_serial.value(), target.value(), line_number});
       }
+    } else if (record == "REMARK") {
+      retain_molecule_remark(line);
+    } else if (!record.empty() && record != "END") {
+      // Match the observable molfile metadata channel: records that are not
+      // consumed as structure or coordinate data remain available verbatim.
+      retain_molecule_remark(line);
     }
     if (end == std::string_view::npos) {
       break;
@@ -481,6 +496,12 @@ Result<StructureDocument> read_pdb(std::string_view content,
   if (!entry_id.empty()) {
     builder.set_source_metadata("entry_id", entry_id);
   }
+  if (!deposition_date.empty()) {
+    builder.set_source_metadata("pdb.deposition_date", deposition_date);
+  }
+  if (!molecule_remarks.empty()) {
+    builder.set_source_metadata("pdb.molecule_remarks", molecule_remarks);
+  }
   const auto topology = builder.build();
   if (!topology.has_value()) {
     return Result<StructureDocument>::failure(topology.error());
@@ -565,6 +586,12 @@ Result<StructureDocument> read_pdb(std::string_view content,
   structure.metadata.emplace("format_version", "3.3");
   if (!entry_id.empty()) {
     structure.metadata.emplace("entry_id", entry_id);
+  }
+  if (!deposition_date.empty()) {
+    structure.metadata.emplace("deposition_date", deposition_date);
+  }
+  if (!molecule_remarks.empty()) {
+    structure.metadata.emplace("molecule_remarks", molecule_remarks);
   }
   if (!title.empty()) {
     structure.metadata.emplace("title", title);

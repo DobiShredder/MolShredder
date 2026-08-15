@@ -273,6 +273,8 @@ int main(int argc, char **argv) {
           serialized_pqr.value().content.starts_with(
               "REMARK electrostatics round trip\n") &&
           serialized_pqr.value().content.find(
+              "CRYST1   10.000   11.000   12.000") != std::string::npos &&
+          serialized_pqr.value().content.find(
               "ATOM 1 N GLY A 1 1.0000 2.0000 3.0000 -0.3000 1.5500") !=
               std::string::npos,
       "PQR writer must preserve charge/radius and requested decimal precision");
@@ -290,8 +292,17 @@ int main(int argc, char **argv) {
             ? roundtrip.value().structures.front().topology->properties().find(
                   "pqr.radius")
             : nullptr;
+    bool roundtrip_has_cell = false;
+    if (roundtrip.has_value()) {
+      const auto roundtrip_frame =
+          roundtrip.value().structures.front().coordinates->read_frame(0U);
+      roundtrip_has_cell =
+          roundtrip_frame.has_value() &&
+          roundtrip_frame.value()->metadata().unit_cell.has_value();
+    }
     passed &= expect(
-        roundtrip.has_value() && charge != nullptr && radius != nullptr &&
+        roundtrip.has_value() && roundtrip_has_cell && charge != nullptr &&
+            radius != nullptr &&
             std::get<std::vector<double>>(charge->values) ==
                 std::vector<double>{-0.3, 0.1, -1.0} &&
             std::get<std::vector<double>>(radius->values) ==
@@ -394,6 +405,8 @@ int main(int argc, char **argv) {
               "N.am 1 ACE -0.200000 BACKBONE") != std::string::npos &&
           serialized_mol2.value().content.find("2 1 3 am AMIDE") !=
               std::string::npos &&
+          serialized_mol2.value().content.find(
+              "4 2 4 nc PROXIMITY_ONLY") != std::string::npos &&
           serialized_mol2.value().content.find("@<TRIPOS>CRYSIN") !=
               std::string::npos,
       "MOL2 writer must preserve SYBYL types, charges, amide/status and cell");
@@ -417,6 +430,12 @@ int main(int argc, char **argv) {
         roundtrip.has_value() && atom_types != nullptr && frame != nullptr &&
             roundtrip.value().structures.front().topology->bonds()[1].order ==
                 model::BondOrder::amide &&
+            roundtrip.value().structures.front().topology->bonds().size() ==
+                3U &&
+            roundtrip.value()
+                    .structures.front()
+                    .topology->source_metadata()
+                    .at("mol2.not_connected.0.status") == "PROXIMITY_ONLY" &&
             std::get<std::vector<std::string>>(atom_types->values)[2] ==
                 "N.am" &&
             frame->metadata().unit_cell.has_value(),
@@ -485,6 +504,38 @@ int main(int argc, char **argv) {
                      "native GRO read/write must round-trip velocity presence, "
                      "time and cell");
   }
+  auto gro_comment_options = gro_options;
+  gro_comment_options.comment = "custom GRO export";
+  const auto commented_gro = io::serialize_structure(
+      *gro_structure.topology, *gro_structure.coordinates,
+      gro_comment_options, gro_context);
+  passed &= expect(
+      commented_gro.has_value() &&
+          commented_gro.value().content.starts_with(
+              "custom GRO export, t= 0\n2\n") &&
+          commented_gro.value().content.find(
+              "custom GRO export, t= 2.5\n2\n") != std::string::npos,
+      "GRO comment override must not erase typed per-frame physical time");
+
+  const auto first_gro_frame =
+      gro_structure.coordinates->read_frame(0U).value();
+  auto contradictory_metadata = first_gro_frame->metadata();
+  contradictory_metadata.physical_time.reset();
+  const auto contradictory_frame = model::CoordinateFrame::create(
+      model::CoordinateBuffer{first_gro_frame->positions()},
+      first_gro_frame->velocities(), first_gro_frame->presence(),
+      std::move(contradictory_metadata));
+  const auto contradictory_source = model::InMemoryCoordinateSource::create(
+      gro_structure.topology->atom_count(), {contradictory_frame.value()});
+  const auto contradictory_gro = io::serialize_structure(
+      *gro_structure.topology, *contradictory_source.value(), gro_options,
+      gro_context);
+  passed &= expect(
+      !contradictory_gro.has_value() &&
+          contradictory_gro.error().message.find("no typed physical time") !=
+              std::string::npos,
+      "GRO writer must reject a stale parseable title time without typed "
+      "metadata");
 
   operation::TaskContext g96_context;
   io::StructureWriteOptions g96_options;
@@ -556,9 +607,10 @@ int main(int argc, char **argv) {
       serialized_psf.has_value() &&
           serialized_psf.value().report.format == io::StructureFormat::psf &&
           serialized_psf.value().report.frame_count == 0U &&
-          serialized_psf.value().content.starts_with("PSF EXT XPLOR\n") &&
+          serialized_psf.value().content.starts_with("PSF EXT XPLOR CMAP\n") &&
           serialized_psf.value().content.find("!NATOM") != std::string::npos &&
-          serialized_psf.value().content.find("!NIMPHI") != std::string::npos,
+          serialized_psf.value().content.find("!NIMPHI") != std::string::npos &&
+          serialized_psf.value().content.find("!NCRTERM") != std::string::npos,
       "PSF writer must export a zero-frame EXT X-PLOR topology");
   if (serialized_psf.has_value()) {
     const auto roundtrip =
@@ -573,6 +625,8 @@ int main(int argc, char **argv) {
             roundtrip.value().structures.front().topology->angles().size() ==
                 2U &&
             roundtrip.value().structures.front().topology->impropers().size() ==
+                1U &&
+            roundtrip.value().structures.front().topology->cmap_terms().size() ==
                 1U,
         "native PSF read/write must round-trip topology and remain "
         "coordinate-free");

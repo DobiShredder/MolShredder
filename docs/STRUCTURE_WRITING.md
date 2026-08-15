@@ -71,7 +71,9 @@ PQR은 atom/residue/optional chain identity, Cartesian coordinate, partial charg
 `partial_charge` float property의 unit은 `elementary_charge|e`, `pqr.radius`는 `angstrom|nanometer`여야
 한다. Writer는 단위를 PQR의 elementary charge/Å로 변환하며 property가 없거나 radius가
 non-positive이면 값을 발명하지 않고 hard error를 반환한다. `pqr.radius`가 없을 때만
-explicit `vdw_radius`를 fallback으로 인정한다. PQR은 single-frame format으로 취급한다.
+explicit `vdw_radius`를 fallback으로 인정한다. PQR은 single-frame format으로 취급한다. Selected frame에
+unit cell이 있으면 VMD PQR 0.6 호환 `CRYST1` record로 geometry를 보존하고 space group/Z는 알 수 없으므로
+`P 1`/`1` 대체를 loss report에 기록한다.
 
 MOL/SDF는 MDL V2000의 single/double/triple/aromatic bond order, formal charge, isotope와 radical을
 보존한다. V2000은 record당 atom/bond가 각각 최대 999이고 coordinate는 F10.4이므로 범위를 벗어난 값이나
@@ -94,7 +96,9 @@ GRO는 stable atom order의 여러 frame, nm 좌표, optional nm/ps velocity, ps
 저장한다. Position precision은 1..15이며 velocity는 같은 field width에서 한 자리 더 많은 소수 자릿수를
 사용한다. Atom/residue name은 5자, 번호는 0..99999 범위를 요구한다. Connectivity, charge, explicit element와
 임의 property는 loss report에 기록한다. Frame마다 velocity 유무가 다른 것은 허용하지만 한 frame 안의
-atom별 velocity 유무가 섞인 데이터는 reader가 거부한다.
+atom별 velocity 유무가 섞인 데이터는 reader가 거부한다. `--comment`는 frame title을 바꾸지만 typed physical
+time이 있으면 frame마다 `t=`를 다시 붙인다. 기존 title의 parseable `t=`는 typed time으로 갱신하며 typed
+time 없이 parseable title time만 남아 있으면 stale scientific metadata로 판단해 export를 거부한다.
 
 G96는 하나의 `TITLE` 뒤에 frame별 optional `TIMESTEP`, required `POSITION/POSITIONRED`, optional
 `VELOCITY/VELOCITYRED`와 `BOX`를 순서대로 기록한다. Writer는 topology identity를 보존하기 위해 full

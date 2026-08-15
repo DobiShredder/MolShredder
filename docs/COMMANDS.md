@@ -14,6 +14,8 @@ molshredder volume load --path PATH [--name NAME]
                            [--file-format auto|dx|opendx|mrc|map|ccp4|mrcs]
                            [--coordinate-unit angstrom|nanometer]
 molshredder volume list
+molshredder volume save --path PATH [--file-format auto|dx|opendx|mrc|map|ccp4|mrcs]
+                           [--overwrite false|true]
 molshredder volume isosurface --level NUMBER
                            [--color blue|cyan|green|magenta|orange|red|white|yellow]
                            [--opacity 0..1] [--replace false|true]
@@ -62,6 +64,8 @@ Additive `format list`와 `save` 문법, atomic output 및 semantic loss table�
   [Volumetric data](VOLUMETRIC_DATA.md)에 고정한다.
 - `volume list`: 현재 Workspace의 volume object ID/name, scene node, dimensions, value count, precision,
   scalar range, coordinate unit, representation count와 active/visibility를 typed table로 반환한다.
+- `volume save`: active volume을 OpenDX 또는 canonical MRC2014 mode 2로 failure-atomic 저장한다. Format은
+  명시하거나 suffix로 선택하며 GUI action, CLI와 Python이 같은 typed operation 및 loss report를 사용한다.
 - `volume isosurface`: active volume의 contour mesh를 생성한다. 기본 cyan/불투명 style을 사용하며
   `--replace true`가 기본이다. GUI, CLI와 Python은 같은 failure-atomic Workspace operation을 호출한다.
 - `select`: atom selection expression을 named selection으로 생성 또는 교체한다. `--update true`는

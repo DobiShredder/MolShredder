@@ -30,6 +30,8 @@ molshredder traj load --path PATH [--file-format auto|dcd|trr|xtc|mdcrd|crd|netc
                                       [--particle-group NAME]
                                       [--cache-mib POSITIVE_INTEGER]
                                       [--prefetch-frames NON_NEGATIVE_INTEGER]
+molshredder traj save --path PATH [--file-format auto|rst7|trr]
+                                      [--title TEXT] [--overwrite false|true]
 molshredder traj frame --frame ZERO_BASED_INDEX
 molshredder traj play [--mode once|loop|rock]
                       [--direction forward|reverse] [--steps NON_NEGATIVE_INTEGER]
@@ -59,6 +61,12 @@ RST7은 by definition one-frame in-memory restart다. 좌표 Å, time ps, option
 box를 보존하고 native AKMA velocity는 20.455를 곱해 Å/ps로 정규화한다. NATOM이 active topology와 다르면
 attach 전에 실패한다. 1–2 atom file에서 optional trailing block이 velocity인지 box인지 구분할 수 없는
 경우에는 추정하지 않고 오류를 반환한다.
+
+`traj save`는 active object의 current frame을 같은 typed registry를 통해 Amber RST7 또는 GROMACS TRR로
+쓴다. Coordinate, velocity, force, time, temperature와 unit cell 보존 여부, binary/text precision 및
+metadata loss를 JSON/table에 반환한다. TRR은 source step, physical time과 lambda가 모두 typed metadata로
+존재해야 하며 누락값을 0으로 만들지 않는다.
+CLI와 Python은 동일 operation을 호출하며 desktop GUI의 visible export control은 후속이다.
 
 MDCRD/CRD는 active topology atom count로 frame boundary를 찾고 open 시 byte offset만 index한다. 3-value
 box length에는 matching PRMTOP `BOX_DIMENSIONS` angle이 필요하며, 없으면 90°를 발명하지 않고 attach를

@@ -21,6 +21,8 @@ namespace {
 constexpr std::size_t kHeaderBytes = 1024U;
 constexpr std::size_t kMaximumVoxels = 100'000'000U;
 constexpr double kDegreesToRadians = 0.017453292519943295769;
+constexpr std::int32_t kImodMagicStamp = 1146047817;
+constexpr std::int32_t kImodSignedByteFlag = 0x1;
 
 enum class ByteOrder { little, big };
 
@@ -37,6 +39,8 @@ struct Header {
   std::int32_t extended_bytes{};
   std::int32_t skew_flag{};
   std::int32_t version{};
+  std::int32_t imod_stamp{};
+  std::int32_t imod_flags{};
   std::array<float, 3U> origin{};
   float rms{};
   std::int32_t label_count{};
@@ -50,7 +54,8 @@ operation::Error invalid(std::string message, std::string suggestion = {}) {
 operation::Error unsupported(std::string message) {
   return operation::Error{
       operation::ErrorCode::unsupported, std::move(message),
-      "use a real-valued MRC2014/CCP4 scalar map in mode 0, 1, 2, 6 or 12"};
+      "use a real-valued MRC2014/CCP4 scalar map in mode 0, 1, 2, 6, 12 "
+      "or RGB mode 16"};
 }
 
 std::uint16_t unsigned16(std::string_view content, std::size_t offset,
@@ -129,6 +134,8 @@ Header header(std::string_view content, ByteOrder order) noexcept {
   result.extended_bytes = signed32(content, 92U, order);
   result.skew_flag = signed32(content, 96U, order);
   result.version = signed32(content, 108U, order);
+  result.imod_stamp = signed32(content, 152U, order);
+  result.imod_flags = signed32(content, 156U, order);
   result.rms = float32(content, 216U, order);
   result.label_count = signed32(content, 220U, order);
   return result;
@@ -136,7 +143,7 @@ Header header(std::string_view content, ByteOrder order) noexcept {
 
 bool known_mode(std::int32_t mode) noexcept {
   return mode == 0 || mode == 1 || mode == 2 || mode == 3 || mode == 4 ||
-         mode == 6 || mode == 12 || mode == 101;
+         mode == 6 || mode == 12 || mode == 16 || mode == 101;
 }
 
 bool plausible(const Header &value) noexcept {
@@ -187,6 +194,8 @@ std::optional<std::size_t> bytes_per_value(std::int32_t mode) noexcept {
     return 2U;
   case 2:
     return 4U;
+  case 16:
+    return 3U;
   default:
     return std::nullopt;
   }
@@ -284,9 +293,11 @@ std::string vector_text(const std::array<float, 3U> &values) {
 }
 
 float scalar(std::string_view content, std::size_t offset, std::int32_t mode,
-             ByteOrder order) noexcept {
+             ByteOrder order, bool unsigned_mode_zero) noexcept {
   switch (mode) {
   case 0:
+    if (unsigned_mode_zero)
+      return static_cast<float>(static_cast<std::uint8_t>(content[offset]));
     return static_cast<float>(
         std::bit_cast<std::int8_t>(static_cast<std::uint8_t>(content[offset])));
   case 1:
@@ -297,6 +308,13 @@ float scalar(std::string_view content, std::size_t offset, std::int32_t mode,
     return static_cast<float>(unsigned16(content, offset, order));
   case 12:
     return float16(unsigned16(content, offset, order));
+  case 16:
+    return (static_cast<float>(static_cast<std::uint8_t>(content[offset])) +
+            static_cast<float>(
+                static_cast<std::uint8_t>(content[offset + 1U])) +
+            static_cast<float>(
+                static_cast<std::uint8_t>(content[offset + 2U]))) /
+           3.0F;
   default:
     return std::numeric_limits<float>::quiet_NaN();
   }
@@ -363,6 +381,10 @@ operation::Result<VolumeDocument> read_mrc(std::string_view content,
   if (!count_result.has_value())
     return operation::Result<VolumeDocument>::failure(count_result.error());
   const auto count = count_result.value();
+  const auto is_imod = parsed.imod_stamp == kImodMagicStamp;
+  const auto unsigned_mode_zero =
+      parsed.mode == 0 && is_imod &&
+      (parsed.imod_flags & kImodSignedByteFlag) == 0;
   const auto extended = static_cast<std::size_t>(parsed.extended_bytes);
   if (extended > content.size() - kHeaderBytes ||
       count >
@@ -409,7 +431,7 @@ operation::Result<VolumeDocument> read_mrc(std::string_view content,
             logical_index[2];
         const auto value =
             scalar(content, data_offset + storage_index * *value_bytes,
-                   parsed.mode, order);
+                   parsed.mode, order, unsigned_mode_zero);
         if (!std::isfinite(value)) {
           return operation::Result<VolumeDocument>::failure(
               invalid("MRC scalar data contains a non-finite value"));
@@ -451,6 +473,20 @@ operation::Result<VolumeDocument> read_mrc(std::string_view content,
   metadata.fields.emplace("format", "mrc");
   metadata.fields.emplace("mrc_version", std::to_string(parsed.version));
   metadata.fields.emplace("mrc_mode", std::to_string(parsed.mode));
+  if (is_imod) {
+    metadata.fields.emplace("mrc_imod_stamp", "true");
+    metadata.fields.emplace("mrc_imod_flags",
+                            std::to_string(parsed.imod_flags));
+    if (parsed.mode == 0) {
+      metadata.fields.emplace("mrc_mode_0_signedness",
+                              unsigned_mode_zero ? "unsigned_imod"
+                                                 : "signed_imod");
+    }
+  } else if (parsed.mode == 0) {
+    metadata.fields.emplace("mrc_mode_0_signedness", "signed_mrc2014");
+  }
+  if (parsed.mode == 16)
+    metadata.fields.emplace("mrc_rgb_conversion", "arithmetic_mean");
   metadata.fields.emplace("mrc_byte_order",
                           order == ByteOrder::little ? "little" : "big");
   metadata.fields.emplace("mrc_axis_mapping", vector_text(parsed.axes));

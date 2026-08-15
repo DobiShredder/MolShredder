@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <compare>
 #include <cstddef>
 #include <cstdint>
@@ -83,6 +84,10 @@ struct Improper {
   AtomIndex third;
 };
 
+struct CmapTerm {
+  std::array<AtomIndex, 8> atoms;
+};
+
 struct BooleanColumn {
   std::vector<std::uint8_t> values;
 };
@@ -156,6 +161,9 @@ class Topology {
   [[nodiscard]] const std::vector<Improper>& impropers() const noexcept {
     return impropers_;
   }
+  [[nodiscard]] const std::vector<CmapTerm>& cmap_terms() const noexcept {
+    return cmap_terms_;
+  }
   [[nodiscard]] const AtomPropertyTable& properties() const noexcept {
     return properties_;
   }
@@ -174,6 +182,7 @@ class Topology {
   std::vector<Angle> angles_;
   std::vector<Dihedral> dihedrals_;
   std::vector<Improper> impropers_;
+  std::vector<CmapTerm> cmap_terms_;
   AtomPropertyTable properties_;
   std::map<std::string, std::string, std::less<>> source_metadata_;
 };
@@ -193,6 +202,8 @@ class TopologyBuilder {
       Dihedral dihedral, bool allow_duplicate_term = false);
   [[nodiscard]] std::optional<operation::Error> add_improper(
       Improper improper, bool allow_duplicate_term = false);
+  [[nodiscard]] std::optional<operation::Error> add_cmap_term(
+      CmapTerm term, bool allow_duplicate_term = false);
 
   [[nodiscard]] std::optional<operation::Error> add_property(
       std::string name, AtomPropertyColumn column,
@@ -212,6 +223,7 @@ class TopologyBuilder {
   std::vector<Angle> angles_;
   std::vector<Dihedral> dihedrals_;
   std::vector<Improper> impropers_;
+  std::vector<CmapTerm> cmap_terms_;
   std::map<std::string, AtomProperty, std::less<>> properties_;
   std::map<std::string, std::string, std::less<>> source_metadata_;
   std::uint64_t base_version_{};

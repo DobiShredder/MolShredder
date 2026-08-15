@@ -1,6 +1,6 @@
 # Volumetric data foundation
 
-상태: typed scalar grid, OpenDX/MRC2014/CCP4 read-only I/O와 isosurface vertical slice
+상태: typed scalar grid, OpenDX와 MRC2014/CCP4 read/write 및 isosurface vertical slice
 
 MolShredder의 volume은 molecular coordinate frame에 억지로 넣지 않는 독립 data model이다.
 `model::VolumeGrid`는 다음 값을 소유한다.
@@ -21,7 +21,7 @@ position(x, y, z) = origin + x * delta_x + y * delta_y + z * delta_z
 
 ## OpenDX contract
 
-현재 reader는 APBS가 출력하는 ASCII regular scalar subset을 지원한다.
+현재 reader와 writer는 APBS-compatible ASCII regular scalar subset을 지원한다.
 
 - `gridpositions counts nx ny nz`
 - `origin ox oy oz`
@@ -39,10 +39,18 @@ OpenDX regular grid에는 coordinate unit field가 없으므로 기본값은 APB
 다른 convention의 파일은 `--coordinate-unit nanometer`처럼 명시해야 하며 결과 metadata가 이 선택을
 기록한다. Scalar unit은 OpenDX syntax만으로 추정하지 않는다.
 
+Writer는 `VolumeGrid`의 float32/float64 precision, origin, skewed delta와 z-fastest scalar order를
+보존하고 한 줄에 최대 scalar 3개를 기록한다. 한 축 dimension이 1이어도 delta를 직접 기록하므로
+extent를 `(count - 1)`로 나누지 않는다. OpenDX가 담지 못하는 coordinate/scalar unit와 auxiliary
+metadata, 정리된 field name은 typed loss report로 반환한다. File 출력은 같은 directory의 temporary
+file을 flush한 뒤 publish하므로 collision, cancellation 또는 오류가 partial target을 남기지 않는다.
+
 ```text
 invoke "volume load" --path "potential.dx" --name "electrostatic" \
   --file-format "opendx" --coordinate-unit "angstrom"
 invoke "volume list"
+invoke "volume save" --path "potential-copy.dx" --file-format "opendx" \
+  --overwrite "false"
 invoke "volume isosurface" --level "0.5" --color "cyan" \
   --opacity "0.72" --replace "true"
 invoke "format list" --family "volume"
@@ -86,6 +94,7 @@ MRC/CCP4 reader는 1024-byte main header, `NSYMBT` extended-header offset과 뒤
 
 - little/big-endian `MACHST`; legacy unknown stamp는 한 byte order만 유효할 때만 추론
 - scalar mode 0 signed int8, 1 signed int16, 2 float32, 6 unsigned int16, 12 IEEE binary16
+- IMOD stamp/flag가 있는 mode 0의 signed/unsigned byte와 mode 16 RGB arithmetic-mean grayscale
 - column/row/section fastness와 `MAPC/MAPR/MAPS` permutation
 - `MX/MY/MZ`, cell length/angle로 만든 triclinic X/Y/Z delta vector
 - nonzero MRC `ORIGIN` 우선, 그렇지 않으면 permuted `NXSTART/NYSTART/NZSTART`에서 계산한 origin
@@ -101,10 +110,20 @@ invoke "volume load" --path "density.mrc" --name "density" \
   --file-format "mrc" --coordinate-unit "angstrom"
 invoke "volume load" --path "difference.ccp4" --name "difference" \
   --file-format "ccp4"
+invoke "volume save" --path "density-copy.mrc" --file-format "mrc" \
+  --overwrite "false"
 ```
 
 MRC2014는 data block handedness를 보편적으로 확정하지 않으므로 reader가 임의 축 반전을 수행하지 않는다.
 `mrc_handedness=unspecified_by_standard`를 보존하며 handedness override와 visual validation은 후속 기능이다.
+
+Writer는 MRC2014 mode 2, little-endian, `MAPC/MAPR/MAPS=1/2/3`, zero start와 extended header가 없는
+canonical 1024-byte header를 생성한다. Internal z-fastest logical scalar는 MRC column-fastest disk order로
+재배열한다. Coordinate는 header 규약에 맞춰 Angstrom으로 변환하며 space group은 유효한
+`mrc_space_group` metadata가 있으면 보존한다. Arbitrarily rotated basis는 MRC header로 손실 없이 표현할 수
+없으므로 거부하고 OpenDX를 안내하지만, a가 +X이고 b가 XY plane에 있는 canonical triclinic basis는 보존한다.
+Float64 scalar와 geometry/statistics의 float32 narrowing, handedness, scalar unit, normalized metadata와 label
+정리는 typed loss로 보고한다. File publish, overwrite와 cancellation은 OpenDX와 같은 failure-atomic 정책이다.
 
 ## 명시적 한계
 
@@ -112,10 +131,11 @@ MRC2014는 data block handedness를 보편적으로 확정하지 않으므로 re
 
 - binary OpenDX, irregular positions, vector/tensor array와 finite-element field
 - 한 파일의 여러 grid/array/field 및 external data payload
-- OpenDX writer와 streaming/out-of-core scalar storage
+- OpenDX streaming/out-of-core scalar storage와 native-endian binary output
 - XPLOR/CNS, cube, DSN6/BRIX, Situs, CHGCAR
 - MRC complex transform mode 3/4, packed 4-bit mode 101과 CCP4 skew transform
 - MRC extended-header payload 해석, image/volume-stack 분리와 handedness override
+- MRC mode 3/4/6/12/16 output, big-endian output, arbitrary rotated-basis output과 out-of-core I/O
 - slice, field line와 direct volume ray marching
 - map arithmetic/resampling, electrostatic potential surface coloring과 trajectory-dependent volume
 - volume object의 session persistence, rename/delete/visibility command

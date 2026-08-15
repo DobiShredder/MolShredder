@@ -77,7 +77,7 @@ int main() {
       "BCIF registry row must expose BinaryCIF multi-block read semantics");
   passed &= expect(
       opendx != nullptr && opendx->family == "volume" && opendx->readable &&
-          !opendx->writable && !opendx->multi_frame &&
+          opendx->writable && !opendx->multi_frame &&
           !opendx->multi_structure && opendx->random_access &&
           !opendx->streaming &&
           std::find(opendx->channels.begin(), opendx->channels.end(),
@@ -87,7 +87,7 @@ int main() {
       "OpenDX registry row must expose regular scalar volume semantics");
   passed &= expect(
       mrc != nullptr && mrc->family == "volume" && mrc->readable &&
-          !mrc->writable && !mrc->multi_frame && !mrc->multi_structure &&
+          mrc->writable && !mrc->multi_frame && !mrc->multi_structure &&
           mrc->random_access && !mrc->streaming &&
           std::find(mrc->channels.begin(), mrc->channels.end(),
                     "axis_permutation") != mrc->channels.end() &&
@@ -100,7 +100,9 @@ int main() {
                  std::find(pqr->channels.begin(), pqr->channels.end(),
                            "partial_charge") != pqr->channels.end() &&
                  std::find(pqr->channels.begin(), pqr->channels.end(),
-                           "pqr_radius") != pqr->channels.end(),
+                           "pqr_radius") != pqr->channels.end() &&
+                 std::find(pqr->channels.begin(), pqr->channels.end(),
+                           "unit_cell") != pqr->channels.end(),
              "PQR registry row must expose native electrostatics channels");
   const auto *mol = find("mol");
   passed &= expect(mol != nullptr && mol->readable && mol->writable &&
@@ -169,7 +171,7 @@ int main() {
           std::find(prmtop->channels.begin(), prmtop->channels.end(),
                     "topology_only") != prmtop->channels.end(),
       "PRMTOP registry row must expose read-only Amber topology semantics");
-  for (const auto id : {"dcd", "trr", "xtc"}) {
+  for (const auto id : {"dcd", "xtc"}) {
     const auto *trajectory = find(id);
     passed &=
         expect(trajectory != nullptr && trajectory->readable &&
@@ -177,6 +179,13 @@ int main() {
                    trajectory->streaming,
                "trajectory registry row must match indexed read-only behavior");
   }
+  const auto *trr = find("trr");
+  passed &= expect(
+      trr != nullptr && trr->readable && trr->writable && trr->random_access &&
+          trr->streaming &&
+          std::find(trr->channels.begin(), trr->channels.end(), "force") !=
+              trr->channels.end(),
+      "TRR registry row must expose indexed read and current-frame write");
   const auto *mdcrd = find("mdcrd");
   passed &= expect(
       mdcrd != nullptr && mdcrd->readable && !mdcrd->writable &&
@@ -186,7 +195,7 @@ int main() {
       "MDCRD registry row must expose indexed ASCII trajectory semantics");
   const auto *rst7 = find("rst7");
   passed &= expect(
-      rst7 != nullptr && rst7->readable && !rst7->writable &&
+      rst7 != nullptr && rst7->readable && rst7->writable &&
           !rst7->multi_frame && rst7->random_access && rst7->streaming &&
           std::find(rst7->channels.begin(), rst7->channels.end(), "velocity") !=
               rst7->channels.end(),

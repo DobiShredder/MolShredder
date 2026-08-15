@@ -74,8 +74,12 @@ int main(int argc, char **argv) {
             amide.topology->residues()[0].chain_id == "A" &&
             amide.topology->bonds()[0].order == model::BondOrder::double_bond &&
             amide.topology->bonds()[1].order == model::BondOrder::amide &&
-            aromatic.topology->bonds()[0].order == model::BondOrder::aromatic,
-        "MOL2 residue identity and double/amide/aromatic bonds must load");
+            aromatic.topology->bonds()[0].order == model::BondOrder::aromatic &&
+            amide.topology->bonds().size() == 3U &&
+            amide.topology->source_metadata().at(
+                "mol2.not_connected.0.status") == "PROXIMITY_ONLY",
+        "MOL2 residue identity, connected bond kinds and retained nc rows "
+        "must load");
     passed &= expect(
         atom_types != nullptr && charges != nullptr && status != nullptr &&
             std::get<std::vector<std::string>>(atom_types->values)[2] ==
@@ -293,6 +297,7 @@ int main(int argc, char **argv) {
             topology.bonds().size() == 3U && topology.angles().size() == 2U &&
             topology.dihedrals().size() == 1U &&
             topology.impropers().size() == 1U &&
+            topology.cmap_terms().size() == 1U &&
             topology.residues()[1].sequence_number == 2 &&
             topology.residues()[1].insertion_code == "A" &&
             topology.residues()[1].segment_id == "PROT" &&
@@ -315,15 +320,15 @@ int main(int argc, char **argv) {
                  bad_psf_reference.error().message.find("unknown atom 2") !=
                      std::string::npos,
              "PSF connectivity must reject unknown source atom identifiers");
-  const auto unsupported_cmap = io::read_structure(
+  const auto malformed_cmap = io::read_structure(
       "PSF EXT CMAP\n\n1 !NTITLE\nREMARKS cmap\n1 !NATOM\n"
-      "1 SEG 1 RES C CT 0.0 12.011 0\n1 !NCRTERM\n1 1 1 1 1 1 1 1\n",
+      "1 SEG 1 RES C CT 0.0 12.011 0\n1 !NCRTERM\n1 1 1 1 1 1 1\n",
       {io::StructureFormat::psf, "cmap.psf"});
   passed &= expect(
-      !unsupported_cmap.has_value() &&
-          unsupported_cmap.error().code == ErrorCode::unsupported &&
-          unsupported_cmap.error().message.find("NCRTERM") != std::string::npos,
-      "PSF CMAP terms must fail instead of being silently discarded");
+      !malformed_cmap.has_value() &&
+          malformed_cmap.error().message.find("contains 7 integer fields") !=
+              std::string::npos,
+      "PSF CMAP terms must require exactly two source-order dihedrals");
   const auto duplicate_psf_term = io::read_structure(
       "PSF NAMD\n\n1 !NTITLE\nREMARKS multiplicity\n4 !NATOM\n"
       "1 SEG 1 RES A CT 0 12.011 0\n2 SEG 1 RES B CT 0 12.011 0\n"
@@ -372,10 +377,21 @@ int main(int argc, char **argv) {
                 1.0e-12 &&
             std::get<std::vector<double>>(radii->values)[3] == 1.5 &&
             topology.source_metadata().at("amber.box_angle_degrees") ==
-                "90.000000",
+                "90.000000" &&
+            topology.source_metadata().at("amber.comment.CHARGE") ==
+                "Amber charge in internal electrostatic units\nconverted "
+                "with the historical scale",
         "PRMTOP identity, Amber charge scale, box template, GB properties and "
-        "signed torsions must load");
+        "signed torsions and section comments must load");
   }
+  const auto misplaced_prmtop_comment = io::read_structure(
+      "%VERSION VERSION_STAMP = V0001.000\n%COMMENT no section\n",
+      {io::StructureFormat::prmtop, "misplaced-comment.prmtop"});
+  passed &= expect(
+      !misplaced_prmtop_comment.has_value() &&
+          misplaced_prmtop_comment.error().message.find(
+              "unexpected Amber %COMMENT") != std::string::npos,
+      "PRMTOP comments outside the FLAG-to-FORMAT interval must fail");
   auto perturbed_prmtop = prmtop_text;
   const auto pointer_row =
       perturbed_prmtop.find("       0       0       0       0       0       0  "
@@ -413,9 +429,9 @@ int main(int argc, char **argv) {
                  dummy_bond.error().message.find("dummy") != std::string::npos,
              "MOL2 dummy/query bonds must not become covalent bonds");
   auto bad_mol2_count = mol2_text;
-  const auto first_count = bad_mol2_count.find("4 3 1 0 0");
-  bad_mol2_count.replace(first_count, std::string{"4 3 1 0 0"}.size(),
-                         "999999999 3 1 0 0");
+  const auto first_count = bad_mol2_count.find("4 4 1 0 0");
+  bad_mol2_count.replace(first_count, std::string{"4 4 1 0 0"}.size(),
+                         "999999999 4 1 0 0");
   const auto bad_count = io::read_structure(
       bad_mol2_count, {io::StructureFormat::mol2, "count.mol2"});
   passed &= expect(!bad_count.has_value() && bad_count.error().message.find(
@@ -499,8 +515,11 @@ int main(int argc, char **argv) {
         expect(frame.has_value() &&
                    frame.value()->metadata().coordinate_unit ==
                        operation::LengthUnit::angstrom &&
+                   frame.value()->metadata().unit_cell.has_value() &&
+                   frame.value()->metadata().unit_cell->signed_volume() >
+                       1000.0 &&
                    positions(*frame.value())[2] == model::Vec3d{3.0, 4.0, 5.0},
-               "PQR Cartesian coordinates must remain float64 angstrom");
+               "PQR coordinates and CRYST1 cell must remain float64 angstrom");
   }
 
   const auto pdb_text = read_text(argv[1]);
@@ -517,8 +536,18 @@ int main(int argc, char **argv) {
         expect(structure.name == "MS01" &&
                    structure.metadata.at("title") ==
                        "SYNTHETIC MULTI MODEL WITH TRICLINIC CELL" &&
+                   structure.metadata.at("deposition_date") == "13-AUG-26" &&
                    structure.metadata.at("space_group") == "P 1",
                "PDB entry and crystallographic metadata must be retained");
+    passed &= expect(
+        structure.metadata.at("molecule_remarks") ==
+            "REMARK 200 SYNTHETIC EXPERIMENTAL DETAIL\n"
+            "SEQRES   1 A    1  GLY\nCONECT    1    2\n" &&
+            structure.topology->source_metadata().at(
+                "pdb.molecule_remarks") ==
+                structure.metadata.at("molecule_remarks"),
+        "PDB REMARK, unused and CONECT records must remain available as "
+        "molecule metadata");
     passed &= expect(structure.topology->atom_count() == 3 &&
                          structure.topology->residue_count() == 2 &&
                          structure.topology->bonds().size() == 1,
@@ -596,7 +625,7 @@ int main(int argc, char **argv) {
       unknown_connection, {io::StructureFormat::pdb, "conect.pdb"});
   passed &= expect(
       !bad_connection.has_value() &&
-          bad_connection.error().message.starts_with("conect.pdb:13:") &&
+          bad_connection.error().message.starts_with("conect.pdb:15:") &&
           bad_connection.error().message.find("CONECT") != std::string::npos,
       "PDB CONECT must not silently reference an unknown atom");
   auto inferred_element = pdb_text;
@@ -708,6 +737,33 @@ int main(int argc, char **argv) {
           two_blocks.value().structures[0].name == "one" &&
           two_blocks.value().structures[1].name == "two",
       "independent mmCIF data blocks must become structures in order");
+
+  const auto long_identity = io::read_structure(
+      "data_long\nloop_\n_atom_site.group_PDB\n_atom_site.id\n"
+      "_atom_site.type_symbol\n_atom_site.label_atom_id\n"
+      "_atom_site.label_alt_id\n_atom_site.label_comp_id\n"
+      "_atom_site.label_asym_id\n_atom_site.label_entity_id\n"
+      "_atom_site.label_seq_id\n_atom_site.pdbx_PDB_ins_code\n"
+      "_atom_site.Cartn_x\n_atom_site.Cartn_y\n_atom_site.Cartn_z\n"
+      "_atom_site.auth_seq_id\n_atom_site.auth_comp_id\n"
+      "_atom_site.auth_asym_id\n_atom_site.auth_atom_id\n"
+      "ATOM 1 C 'C alpha' . GLY LABEL_LONG 1 1 ? 0 0 0 10 GLY "
+      "AUTH_LONG 'C alpha'\n",
+      {io::StructureFormat::mmcif, "long-identity.cif"});
+  passed &= expect(
+      long_identity.has_value() &&
+          long_identity.value().structures.front().topology->atoms().front()
+                  .name == "C alpha" &&
+          long_identity.value().structures.front().topology->residues().front()
+                  .chain_id == "AUTH_LONG" &&
+          std::get<std::vector<std::string>>(
+              long_identity.value()
+                  .structures.front()
+                  .topology->properties()
+                  .find("mmcif.label_asym_id")
+                  ->values)[0] == "LABEL_LONG",
+      "native mmCIF must preserve quoted atom names and chain identifiers "
+      "beyond the molfile ABI 18 width");
 
   const auto malformed_loop = io::read_structure(
       "data_bad\nloop_\n_atom_site.id\n_atom_site.type_symbol\n1\n",
@@ -827,6 +883,21 @@ int main(int argc, char **argv) {
       expect(!multimodel_pqr.has_value() &&
                  multimodel_pqr.error().code == ErrorCode::invalid_argument,
              "multi-model PQR must not be silently flattened");
+  const auto duplicate_pqr_cell = io::read_structure(
+      "CRYST1 10 10 10 90 90 90\nCRYST1 10 10 10 90 90 90\n"
+      "ATOM 1 C MOL 1 0 0 0 0.0 1.7\n",
+      {io::StructureFormat::pqr, "duplicate-cell.pqr"});
+  passed &= expect(!duplicate_pqr_cell.has_value() &&
+                       duplicate_pqr_cell.error().message.find(
+                           "duplicate PQR CRYST1") != std::string::npos,
+                   "duplicate PQR CRYST1 must fail explicitly");
+  const auto invalid_pqr_cell = io::read_structure(
+      "CRYST1 10 10 10 90 90 0\nATOM 1 C MOL 1 0 0 0 0.0 1.7\n",
+      {io::StructureFormat::pqr, "invalid-cell.pqr"});
+  passed &= expect(!invalid_pqr_cell.has_value() &&
+                       invalid_pqr_cell.error().message.find("degenerate") !=
+                           std::string::npos,
+                   "degenerate PQR CRYST1 must fail explicitly");
 
   const auto truncated_mol = io::read_structure(
       "bad\nprogram\ncomment\n  2  0  0  0  0  0  0  0  0  0999 V2000\n",

@@ -164,6 +164,45 @@ Result<ParsedAtom> parse_atom(std::string_view line, std::size_t line_number,
       line_number});
 }
 
+std::string_view trim_spaces(std::string_view value) {
+  while (!value.empty() &&
+         std::isspace(static_cast<unsigned char>(value.front())) != 0) {
+    value.remove_prefix(1U);
+  }
+  while (!value.empty() &&
+         std::isspace(static_cast<unsigned char>(value.back())) != 0) {
+    value.remove_suffix(1U);
+  }
+  return value;
+}
+
+Result<model::UnitCell> parse_cryst1(
+    std::string_view line, const std::vector<std::string_view>& columns,
+    std::size_t line_number, std::string_view source) {
+  if (line.size() < 54U && columns.size() < 7U) {
+    return Result<model::UnitCell>::failure(parse_error(
+        source, line_number,
+        "PQR CRYST1 record requires a, b, c, alpha, beta and gamma"));
+  }
+  std::vector<double> values;
+  values.reserve(6U);
+  constexpr std::size_t offsets[]{6U, 15U, 24U, 33U, 40U, 47U};
+  constexpr std::size_t widths[]{9U, 9U, 9U, 7U, 7U, 7U};
+  for (std::size_t index = 0U; index < 6U; ++index) {
+    const auto text = line.size() >= 54U
+                          ? trim_spaces(line.substr(offsets[index], widths[index]))
+                          : columns[index + 1U];
+    const auto value = number<double>(text, source, line_number,
+                                      "CRYST1 cell parameter");
+    if (!value.has_value()) {
+      return Result<model::UnitCell>::failure(value.error());
+    }
+    values.push_back(value.value());
+  }
+  return make_unit_cell(values[0], values[1], values[2], values[3], values[4],
+                        values[5], source, line_number);
+}
+
 std::string structure_name(std::string_view source_name) {
   if (source_name == "<memory>") return "pqr_structure";
   auto name = std::filesystem::path{source_name}.stem().string();
@@ -176,6 +215,7 @@ Result<StructureDocument> read_pqr(std::string_view content,
                                    std::string source_name) {
   std::vector<ParsedAtom> atoms;
   std::set<std::int64_t> serials;
+  std::optional<model::UnitCell> unit_cell;
   std::size_t line_number{};
   std::size_t position{};
   while (position <= content.size()) {
@@ -197,6 +237,17 @@ Result<StructureDocument> read_pqr(std::string_view content,
             source_name, line_number, "duplicate PQR atom serial"));
       }
       atoms.push_back(atom.value());
+    } else if (!columns.empty() && columns.front() == "CRYST1") {
+      if (unit_cell.has_value()) {
+        return Result<StructureDocument>::failure(parse_error(
+            source_name, line_number, "duplicate PQR CRYST1 record"));
+      }
+      const auto parsed =
+          parse_cryst1(line, columns, line_number, source_name);
+      if (!parsed.has_value()) {
+        return Result<StructureDocument>::failure(parsed.error());
+      }
+      unit_cell = parsed.value();
     } else if (!columns.empty() &&
                (columns.front() == "MODEL" || columns.front() == "ENDMDL")) {
       return Result<StructureDocument>::failure(parse_error(
@@ -267,6 +318,7 @@ Result<StructureDocument> read_pqr(std::string_view content,
   model::FrameMetadata metadata;
   metadata.source_step = 1U;
   metadata.coordinate_unit = operation::LengthUnit::angstrom;
+  metadata.unit_cell = unit_cell;
   const auto frame = model::CoordinateFrame::create(
       model::CoordinateBuffer{std::move(positions)}, std::nullopt, {},
       std::move(metadata));

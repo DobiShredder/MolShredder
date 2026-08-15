@@ -615,6 +615,27 @@ operation::Result<VolumeIsosurfaceResult> Workspace::show_volume_isosurface(
       {volume->id, index, level, color, vertex_count, triangle_count, bounds});
 }
 
+operation::Result<VolumeSaveResult> Workspace::save_active_volume(
+    const std::filesystem::path &path, io::VolumeFormat format, bool overwrite,
+    operation::TaskContext &context) const {
+  const auto *volume = active_volume();
+  if (volume == nullptr) {
+    return operation::Result<VolumeSaveResult>::failure(operation::Error{
+        operation::ErrorCode::not_found, "workspace has no active volume",
+        "load a volume with volume load first"});
+  }
+  io::VolumeWriteOptions options;
+  options.format = format;
+  options.name = volume->name;
+  const auto written = io::write_volume_file(path, *volume->grid,
+                                             std::move(options), overwrite,
+                                             context);
+  if (!written.has_value())
+    return operation::Result<VolumeSaveResult>::failure(written.error());
+  return operation::Result<VolumeSaveResult>::success(
+      VolumeSaveResult{volume->id, path, written.value()});
+}
+
 operation::Result<SaveResult> Workspace::save_active_structure(
     const std::filesystem::path &path, io::StructureFormat format,
     bool all_frames, unsigned int decimal_places, std::string comment,
@@ -641,6 +662,33 @@ operation::Result<SaveResult> Workspace::save_active_structure(
   }
   return operation::Result<SaveResult>::success(
       SaveResult{object->id, path, written.value()});
+}
+
+operation::Result<TrajectorySaveResult>
+Workspace::save_active_trajectory_frame(const std::filesystem::path &path,
+                                        io::TrajectoryFormat format,
+                                        std::string title, bool overwrite,
+                                        operation::TaskContext &context) const {
+  const auto *object = active_object();
+  if (object == nullptr)
+    return operation::Result<TrajectorySaveResult>::failure(missing_active());
+  const auto frame_index = object->trajectory.has_value()
+                               ? object->trajectory->timeline.snapshot().frame
+                               : 0U;
+  const auto frame = active_frame(*object);
+  if (!frame.has_value()) {
+    return operation::Result<TrajectorySaveResult>::failure(frame.error());
+  }
+  io::TrajectoryWriteOptions options;
+  options.format = format;
+  options.title = std::move(title);
+  const auto written = io::write_trajectory_frame_file(
+      path, *frame.value(), std::move(options), overwrite, context);
+  if (!written.has_value()) {
+    return operation::Result<TrajectorySaveResult>::failure(written.error());
+  }
+  return operation::Result<TrajectorySaveResult>::success(
+      TrajectorySaveResult{object->id, frame_index, path, written.value()});
 }
 
 std::optional<operation::Error>

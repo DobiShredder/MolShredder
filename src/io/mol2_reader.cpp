@@ -49,6 +49,7 @@ struct ParsedBond {
   std::int64_t first{};
   std::int64_t second{};
   model::BondOrder order{model::BondOrder::unknown};
+  bool connected{true};
   std::string status_bits;
 };
 
@@ -242,16 +243,18 @@ Result<ParsedBond> parse_bond(const SourceLine& line, std::string_view source) {
     order = model::BondOrder::aromatic;
   } else if (type == "AM") {
     order = model::BondOrder::amide;
+  } else if (type == "NC") {
+    order = model::BondOrder::unknown;
   } else {
     return Result<ParsedBond>::failure(operation::Error{
         operation::ErrorCode::unsupported,
         std::string{source} + ":" + std::to_string(line.number) +
-            ": unsupported MOL2 dummy/query/not-connected bond type: " +
+            ": unsupported MOL2 dummy/query/unknown bond type: " +
             std::string{fields[3]},
-        "use 1, 2, 3, ar/4 or am until the generalized bond-kind model is available"});
+        "use 1, 2, 3, ar/4, am or nc until the generalized bond-kind model is available"});
   }
   return Result<ParsedBond>::success(
-      {id.value(), first.value(), second.value(), order,
+      {id.value(), first.value(), second.value(), order, type != "NC",
        fields.size() == 5U ? std::string{fields[4]} : std::string{}});
 }
 
@@ -378,6 +381,7 @@ Result<StructureData> parse_record(std::span<const SourceLine> record,
     atoms.push_back(parsed.value());
   }
   std::vector<ParsedBond> bonds;
+  std::vector<ParsedBond> not_connected;
   std::set<std::int64_t> bond_ids;
   bonds.reserve(bond_lines.size());
   for (const auto& line : bond_lines) {
@@ -390,7 +394,11 @@ Result<StructureData> parse_record(std::span<const SourceLine> record,
           source, line.number,
           "MOL2 bond identifier is duplicate or references an unknown atom"));
     }
-    bonds.push_back(parsed.value());
+    if (parsed.value().connected) {
+      bonds.push_back(parsed.value());
+    } else {
+      not_connected.push_back(parsed.value());
+    }
   }
   std::map<std::int64_t, Substructure> substructures;
   for (const auto& line : substructure_lines) {
@@ -530,6 +538,23 @@ Result<StructureData> parse_record(std::span<const SourceLine> record,
   builder.set_source_metadata("mol2.name", trim(molecule_lines[0].text));
   builder.set_source_metadata("mol2.molecule_type", trim(molecule_lines[2].text));
   builder.set_source_metadata("mol2.charge_type", trim(molecule_lines[3].text));
+  if (!not_connected.empty()) {
+    builder.set_source_metadata("mol2.not_connected_count",
+                                std::to_string(not_connected.size()));
+    for (std::size_t index = 0; index < not_connected.size(); ++index) {
+      const auto &record = not_connected[index];
+      const auto prefix =
+          "mol2.not_connected." + std::to_string(index) + ".";
+      builder.set_source_metadata(prefix + "id", std::to_string(record.id));
+      builder.set_source_metadata(prefix + "first",
+                                  std::to_string(record.first));
+      builder.set_source_metadata(prefix + "second",
+                                  std::to_string(record.second));
+      if (!record.status_bits.empty()) {
+        builder.set_source_metadata(prefix + "status", record.status_bits);
+      }
+    }
+  }
   if (molecule_lines.size() > 4U) {
     std::vector<SourceLine> extra(molecule_lines.begin() + 4U,
                                   molecule_lines.end());

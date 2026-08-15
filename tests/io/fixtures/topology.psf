@@ -1,4 +1,4 @@
-PSF EXT XPLOR
+PSF EXT XPLOR CMAP
 
          1 !NTITLE
  REMARKS Synthetic peptide topology
@@ -30,3 +30,6 @@ PSF EXT XPLOR
 
        1       0 !NGRP
          0         0         0
+
+         1 !NCRTERM: cross-terms
+         1         2         3         4         1         2         3         4

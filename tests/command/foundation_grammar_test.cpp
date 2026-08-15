@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <fstream>
 #include <iostream>
 #include <iterator>
@@ -45,16 +46,28 @@ int main(int argc, char *argv[]) {
   const auto aliases = molshredder::command::foundation_command_aliases();
   const auto file_descriptors =
       molshredder::command::file_command_descriptors();
+  const auto trajectory_descriptors =
+      molshredder::command::trajectory_command_descriptors();
   passed &= expect(descriptors.size() == 8,
                    "foundation grammar must define exactly eight commands");
   passed &= expect(aliases.size() == 9,
                    "foundation grammar v1 must expose nine shorthand aliases");
   passed &= expect(
-      file_descriptors.size() == 5U &&
+      file_descriptors.size() == 6U &&
           file_descriptors.front().canonical_name == "format list" &&
-          file_descriptors[3].canonical_name == "volume isosurface" &&
+          file_descriptors[3].canonical_name == "volume save" &&
+          file_descriptors[4].canonical_name == "volume isosurface" &&
           file_descriptors.back().canonical_name == "save",
       "additive file grammar must expose format, volume and save commands");
+  const auto trajectory_save = std::find_if(
+      trajectory_descriptors.begin(), trajectory_descriptors.end(),
+      [](const auto &descriptor) {
+        return descriptor.canonical_name == "traj save";
+      });
+  passed &= expect(trajectory_save != trajectory_descriptors.end() &&
+                       trajectory_save->undo_policy ==
+                           molshredder::command::UndoPolicy::not_applicable,
+                   "trajectory grammar must expose current-frame export");
 
   Registry registry;
   for (auto descriptor : descriptors) {

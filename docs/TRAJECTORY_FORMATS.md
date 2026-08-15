@@ -1,7 +1,7 @@
 # Trajectory format support
 
-상태: DCD/TRR/XTC/MDCRD/Amber NetCDF/H5MD indexed trajectory와 RST7 restart reader contract
-검증 기준일: 2026-08-14
+상태: DCD/TRR/XTC/MDCRD/Amber NetCDF/H5MD indexed trajectory와 RST7 restart read/write contract
+검증 기준일: 2026-08-16
 
 MolShredder의 첫 out-of-core trajectory source는 CHARMM/NAMD/X-PLOR DCD를 읽는다. Public API는
 `molshredder/io/trajectory_reader.hpp`의 `open_dcd()`와 `DcdCoordinateSource`다. Topology는 DCD에
@@ -73,6 +73,7 @@ decode한다. XDR scalar는 network byte order이며 다음 channel을 지원한
 | Unit cell | 3×3 row-major triclinic basis를 nm에서 Å로 변환, optional |
 | Frame identity | signed simulation step, physical time(ps), lambda와 nre |
 | Access | open 시 O(frame count) offset index, decode O(atom count) random seek |
+| Write | current frame의 float32/64 coordinate, optional velocity/force/cell과 step/time/lambda/nre |
 
 Public `TrrMetadata`의 channel boolean은 적어도 한 frame에 해당 channel이 존재함을 뜻한다. Frame별
 optional channel은 `CoordinateFrame`에서 다시 확인해야 한다. Header block size, atom-count stability,
@@ -82,14 +83,25 @@ Box block의 3×3 행렬이 모두 0이면 GROMACS의 non-periodic/infinite-cell
 
 현재 coordinate model은 positions를 필수로 하므로 positionless TRR frame을 거부한다. 현대 trajectory
 frame에 쓰이지 않는 `ir/e/top/sym` legacy block도 조용히 건너뛰지 않고 unsupported input으로 거부한다.
-Virial과 pressure block은 size를 검증하고 건너뛰지만 아직 model property로 노출하지 않는다. Writer,
-append, lambda-specific semantics와 file mutation detection은 후속 범위다.
+Virial과 pressure block은 size를 검증하고 건너뛰지만 아직 model property로 노출하지 않는다.
+
+`traj save --file-format trr`는 current frame을 portable big-endian XDR로 쓴다. Positions와 optional
+velocity는 typed coordinate/time unit에서 nm와 nm/ps로 변환하고, `force_x/y/z` 전체가
+`kJ mol^-1 angstrom^-1`일 때 force block을 `kJ mol^-1 nm^-1`로 되돌린다. Coordinate, velocity 또는
+force 중 하나라도 float64이면 전체 frame을 float64로 쓰고 그 외에는 float32다. Source step, physical
+time과 `trr.lambda`는 필수이며 누락 시 0을 발명하지 않고 실패한다. Partial force triplet, missing atom,
+non-finite 값과 32-bit header 한계도 오류다. Auxiliary property/metadata와 float32 time/lambda/cell
+narrowing은 typed loss로 반환한다. Multi-frame append, virial/pressure/energy write와 file mutation
+detection은 후속 범위다.
 
 TRR 구현은 별도 runtime library를 링크하거나 GROMACS/standalone xdrfile source를 복사하지 않은 native
-reader다. Format semantics와 unit은 다음 공개 자료를 기준으로 했다.
+reader/writer다. Format semantics와 unit은 다음 공개 자료를 behavior reference로 사용했으며 source나
+support header를 복사·link·bundle하지 않았다.
 
 - [GROMACS file-format reference](https://manual.gromacs.org/current/reference-manual/file-formats.html)
 - [GROMACS source repository](https://gitlab.com/gromacs/gromacs)
+- [VMD current gromacsplugin registration/source](https://www.ks.uiuc.edu/Research/vmd/plugins/doxygen/gromacsplugin_8C-source.html)
+- [VMD legacy TRR plugin notes](https://www.ks.uiuc.edu/Research/vmd/plugins/molfile/trrplugin.html)
 - [Chemfiles supported-format matrix](https://chemfiles.org/chemfiles/latest/formats.html) (교차검증용)
 
 ## XTC capability
@@ -123,7 +135,8 @@ adapt했으며 전체 고지는 `THIRD_PARTY_NOTICES.md`에 보존한다. VMD ma
 ## Amber RST7 capability
 
 `open_amber_restart()`는 `.rst7/.restrt/.inpcrd/.inprst` ASCII restart 한 frame을 읽으며
-`open_trajectory()`와 `traj load`에도 `TrajectoryFormat::rst7`으로 연결된다.
+`open_trajectory()`와 `traj load`에도 `TrajectoryFormat::rst7`으로 연결된다. 현재 frame은
+`serialize_trajectory_frame()` 또는 failure-atomic `write_trajectory_frame_file()`로 다시 쓸 수 있다.
 
 | Channel | 현재 지원 |
 |---|---|
@@ -131,12 +144,17 @@ adapt했으며 전체 고지는 `THIRD_PARTY_NOTICES.md`에 보존한다. VMD ma
 | Velocities | optional AKMA value ×20.455 → Å/ps, source scale metadata |
 | Frame metadata | optional time ps와 temperature K |
 | Unit cell | 3 lengths(90°) 또는 3 lengths+alpha/beta/gamma |
-| Access/memory | known one frame, in-memory random access |
+| Access/memory | known one frame, in-memory random access; current-frame write |
 
 Active topology의 atom count와 NATOM을 attach 전에 대조한다. Coordinate 뒤 optional payload는
 none, velocity, box 또는 velocity+box만 허용하며 incomplete data를 거부한다. NATOM 1–2에서는 trailing
 3/6 value가 velocity와 box 중 어느 것인지 형식만으로 구별되지 않는 경우가 있어 추정 대신 실패한다.
-Writer, NetCDF restart와 ambiguity override는 아직 없다. Normative layout과 unit은
+Writer는 Cartesian coordinate, optional velocity/time/temperature/cell을 원래 typed metadata에 따라
+F12.7 restart로 기록한다. Å/ps velocity는 Amber raw scale로 역변환하고 orthogonal cell은 length 3개,
+triclinic cell은 length/angle 6개를 쓴다. 없는 velocity, time 또는 cell을 0으로 발명하지 않는다.
+Temperature만 있고 time이 없거나 writer output도 1–2 atom optional-block ambiguity를 만들면 hard error다.
+Fixed precision, source step과 auxiliary property/metadata omission은 typed loss report로 반환하며 overwrite,
+cancellation 또는 I/O 오류는 partial target을 publish하지 않는다. NetCDF restart와 ambiguity override는 아직 없다. Normative layout과 unit은
 [Amber official file formats](https://ambermd.org/FileFormats.php)의 coordinate/restart specification을 따른다.
 
 ## Amber MDCRD capability
