@@ -391,6 +391,14 @@ operation::Result<Value::Object> response_data(const Response& response) {
   return operation::Result<Value::Object>::success(std::move(data));
 }
 
+Value::Object error_details(const Error& error) {
+  Value::Object details;
+  for (const auto& [name, value] : error.details) {
+    details.emplace(name, value);
+  }
+  return details;
+}
+
 std::string csv_escape(std::string value) {
   if (value.find_first_of(",\"\r\n") == std::string::npos) return value;
   std::string escaped{"\""};
@@ -408,11 +416,16 @@ operation::Result<std::string> render_csv(const ResultEnvelope& envelope) {
     if (!valid_utf8(failure.message) || !valid_utf8(failure.suggestion)) {
       return operation::Result<std::string>::failure(invalid_utf8_error());
     }
+    const auto details = json_object(error_details(failure));
+    if (!details.has_value()) {
+      return operation::Result<std::string>::failure(details.error());
+    }
     return operation::Result<std::string>::success(
-        "status,error_code,message,suggestion\r\nerror," +
+        "status,error_code,message,suggestion,details\r\nerror," +
         csv_escape(std::string{operation::to_string(failure.code)}) + ',' +
         csv_escape(failure.message) + ',' +
-        csv_escape(failure.suggestion) + "\r\n");
+        csv_escape(failure.suggestion) + ',' + csv_escape(details.value()) +
+        "\r\n");
   }
   const auto& response = std::get<Response>(envelope.payload);
   if (!response.table.has_value()) {
@@ -480,6 +493,9 @@ operation::Result<std::string> render_text(const ResultEnvelope& envelope) {
     if (!failure.suggestion.empty()) {
       result += "hint: " + failure.suggestion + '\n';
     }
+    for (const auto& [name, value] : failure.details) {
+      result += "detail." + name + '=' + value + '\n';
+    }
   }
   return operation::Result<std::string>::success(std::move(result));
 }
@@ -506,6 +522,10 @@ operation::Result<std::string> render_json(const ResultEnvelope& envelope) {
     if (!valid_utf8(failure.message) || !valid_utf8(failure.suggestion)) {
       return operation::Result<std::string>::failure(invalid_utf8_error());
     }
+    if (const auto invalid = validate_json_object(error_details(failure));
+        invalid.has_value()) {
+      return operation::Result<std::string>::failure(*invalid);
+    }
   }
   std::string result =
       "{\"schema_version\":" + std::to_string(envelope.schema_version) +
@@ -525,10 +545,15 @@ operation::Result<std::string> render_json(const ResultEnvelope& envelope) {
               ",\"data\":" + data.value();
   } else {
     const auto& failure = std::get<Error>(envelope.payload);
+    const auto details = json_object(error_details(failure));
+    if (!details.has_value()) {
+      return operation::Result<std::string>::failure(details.error());
+    }
     result += ",\"error\":{\"code\":" +
               json_string(operation::to_string(failure.code)) +
               ",\"message\":" + json_string(failure.message) +
-              ",\"suggestion\":" + json_string(failure.suggestion) + '}';
+              ",\"suggestion\":" + json_string(failure.suggestion) +
+              ",\"details\":" + details.value() + '}';
   }
   result += "}\n";
   return operation::Result<std::string>::success(std::move(result));

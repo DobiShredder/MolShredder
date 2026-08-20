@@ -6,6 +6,8 @@ import pathlib
 import subprocess
 import sys
 
+from console_script import portable_console_script
+
 
 def require(condition: bool, message: str) -> None:
     if not condition:
@@ -45,8 +47,13 @@ def main() -> int:
         "format list", {"family": "structure", "direction": "write"}
     )
     require(writable["status"] == "ok" and
-            writable["data"]["capability_schema_version"] == 2 and
+            writable["data"]["capability_schema_version"] == 3 and
             writable["data"]["format_count"] == 10 and
+            writable["data"]["provider"]["id"] == "native" and
+            writable["data"]["provider"]["origin"] == "native_builtin" and
+            writable["data"]["formats"][0]["provider"]["license_status"] == "approved" and
+            writable["data"]["formats"][0]["directions"]["write"]["available"] and
+            writable["data"]["formats"][0]["directions"]["write"]["typed_loss_reporting"] and
             [item["id"] for item in writable["data"]["formats"]] ==
             ["pdb", "mmcif", "pqr", "mol", "sdf", "mol2", "psf", "gro", "g96", "xyz"] and
             "presence" in writable["data"]["formats"][0]["channels"] and
@@ -62,9 +69,11 @@ def main() -> int:
             "velocity" in writable["data"]["formats"][7]["channels"] and
             "source_step" in writable["data"]["formats"][8]["channels"] and
             writable["data"]["formats"][9]["channels"] ==
-            ["element", "coordinates", "frame_comment"],
+            ["element", "atomic_number", "coordinates", "frame_comment"],
             "native capability registry does not expose chemistry write truth")
     readable = molshredder.invoke("format list", {"direction": "read"})
+    xtc_capability = next(item for item in readable["data"]["formats"]
+                          if item["id"] == "xtc")
     require(readable["status"] == "ok" and
             readable["data"]["format_count"] == 24 and
             [item["id"] for item in readable["data"]["formats"]][-5:] ==
@@ -74,20 +83,32 @@ def main() -> int:
             "topology_only" in next(
                 item for item in readable["data"]["formats"]
                 if item["id"] == "prmtop")["channels"] and
+            not xtc_capability["directions"]["write"]["available"] and
+            xtc_capability["directions"]["write"]["unavailable_reason"] ==
+            "no registered write implementation for this format" and
             "velocity" in readable["data"]["formats"][-1]["channels"],
             "native capability registry does not expose Amber read truth")
+    rejected_provider = molshredder.invoke(
+        "format list", {"provider": "untrusted-plugin"}
+    )
+    require(rejected_provider["status"] == "error" and
+            rejected_provider["error"]["code"] == "unsupported",
+            "explicit unknown provider must fail without silent fallback")
 
     loaded = molshredder.invoke(
         "load", {"path": str(fixture), "name": "motion"}
     )
-    require(loaded["status"] == "ok" and loaded["data"]["frame_count"] == 2,
+    require(loaded["status"] == "ok" and loaded["data"]["frame_count"] == 2 and
+            loaded["data"]["provider"]["id"] == "native",
             "Python XYZ load did not retain both frames")
     arguments = {
         "path": str(output), "file-format": "xyz", "frames": "all",
         "precision": "4", "overwrite": "true"
     }
     python_save = molshredder.invoke("save", arguments)
-    require(python_save["status"] == "ok", "Python XYZ save failed")
+    require(python_save["status"] == "ok" and
+            python_save["data"]["provider"]["id"] == "native",
+            "Python XYZ save failed or omitted provider provenance")
 
     script = (
         "format json\n"
@@ -97,7 +118,8 @@ def main() -> int:
         "exit\n"
     )
     completed = subprocess.run(
-        [str(cli_path), "console"], input=script, text=True,
+        [str(cli_path), "console"], input=portable_console_script(script),
+        text=True,
         capture_output=True, check=True
     )
     envelopes = [
@@ -146,7 +168,8 @@ def main() -> int:
         "exit\n"
     )
     pqr_completed = subprocess.run(
-        [str(cli_path), "console"], input=pqr_script, text=True,
+        [str(cli_path), "console"], input=portable_console_script(pqr_script),
+        text=True,
         capture_output=True, check=True
     )
     pqr_envelopes = [
@@ -198,7 +221,8 @@ def main() -> int:
         "exit\n"
     )
     sdf_completed = subprocess.run(
-        [str(cli_path), "console"], input=sdf_script, text=True,
+        [str(cli_path), "console"], input=portable_console_script(sdf_script),
+        text=True,
         capture_output=True, check=True
     )
     sdf_envelopes = [
@@ -255,7 +279,8 @@ def main() -> int:
         "exit\n"
     )
     mol2_completed = subprocess.run(
-        [str(cli_path), "console"], input=mol2_script, text=True,
+        [str(cli_path), "console"], input=portable_console_script(mol2_script),
+        text=True,
         capture_output=True, check=True
     )
     mol2_envelopes = [
@@ -311,7 +336,8 @@ def main() -> int:
         "exit\n"
     )
     gro_completed = subprocess.run(
-        [str(cli_path), "console"], input=gro_script, text=True,
+        [str(cli_path), "console"], input=portable_console_script(gro_script),
+        text=True,
         capture_output=True, check=True
     )
     gro_envelopes = [
@@ -367,7 +393,8 @@ def main() -> int:
         "exit\n"
     )
     g96_completed = subprocess.run(
-        [str(cli_path), "console"], input=g96_script, text=True,
+        [str(cli_path), "console"], input=portable_console_script(g96_script),
+        text=True,
         capture_output=True, check=True
     )
     g96_envelopes = [
@@ -419,7 +446,8 @@ def main() -> int:
         "exit\n"
     )
     psf_completed = subprocess.run(
-        [str(cli_path), "console"], input=psf_script, text=True,
+        [str(cli_path), "console"], input=portable_console_script(psf_script),
+        text=True,
         capture_output=True, check=True
     )
     psf_envelopes = [
@@ -462,7 +490,8 @@ def main() -> int:
         f'--path "{rst7_fixture}" --prefetch-frames "0"\nexit\n'
     )
     amber_completed = subprocess.run(
-        [str(cli_path), "console"], input=amber_script, text=True,
+        [str(cli_path), "console"], input=portable_console_script(amber_script),
+        text=True,
         capture_output=True, check=True
     )
     amber_envelopes = [
@@ -502,7 +531,8 @@ def main() -> int:
         f'--precision "3"\nexit\n'
     )
     pdb_completed = subprocess.run(
-        [str(cli_path), "console"], input=pdb_script, text=True,
+        [str(cli_path), "console"], input=portable_console_script(pdb_script),
+        text=True,
         capture_output=True, check=True
     )
     pdb_envelopes = [
@@ -547,7 +577,8 @@ def main() -> int:
         f'--precision "4"\nexit\n'
     )
     mmcif_completed = subprocess.run(
-        [str(cli_path), "console"], input=mmcif_script, text=True,
+        [str(cli_path), "console"], input=portable_console_script(mmcif_script),
+        text=True,
         capture_output=True, check=True
     )
     mmcif_envelopes = [

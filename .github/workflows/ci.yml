@@ -51,10 +51,18 @@ jobs:
           conda run --no-capture-output -n molshredder
           cmake --build build/ci --config Debug --parallel
 
+      - name: Test required molfile ABI loader gate
+        run: >-
+          conda run --no-capture-output -n molshredder
+          ctest --test-dir build/ci -C Debug
+          --output-on-failure --no-tests=error
+          -R "^io\.molfile_provider$"
+
       - name: Test
         run: >-
           conda run --no-capture-output -n molshredder
-          ctest --test-dir build/ci -C Debug --output-on-failure
+          ctest --test-dir build/ci -C Debug
+          --output-on-failure --no-tests=error
 
       - name: Install staging
         run: >-

@@ -1,7 +1,7 @@
 # Trajectory format support
 
-상태: DCD/TRR/XTC/MDCRD/Amber NetCDF/H5MD indexed trajectory와 RST7 restart read/write contract
-검증 기준일: 2026-08-16
+상태: DCD/TRR/XTC/MDCRD/Amber NetCDF/H5MD/BINPOS indexed trajectory와 DCD/RST7/TRR/MDCRD/BINPOS current-frame write contract
+검증 기준일: 2026-08-20
 
 MolShredder의 첫 out-of-core trajectory source는 CHARMM/NAMD/X-PLOR DCD를 읽는다. Public API는
 `molshredder/io/trajectory_reader.hpp`의 `open_dcd()`와 `DcdCoordinateSource`다. Topology는 DCD에
@@ -17,18 +17,27 @@ MolShredder의 첫 out-of-core trajectory source는 CHARMM/NAMD/X-PLOR DCD를 �
 | Coordinates | frame별 X/Y/Z float32, Å 단위 |
 | Unit cell | CHARMM extra 48-byte cell record, angle 또는 cosine encoding |
 | Frame identity | header start step + frame index × save interval |
+| Fixed atoms | canonical NAMNF/free-index record, first full frame에서 subsequent free-atom update 재구성 |
 | Access | open 시 frame offset index 생성, 이후 random seek |
 | Memory | index O(frame count), decode O(atom count); 전체 trajectory를 적재하지 않음 |
+| Write | current frame을 little-endian CHARMM24, optional cosine unit cell, float32 X/Y/Z로 출력 |
 
 Unit cell의 DCD 순서 `A, gamma, B, beta, alpha, C`를 세 lattice vector로 변환하므로 orthogonal 및
 triclinic cell을 표현한다. Angle 세 값이 모두 [-1, 1]이면 cosine encoding으로 해석하고 아니면
 degree로 해석한다. Invalid/degenerate cell은 조용히 버리지 않고 frame decode error로 반환한다.
 
-Reader는 header/title/atom count, 모든 leading/trailing record marker와 indexed frame count를
-검증한다. Expected topology atom count mismatch, truncated record, non-finite coordinates/cell,
-unsupported 4D 및 fixed-atom trajectory를 명시적으로 거부한다. Header의 raw delta는 dialect에 맞게
+Reader는 header/title/atom count, canonical payload offset 36의 NAMNF, free-index uniqueness/range, 모든
+leading/trailing record marker와 indexed frame count를 검증한다. First fixed-atom frame은 전체 좌표를 읽고 이후
+frame은 free atom만 갱신해 random-access frame을 재구성한다. Expected topology atom count mismatch, truncated
+record, non-finite coordinates/cell과 unsupported 4D를 명시적으로 거부한다. Header의 raw delta는 dialect에 맞게
 보존하지만 DCD variant마다 timestep 의미가 다를 수 있어 foundation에서는 physical-time unit으로
 추정하지 않는다.
+
+`traj save --file-format dcd`는 current frame의 source/signed step, raw delta, title과 optional triclinic cell을
+CHARMM24 header와 한 frame으로 쓴다. Coordinate는 Å float32 X/Y/Z record로 좁히고 typed loss로 보고한다.
+Source step/raw delta가 없는 일반 structure frame은 DCD required header 값 0/1을 합성했다는 loss를 반환한다.
+Physical time, velocity와 auxiliary property는 저장하지 않으며 failure-atomic publish, overwrite와 cancellation을
+공통 trajectory writer가 보장한다.
 
 ## I/O와 lifetime
 
@@ -41,8 +50,8 @@ prefetch를 제공하며 persistent file handle과 production worker scheduling�
 ## 현재 limitation
 
 - 64-bit Fortran record marker와 2^30-scale huge-file marker workaround
-- Fixed-atom/free-index DCD, 4D coordinate block과 velocity block
-- Corrupted marker recovery, writer와 append
+- 4D coordinate block과 velocity block
+- Corrupted marker recovery, multi-frame writer와 append
 - XTC writer/append와 compressed payload recovery
 - Persistent concurrent file-handle policy와 production decoder pool
 - Raw delta의 engine-specific physical-time conversion
@@ -132,6 +141,13 @@ XTC integer decompression은 permissive source를 투명하게 재사용한 부�
 `51a17e85027c7b31ef3ae1531ed42281e578e513`(BSD-3-Clause)의 modern bounds/long-format 처리에서
 adapt했으며 전체 고지는 `THIRD_PARTY_NOTICES.md`에 보존한다. VMD main source는 사용하지 않았다.
 
+VMD current XTC 1.4 registration은 shared `gromacsplugin.C`의 open/read/close callback만 노출하는
+read-only·sequential·thread-unsafe provider다. Callback은 coordinate와 cell geometry만 molfile timestep에 복사하고
+XTC step, physical time 및 compression precision은 노출하지 않으며 null timestep 요청은 sequential skip으로 처리한다.
+같은 translation unit의 writer entry는 TRR registration에만 연결되고 XTC에는 등록되지 않는다. MolShredder는 이
+관찰 가능한 read semantics를 indexed native path로 포함하면서 step/time/precision까지 보존한다. UIUC plugin source,
+`Gromacs.h`, `largefiles.h`와 `strings.h`는 복사·link·bundle하지 않고 behavior reference로만 사용한다.
+
 ## Amber RST7 capability
 
 `open_amber_restart()`는 `.rst7/.restrt/.inpcrd/.inprst` ASCII restart 한 frame을 읽으며
@@ -168,11 +184,19 @@ index하며 `open_trajectory()`와 `traj load`의 `mdcrd|crd` 선택에 연결�
 | Unit cell | optional 3 lengths + PRMTOP angle 또는 3 lengths+alpha/beta/gamma |
 | Frame metadata | title; format에는 step/time이 없음 |
 | Access/memory | open 시 O(frame count) byte-offset index, decode O(atom count) random seek |
+| Write | current frame CRD coordinate-only 또는 explicit CRDBOX 3 lengths; F8.3, 줄당 최대 10 coordinate 값 |
 
 각 coordinate line의 정확한 field 수, finite value, frame 전체의 box layout과 topology atom count를 검증한다.
 3-value box를 90°로 추정하지 않고 PRMTOP `BOX_DIMENSIONS` angle을 요구한다. 3원자 미만에서는 다음 coordinate
-line과 3/6-value box를 안전하게 구별할 수 없어 multi-line input을 명시적으로 거부한다. REMD/HREMD/RXSGLD
-header, compressed input, MDVEL/MDFRC semantic과 writer/append는 후속 범위다.
+line과 3/6-value box를 안전하게 구별할 수 없어 multi-line input을 명시적으로 거부한다.
+`traj save --file-format mdcrd|crd`는 current frame의 모든 atom coordinate를 Å 단위 F8.3으로 쓰고 title을
+최대 80자까지 보존한다. Box가 있는 frame도 coordinate-only CRD로 내보내며 omission을 typed loss로 반환한다.
+`traj save --file-format crdbox`는 typed unit cell을 요구하고 coordinate 뒤에 a/b/c length 세 값을 쓴다.
+CRDBOX에 angle field가 없으므로 세 cell angle이 같을 때만 허용하고 matching topology가 제공해야 하는 shared
+angle omission을 typed loss로 반환한다. `.crdbox` auto detection도 이 명시적 layout을 선택한다.
+Missing atom, non-finite 값과 F8 범위 초과는 publish 전에 실패하고 overwrite/cancellation도 공통
+failure-atomic writer 계약을 따른다. REMD/HREMD/RXSGLD header, compressed input, MDVEL/MDFRC semantic,
+multi-frame append는 후속 범위다.
 
 Normative layout은 [Amber official file formats](https://ambermd.org/FileFormats.php)을 사용했고,
 [Amber-MD CPPTRAJ formatted trajectory implementation](https://github.com/Amber-MD/cpptraj/blob/master/src/Traj_AmberCoord.cpp)은
@@ -181,8 +205,9 @@ source를 복사하거나 vendor하지 않았다.
 
 ## Amber NetCDF capability
 
-`open_amber_netcdf()`는 Amber NetCDF convention 1.0 trajectory를 netCDF-C public API로 열고,
-`open_trajectory()` 및 `traj load`의 `netcdf|nc|ncdf` 선택과 `.nc/.ncdf/.netcdf` 자동 감지에 연결된다.
+`open_amber_netcdf()`는 Amber NetCDF convention 1.0 trajectory와 AMBERRESTART convention 1.0
+single-frame restart를 netCDF-C public API로 열고, `open_trajectory()` 및 `traj load`의
+`netcdf|nc|ncdf|ncrst` 선택과 `.nc/.ncdf/.netcdf/.ncrst` 자동 감지에 연결된다.
 Topology는 포함하지 않으므로 active topology atom count와 `atom` dimension을 attach 전에 대조한다.
 
 | Channel | 현재 지원 |
@@ -201,7 +226,9 @@ Reader는 `Conventions=AMBER`, `ConventionVersion=1.0`, non-zero frame/atom, `sp
 non-finite value, zero scale, standard/compressed duplicate와 cell length/angle의 단독 존재를 오류로 처리한다.
 netCDF API는 distribution별 thread-safety 차이를 감추기 위해 process-wide mutex로 직렬화한다.
 
-현재 REMD replica metadata, NetCDF restart convention, partial-periodic cell, writer/append와 remote dataset은
+AMBERRESTART는 frame dimension이 없는 `(atom, spatial)` coordinate/velocity, scalar time/temperature와
+1-D cell channel을 정확히 한 frame으로 노출한다. 현재 MMTK schema, REMD replica metadata,
+partial-periodic cell, writer/append와 remote dataset은
 노출하지 않는다. Runtime은 netCDF-C와 선택된 NetCDF-4/HDF5 dependency closure가 필요하며 installer는 OS별 exact
 artifact와 license/SBOM을 수집해야 한다. Convention과 variable semantics는
 [AmberTools manual](https://ambermd.org/AmberTools.php), container/API는
@@ -260,19 +287,25 @@ atom identity로 추정하는 fallback은 없다.
 | Coordinates | wrapped Cartesian `x/y/z`, scaled wrapped `xs/ys/zs`, unwrapped Cartesian `xu/yu/zu`, scaled unwrapped `xsu/ysu/zsu` 중 snapshot당 정확히 하나 |
 | Cell | orthogonal bounds 또는 restricted-triclinic `xy/xz/yz`; true bounds와 lattice vector 복원 |
 | Identity/state | positive unique atom `id`, non-negative timestep, boundary flags와 non-zero box origin |
+| Time/units | optional file-level `ITEM: UNITS`; frame별 `ITEM: TIME`; real(fs), metal(ps), nano(ns→ps) typed normalization |
+| Velocity | complete `vx/vy/vz`; real Å/fs, metal Å/ps, nano nm/ns→nm/ps; source columns도 frame property로 보존 |
 | Custom columns | coordinate/id 외 column을 frame별 typed integer/float64/text atom property로 보존 |
 | Access/memory | open 시 O(frame count) offset index와 O(atom count) validation, random decode O(atom count) |
 
-Text dump에는 simulation `units` style이 기록되지 않으므로 generic `open_trajectory()`와 `traj load`는
-`coordinate-unit=angstrom|nanometer`를 명시하도록 요구한다. SI/CGS/micro/electron/LJ reduced unit을 Å 또는
-nm로 몰래 해석하지 않는다. General triclinic `BOX BOUNDS abc origin`, ID가 없는 dump, atom subset/count 변화,
+`ITEM: UNITS`는 optional이므로 generic `open_trajectory()`와 `traj load`는 항상
+`coordinate-unit=angstrom|nanometer`를 명시하도록 요구한다. Header가 있으면 real/metal↔Å 및 nano↔nm를
+검증하고 SI/CGS/micro/electron/LJ reduced unit을 Å 또는 nm로 몰래 해석하지 않는다. TIME만 있고 UNITS가
+없으면 raw value를 provenance로 보존하되 typed physical time을 생성하지 않는다. General triclinic
+`BOX BOUNDS abc origin`, ID가 없는 dump, atom subset/count 변화,
 복수 coordinate triplet과 multi-file `%`/`*` sequence는 현재 hard unsupported다. Velocity/force/custom compute
-column은 값과 원래 이름을 보존하지만 time/force unit을 알 수 없으므로 typed velocity/force channel로
-승격하지 않는다.
+column은 값과 원래 이름을 frame별로 보존한다. Complete velocity triplet은 buffer로도 승격하지만 force는
+unit metadata가 부족해 atom property로 유지한다.
 
 Grammar와 box 변환은 [LAMMPS dump command documentation](https://docs.lammps.org/dump.html) 및
 [LAMMPS triclinic box documentation](https://docs.lammps.org/Howto_triclinic.html)을 normative reference로
-사용했다. 구현은 외부 reader source를 복사하거나 vendor하지 않은 native parser다.
+사용했다. `ITEM: TIME/UNITS`와 unit style은 [LAMMPS dump_modify](https://docs.lammps.org/dump_modify.html) 및
+[LAMMPS units](https://docs.lammps.org/units.html)을 따른다. 구현은 외부 reader source를 복사하거나
+vendor하지 않은 native parser다.
 
 ## Scripps BINPOS capability
 
@@ -287,12 +320,16 @@ float32 Cartesian coordinate record를 읽는다. Active topology count와 첫 r
 | Identity | active topology order와 매 frame atom count |
 | Access/memory | fixed-size O(frame count) offset index, random decode O(atom count) |
 | Portability | little/big-endian detection과 conversion |
+| Write | current frame, canonical little-endian `fxyz`/count/float32 Å |
 
 BINPOS에는 unit cell, source step, physical time, velocity/force, title 또는 unit marker가 없다. CPPTRAJ/Scripps
 behavioral convention에 따라 coordinates를 Å로 해석하되 나머지 metadata를 발명하지 않는다. Compressed input,
-varying atom count, byte-order-ambiguous atom count, non-finite/truncated payload와 writer/append는 현재 지원하지 않는다.
+varying atom count, byte-order-ambiguous atom count와 non-finite/truncated payload는 거부한다. Writer는 nm 좌표를
+Å로 변환하고 float64 narrowing 및 저장할 수 없는 channel을 typed loss로 반환하며 atomic publish, overwrite와
+cancellation 계약을 공유한다. Multi-frame write/append는 아직 지원하지 않는다.
 
 Layout은 Amber-MD CPPTRAJ의 공식 공개
 [`Traj_Binpos.cpp` at commit `19a0bb7`](https://github.com/Amber-MD/cpptraj/blob/19a0bb7fd63396bcf274df34bf51f55e9f5db671/src/Traj_Binpos.cpp)와
 [pytraj supported-format table](https://amber-md.github.io/pytraj/latest/read_and_write.html)을 reference로 확인했다.
-Reader는 source를 복사/vendor하지 않고 독립 구현했으며 CPPTRAJ보다 추가로 cross-endian validation을 제공한다.
+Reader/writer는 source를 복사/vendor하지 않고 독립 구현했으며 CPPTRAJ보다 추가로 cross-endian validation과
+deterministic little-endian 출력을 제공한다. VMD BINPOS 0.4 source는 behavior-only reference다.

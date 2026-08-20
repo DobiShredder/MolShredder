@@ -19,7 +19,7 @@ Load가 성공하면 각 topology/coordinate source를 system으로 만들고 sc
 Active object와 scene selection은 `object activate`에서 함께 commit되고 `object visibility`는 immutable
 scene snapshot을 교체한다. `object list`가 GUI/CLI/Python에 동일한 typed state table을 제공한다.
 
-현재 molecular load는 PDB/mmCIF/BCIF/PQR/MOL/SDF/MOL2/PSF/PRMTOP/GRO/G96/VTF/XYZ document를 받는다. Multi-model PDB/mmCIF/BCIF,
+현재 molecular load는 PDB/mmCIF/BCIF/PQR/MOL/SDF/MOL2/PSF/PRMTOP/GRO/G96/VTF/XYZ/XMol document를 받는다. Multi-model PDB/mmCIF/BCIF,
 concatenated GRO, ordered G96 frame block과 multi-block XYZ는
 한 object의 coordinate frames로 유지하고, multi-data-block mmCIF 및 multi-record SDF는 ordered object
 batch로 펼친다. MOL2의 각 `@<TRIPOS>MOLECULE` record도 같은 ordered batch path를 사용한다. 모든

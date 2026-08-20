@@ -44,6 +44,15 @@
         "CMAKE_PREFIX_PATH": "$env{CONDA_PREFIX}",
         "MOLSHREDDER_BUILD_DESKTOP": "ON"
       }
+    },
+    {
+      "name": "tsan",
+      "inherits": "dev",
+      "displayName": "ThreadSanitizer developer build (Unix)",
+      "cacheVariables": {
+        "CMAKE_PREFIX_PATH": "$env{CONDA_PREFIX}",
+        "MOLSHREDDER_ENABLE_THREAD_SANITIZER": "ON"
+      }
     }
   ],
   "buildPresets": [
@@ -58,6 +67,19 @@
     {
       "name": "desktop",
       "configurePreset": "desktop"
+    },
+    {
+      "name": "tsan",
+      "configurePreset": "tsan",
+      "targets": [
+        "molshredder_molfile_provider_tests",
+        "molshredder_molfile_test_valid",
+        "molshredder_molfile_test_alternate",
+        "molshredder_molfile_test_incompatible",
+        "molshredder_molfile_test_duplicate",
+        "molshredder_molfile_test_missing_entry",
+        "molshredder_molfile_test_wrong_type"
+      ]
     }
   ],
   "testPresets": [
@@ -71,6 +93,18 @@
     {
       "name": "desktop",
       "configurePreset": "desktop",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "tsan",
+      "configurePreset": "tsan",
+      "filter": {
+        "include": {
+          "name": "^io\\.molfile_provider$"
+        }
+      },
       "output": {
         "outputOnFailure": true
       }

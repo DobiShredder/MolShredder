@@ -59,15 +59,83 @@ int main(int argc, char *argv[]) {
           file_descriptors[4].canonical_name == "volume isosurface" &&
           file_descriptors.back().canonical_name == "save",
       "additive file grammar must expose format, volume and save commands");
+  const auto has_provider = [](const auto &descriptor) {
+    const auto found = std::find_if(
+        descriptor.parameters.begin(), descriptor.parameters.end(),
+        [](const auto &parameter) { return parameter.name == "provider"; });
+    return found != descriptor.parameters.end() &&
+           found->default_value == "auto" && found->allowed_values.empty();
+  };
+  const auto has_plugin_path = [](const auto &descriptor) {
+    return std::ranges::any_of(descriptor.parameters, [](const auto &parameter) {
+      return parameter.name == "plugin-path" && !parameter.required &&
+             !parameter.default_value.has_value();
+    });
+  };
+  const auto foundation_load = std::find_if(
+      descriptors.begin(), descriptors.end(), [](const auto &descriptor) {
+        return descriptor.canonical_name == "load";
+      });
+  passed &= expect(
+      foundation_load != descriptors.end() && has_provider(*foundation_load) &&
+          has_plugin_path(*foundation_load) &&
+          has_provider(file_descriptors[0]) &&
+          has_provider(file_descriptors[1]) &&
+          has_provider(file_descriptors[3]) &&
+          has_provider(file_descriptors.back()),
+      "all structure and volume I/O commands must expose provider override");
   const auto trajectory_save = std::find_if(
       trajectory_descriptors.begin(), trajectory_descriptors.end(),
       [](const auto &descriptor) {
         return descriptor.canonical_name == "traj save";
       });
+  const auto trajectory_load = std::find_if(
+      trajectory_descriptors.begin(), trajectory_descriptors.end(),
+      [](const auto &descriptor) {
+        return descriptor.canonical_name == "traj load";
+      });
+  passed &= expect(trajectory_load != trajectory_descriptors.end() &&
+                       trajectory_save != trajectory_descriptors.end() &&
+                       has_provider(*trajectory_load) &&
+                       has_provider(*trajectory_save),
+                   "trajectory load/save must expose provider override");
+  const auto trajectory_load_format =
+      trajectory_load == trajectory_descriptors.end()
+          ? std::vector<molshredder::command::ParameterSpec>::const_iterator{}
+          : std::find_if(trajectory_load->parameters.begin(),
+                         trajectory_load->parameters.end(),
+                         [](const auto &parameter) {
+                           return parameter.name == "file-format";
+                         });
+  passed &= expect(
+      trajectory_load != trajectory_descriptors.end() &&
+          trajectory_load_format != trajectory_load->parameters.end() &&
+          std::find(trajectory_load_format->allowed_values.begin(),
+                    trajectory_load_format->allowed_values.end(),
+                    "ncrst") != trajectory_load_format->allowed_values.end(),
+      "trajectory grammar must expose the AMBERRESTART alias");
+  const auto trajectory_save_format =
+      trajectory_save == trajectory_descriptors.end()
+          ? std::vector<molshredder::command::ParameterSpec>::const_iterator{}
+          : std::find_if(trajectory_save->parameters.begin(),
+                         trajectory_save->parameters.end(),
+                         [](const auto &parameter) {
+                           return parameter.name == "file-format";
+                         });
   passed &= expect(trajectory_save != trajectory_descriptors.end() &&
                        trajectory_save->undo_policy ==
-                           molshredder::command::UndoPolicy::not_applicable,
-                   "trajectory grammar must expose current-frame export");
+                           molshredder::command::UndoPolicy::not_applicable &&
+                       trajectory_save_format !=
+                           trajectory_save->parameters.end() &&
+                       std::find(trajectory_save_format->allowed_values.begin(),
+                                 trajectory_save_format->allowed_values.end(),
+                                 "crdbox") !=
+                           trajectory_save_format->allowed_values.end() &&
+                       std::find(trajectory_save_format->allowed_values.begin(),
+                                 trajectory_save_format->allowed_values.end(),
+                                 "binpos") !=
+                           trajectory_save_format->allowed_values.end(),
+                   "trajectory grammar must expose CRDBOX and BINPOS export");
 
   Registry registry;
   for (auto descriptor : descriptors) {

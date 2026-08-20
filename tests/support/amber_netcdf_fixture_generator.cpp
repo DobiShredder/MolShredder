@@ -229,12 +229,109 @@ void write_compressed(const std::filesystem::path &path) {
   checked(nc_close(ncid), "close compressed");
 }
 
+void write_restart(const std::filesystem::path &path) {
+  int ncid{};
+  checked(nc_create(path.string().c_str(), NC_CLOBBER | NC_64BIT_OFFSET, &ncid),
+          "create restart");
+  text_attribute(ncid, NC_GLOBAL, "Conventions", "AMBERRESTART");
+  text_attribute(ncid, NC_GLOBAL, "ConventionVersion", "1.0");
+  text_attribute(ncid, NC_GLOBAL, "title", "MolShredder NetCDF restart fixture");
+
+  int atom{};
+  int spatial{};
+  int cell_spatial{};
+  int cell_angular{};
+  int label{};
+  checked(nc_def_dim(ncid, "atom", 4U, &atom), "restart atom dim");
+  checked(nc_def_dim(ncid, "spatial", 3U, &spatial), "restart spatial dim");
+  checked(nc_def_dim(ncid, "cell_spatial", 3U, &cell_spatial),
+          "restart cell spatial dim");
+  checked(nc_def_dim(ncid, "cell_angular", 3U, &cell_angular),
+          "restart cell angular dim");
+  checked(nc_def_dim(ncid, "label", 5U, &label), "restart label dim");
+
+  int spatial_labels{};
+  int cell_spatial_labels{};
+  int cell_angular_labels{};
+  checked(nc_def_var(ncid, "spatial", NC_CHAR, 1, &spatial, &spatial_labels),
+          "restart spatial labels");
+  checked(nc_def_var(ncid, "cell_spatial", NC_CHAR, 1, &cell_spatial,
+                     &cell_spatial_labels),
+          "restart cell spatial labels");
+  const std::array<int, 2U> angular_label_dims{cell_angular, label};
+  checked(nc_def_var(ncid, "cell_angular", NC_CHAR, 2,
+                     angular_label_dims.data(), &cell_angular_labels),
+          "restart angular labels");
+
+  const std::array<int, 2U> atom_spatial{atom, spatial};
+  int coordinates{};
+  int velocities{};
+  int time{};
+  int temperature{};
+  int cell_lengths{};
+  int cell_angles{};
+  checked(nc_def_var(ncid, "coordinates", NC_DOUBLE, 2, atom_spatial.data(),
+                     &coordinates),
+          "restart coordinates");
+  checked(nc_def_var(ncid, "velocities", NC_DOUBLE, 2, atom_spatial.data(),
+                     &velocities),
+          "restart velocities");
+  checked(nc_def_var(ncid, "time", NC_DOUBLE, 0, nullptr, &time),
+          "restart time");
+  checked(nc_def_var(ncid, "temp0", NC_DOUBLE, 0, nullptr, &temperature),
+          "restart temperature");
+  checked(nc_def_var(ncid, "cell_lengths", NC_DOUBLE, 1, &cell_spatial,
+                     &cell_lengths),
+          "restart cell lengths");
+  checked(nc_def_var(ncid, "cell_angles", NC_DOUBLE, 1, &cell_angular,
+                     &cell_angles),
+          "restart cell angles");
+  text_attribute(ncid, coordinates, "units", "angstrom");
+  text_attribute(ncid, velocities, "units", "angstrom/picosecond");
+  text_attribute(ncid, time, "units", "picosecond");
+  text_attribute(ncid, temperature, "units", "kelvin");
+  text_attribute(ncid, cell_lengths, "units", "angstrom");
+  text_attribute(ncid, cell_angles, "units", "degree");
+  checked(nc_enddef(ncid), "end restart definition");
+
+  constexpr std::array<char, 3U> xyz{'x', 'y', 'z'};
+  constexpr std::array<char, 3U> abc{'a', 'b', 'c'};
+  constexpr std::array<char, 15U> angle_names{
+      'a', 'l', 'p', 'h', 'a', 'b', 'e', 't', 'a', ' ',
+      'g', 'a', 'm', 'm', 'a'};
+  checked(nc_put_var_text(ncid, spatial_labels, xyz.data()), "restart xyz");
+  checked(nc_put_var_text(ncid, cell_spatial_labels, abc.data()),
+          "restart abc");
+  checked(nc_put_var_text(ncid, cell_angular_labels, angle_names.data()),
+          "restart angle labels data");
+  constexpr std::array<double, 12U> coordinate_values{
+      0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0};
+  constexpr std::array<double, 12U> velocity_values{
+      0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1};
+  constexpr double time_value = 12.5;
+  constexpr double temperature_value = 298.15;
+  constexpr std::array<double, 3U> lengths{20.0, 21.0, 22.0};
+  constexpr std::array<double, 3U> angles{80.0, 90.0, 100.0};
+  checked(nc_put_var_double(ncid, coordinates, coordinate_values.data()),
+          "restart coordinate data");
+  checked(nc_put_var_double(ncid, velocities, velocity_values.data()),
+          "restart velocity data");
+  checked(nc_put_var_double(ncid, time, &time_value), "restart time data");
+  checked(nc_put_var_double(ncid, temperature, &temperature_value),
+          "restart temperature data");
+  checked(nc_put_var_double(ncid, cell_lengths, lengths.data()),
+          "restart length data");
+  checked(nc_put_var_double(ncid, cell_angles, angles.data()),
+          "restart angle data");
+  checked(nc_close(ncid), "close restart");
+}
+
 } // namespace
 
 int main(int argc, char **argv) {
-  if (argc != 6) {
+  if (argc != 7) {
     std::cerr << "expected standard, compressed, bad-convention, partial-cell "
-                 "and missing-data paths\n";
+                 "missing-data and restart paths\n";
     return 2;
   }
   write_standard(argv[1]);
@@ -242,5 +339,6 @@ int main(int argc, char **argv) {
   write_standard(argv[3], false);
   write_standard(argv[4], true, true);
   write_standard(argv[5], true, false, true);
+  write_restart(argv[6]);
   return 0;
 }

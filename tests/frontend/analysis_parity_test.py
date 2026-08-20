@@ -6,6 +6,8 @@ import pathlib
 import subprocess
 import sys
 
+from console_script import portable_console_script
+
 
 def require(condition: bool, message: str) -> None:
     if not condition:
@@ -62,7 +64,8 @@ def main() -> int:
         '--pbc "minimum-image" '
         '--precision "6" --to "index 2" --unit "nanometer"\nexit\n'
     )
-    cli_run = subprocess.run([str(cli_path), "console"], input=script, text=True,
+    cli_run = subprocess.run([str(cli_path), "console"],
+                             input=portable_console_script(script), text=True,
                              capture_output=True, check=True)
     cli_results = json_lines(cli_run.stdout)[1:]
     gui_run = subprocess.run([str(gui_probe), str(fixture)], text=True,

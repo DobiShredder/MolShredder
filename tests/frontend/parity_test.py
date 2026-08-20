@@ -55,7 +55,7 @@ def main() -> int:
         "version alias was not normalized canonically",
     )
     require(
-        version_python["data"] == {"result_schema_version": 1, "version": "0.1.0"},
+        version_python["data"] == {"result_schema_version": 2, "version": "0.1.0"},
         "typed version fields did not survive all frontend conversions",
     )
 

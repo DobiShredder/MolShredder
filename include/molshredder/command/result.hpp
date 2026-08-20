@@ -18,7 +18,7 @@
 
 namespace molshredder::command {
 
-inline constexpr unsigned int kResultSchemaVersion = 1;
+inline constexpr unsigned int kResultSchemaVersion = 2;
 
 struct Number {
   double value{};

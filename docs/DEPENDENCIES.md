@@ -7,7 +7,7 @@ pin한다. 개발 도구는 `environment.yml`에 기록한다.
 
 | 도구 | 범위 | 용도 |
 |---|---|---|
-| Python 3.12 | development/runtime ABI | automation과 CPython extension target |
+| Python 3.12 | development/runtime ABI | CPython extension과 explicit in-process script runtime |
 | CMake 3.25 이상, 5 미만 | development/build | cross-platform build generation |
 | Ninja 1.11 이상 | development/build | 공통 local/CI build executor |
 | CLI11 2.6.2 | build/static headers | Native CLI parsing과 subcommand/help adapter |
@@ -19,14 +19,41 @@ pin한다. 개발 도구는 `environment.yml`에 기록한다.
 | SPIRV-Tools | desktop build tool | multi-backend `.qsb` shader optimization |
 | Native threading runtime | system/runtime | async trajectory prefetch와 synchronization |
 | xdrfile/Chemfiles-derived code | compiled source | XTC compressed-coordinate decoding |
+| VMD molfile ABI 18 declarations | compiled source/interface | Optional dynamic format-provider adapter |
 
 Compiler와 platform SDK는 conda에 고정하지 않고 각 OS의 native toolchain을 사용한다.
 Thread support는 CMake `Threads::Threads` portable target으로 link하며 별도 vendored library를
 추가하지 않는다.
 
+CLI는 script command를 실제로 호출할 때 embedded CPython을 초기화한다. Python extension은 host interpreter를
+사용하며 `libpython`을 별도로 link하지 않는다. macOS에서 두 runtime을 한 module에 link하지 않도록 automation
+static library는 Python header만 사용하고 CLI executable이 `Development.Embed`, extension target이
+`Development.Module` link mode를 각각 소유한다.
+
 - macOS: Apple Clang과 macOS SDK
 - Linux: CI에서 pin한 GCC 또는 Clang과 system SDK
 - Windows: Visual Studio Build Tools의 MSVC와 Windows SDK
+
+동시성 회귀는 지원되는 Unix compiler에서 opt-in `tsan` preset으로 실행한다. 이 preset은
+`MOLSHREDDER_ENABLE_THREAD_SANITIZER=ON`을 사용해 MolShredder C++ target에
+ThreadSanitizer와 frame pointer를 적용하며 `io.molfile_provider` fixture만 build/test한다.
+Windows/MSVC에서는 ThreadSanitizer runtime을 제품 요구사항으로 간주하지 않고 configure 단계에서 명시적으로
+거부한다. 일반 `dev`, `release`, desktop 및 세 OS CI build에는 sanitizer instrumentation을 적용하지 않는다.
+
+## VMD molfile ABI 18 provenance
+
+- Official headers: public VMD plugin documentation의 `vmdplugin.h` revision 1.35와
+  `molfile_plugin.h` revision 1.112
+- ABI baseline: 18
+- License: UIUC Open Source License; full notice는 `THIRD_PARTY_NOTICES.md`에 보존한다.
+- Linkage: platform loader(`dlopen`/`dlsym`/`dlclose` 또는
+  `LoadLibraryW`/`GetProcAddress`/`FreeLibrary`)를 사용하며 VMD main code를 link하지 않는다.
+- Distribution: 이 vertical slice는 VMD plugin source/binary를 bundle하지 않는다. 후속 plugin은
+  file별 license와 dependency audit를 별도로 통과해야 한다.
+- Trust boundary: application-bundled approved directory, user-approved directory 또는 명시적
+  file path만 discovery 대상이다.
+- Lifecycle: ABI/type/callback과 duplicate를 registry commit 전에 검증하며 plugin-owned callback
+  table은 역순 `vmdplugin_fini`와 unload까지 library lifetime으로 보호한다.
 
 ## 재현 전략
 

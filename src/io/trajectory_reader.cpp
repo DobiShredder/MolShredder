@@ -28,7 +28,10 @@ TrajectoryFormat detect(const std::filesystem::path &path) {
   if (extension == ".mdcrd" || extension == ".crd") {
     return TrajectoryFormat::mdcrd;
   }
-  if (extension == ".nc" || extension == ".ncdf" || extension == ".netcdf") {
+  if (extension == ".crdbox")
+    return TrajectoryFormat::crdbox;
+  if (extension == ".nc" || extension == ".ncdf" || extension == ".netcdf" ||
+      extension == ".ncrst") {
     return TrajectoryFormat::amber_netcdf;
   }
   if (extension == ".h5md")
@@ -45,7 +48,7 @@ TrajectoryFormat detect(const std::filesystem::path &path) {
 operation::Error unsupported_format(const std::filesystem::path &path) {
   return {operation::ErrorCode::unsupported,
           "cannot detect trajectory format from path: " + path.string(),
-          "use --file-format dcd, trr, xtc, rst7, mdcrd, netcdf, h5md, "
+          "use --file-format dcd, trr, xtc, rst7, mdcrd, crdbox, netcdf, h5md, "
           "lammps, or binpos"};
 }
 
@@ -65,6 +68,8 @@ std::string_view to_string(TrajectoryFormat format) noexcept {
     return "rst7";
   case TrajectoryFormat::mdcrd:
     return "mdcrd";
+  case TrajectoryFormat::crdbox:
+    return "crdbox";
   case TrajectoryFormat::amber_netcdf:
     return "netcdf";
   case TrajectoryFormat::h5md:
@@ -122,7 +127,8 @@ open_trajectory(const std::filesystem::path &path, TrajectoryFormat format,
     return operation::Result<OpenedTrajectory>::success(
         {resolved, source.value()});
   }
-  if (resolved == TrajectoryFormat::mdcrd) {
+  if (resolved == TrajectoryFormat::mdcrd ||
+      resolved == TrajectoryFormat::crdbox) {
     if (!context.expected_atom_count.has_value()) {
       return operation::Result<OpenedTrajectory>::failure(operation::Error{
           operation::ErrorCode::invalid_argument,
@@ -130,7 +136,10 @@ open_trajectory(const std::filesystem::path &path, TrajectoryFormat format,
           "load a matching topology before attaching the trajectory"});
     }
     const auto source = open_amber_ascii_trajectory(
-        path, *context.expected_atom_count, context.amber_box_angle_degrees);
+        path, *context.expected_atom_count, context.amber_box_angle_degrees,
+        resolved == TrajectoryFormat::crdbox
+            ? AmberAsciiBoxLayout::three_lengths
+            : AmberAsciiBoxLayout::auto_detect);
     if (!source.has_value()) {
       return operation::Result<OpenedTrajectory>::failure(source.error());
     }

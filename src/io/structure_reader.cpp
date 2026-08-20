@@ -233,6 +233,8 @@ read_structure_file(const std::filesystem::path &path, StructureFormat format) {
       format = StructureFormat::g96;
     if (extension == ".vtf")
       format = StructureFormat::vtf;
+    if (extension == ".xyz" || extension == ".xmol")
+      format = StructureFormat::xyz;
     if (extension == ".sdf" || extension == ".sd") {
       format = StructureFormat::sdf;
     }

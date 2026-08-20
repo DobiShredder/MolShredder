@@ -100,7 +100,7 @@ int main() {
                         "chain C", "--format", "json"},
                        output, error);
   passed &= expect(json == 0, "JSON CLI result must succeed");
-  passed &= expect(output.str().find("\"schema_version\":1") !=
+  passed &= expect(output.str().find("\"schema_version\":2") !=
                            std::string::npos &&
                        output.str().find("\"selection\":\"chain C\"") !=
                            std::string::npos,

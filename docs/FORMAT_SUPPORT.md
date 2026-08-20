@@ -32,10 +32,14 @@ PQR과 PDB는 ATOM record만으로는 occupancy/B-factor와 charge/radius가 구
 | Explicit bond | deduplicated `CONECT`, unknown order | `_struct_conn`와 bond order | 표현 불가; loss 보고 | V2000 atom pair와 bond order 보존 | atom pair, bond ID/order/status 보존 | bond와 higher-order connectivity를 ordered term으로 보존; bond order 없음 | 표현 불가; loss 보고 | 표현 불가; loss 보고 | 표현 불가; loss 보고 |
 | Source metadata | entry/title/space group | data-block scalar item | optional `REMARK`; typed loss 보고 | 세 header line, unknown property line 및 unique SDF data field | molecule type/charge type/extra, substructure rows와 unknown section | title, variant와 unmodeled auxiliary section count | frame title 및 optional `t=` physical time ps | mandatory `TITLE`, optional TIMESTEP step/time과 full/reduced block kind | frame comment |
 
-Native `format list` registry schema v2는 BCIF, H5MD, OpenDX와 MRC/CCP4를 포함한 24개 native
+Provider-neutral `format list` registry schema v3는 BCIF, H5MD, OpenDX와 MRC/CCP4를 포함한 24개 native
 structure/trajectory/volume format을 함께 열거하고 extension,
-read/write, multi-frame, multi-structure, random-access, streaming, data channel, limitation과 implementation을 typed JSON으로
-반환한다. 이 registry와 fixture가 실제 capability의 authoritative inventory이며 이 표는 사람용 설명이다.
+read/write, multi-frame, multi-structure, random-access, streaming, data channel, limitation, implementation 및
+provider identity/version/origin/trust/license를 typed JSON으로 반환한다. Read/write 방향별 availability와 unavailable
+reason, channel, limitation 및 typed-loss 지원도 별도 row다. 모든 I/O command의 `--provider`와 성공 result가 같은
+provider provenance를 사용하며 explicit override는 silent fallback하지 않는다. 상세 계약은
+[Format provider contract](FORMAT_PROVIDER_CONTRACT.md)에 둔다. 이 registry와 fixture가 실제 capability의
+authoritative inventory이며 이 표는 사람용 설명이다.
 
 ## OpenDX regular scalar volume
 
@@ -113,9 +117,11 @@ category table은 후속 범위다. 2026-08-14 RCSB model server의
 Normative format reference는 BinaryCIF repository commit `ce75b24289746edc28dcef9a703afca2c7e74d81`이고,
 Mol* commit `5bd9cb1f3075347db16aa0a46f771907e5889a29`은 source 복사 없이 behavior cross-check에만 사용했다.
 
-Plain XYZ는 positive atom count, required comment line 및 정확히 `element x y z` 네 column을 읽는다. `X`는
-unknown site로 보존한다. 연속 block은 같은 atom count/order/element일 때에만 frame으로 결합한다. 현재
-extended XYZ property/lattice column은 조용히 버리지 않고 source line이 있는 error로 거부한다.
+Plain XYZ는 positive atom count, required comment line 및 정확히 `label x y z` 네 column을 읽는다. Label은
+IUPAC element symbol, periodic-table ordinal `0..118` 또는 unknown site `X`이며 ordinal은 canonical symbol로
+정규화한다. `.xyz`와 XMol 호환 `.xmol` suffix는 같은 native reader/writer를 선택한다. 연속 block은 같은 atom
+count/order/element일 때에만 frame으로 결합한다. 현재 extended XYZ property/lattice column은 조용히 버리지 않고
+source line이 있는 error로 거부한다.
 
 PQR은 APBS가 사용하는 whitespace-delimited `record serial atom residue [chain] residue-number x y z
 charge radius` 10/11-field form을 읽는다. Charge는 elementary charge, radius는 Å 단위의 static
@@ -165,6 +171,11 @@ optional velocity/force/triclinic cell, signed step, physical time, lambda와 nr
 Source step/time/lambda가 없거나 force axis가 일부만 있으면 scientific zero를 발명하지 않고 실패하며,
 multi-frame append와 virial/pressure/energy block은 아직 지원하지 않는다.
 
+DCD는 32-bit Fortran record, little/big endian, X-PLOR/CHARMM delta, optional unit cell과 canonical fixed/free atom
+trajectory를 indexed random-access로 읽는다. Current-frame writer는 little-endian CHARMM24 float32 coordinate와
+실제로 존재하는 unit cell만 출력한다. Source step/raw delta 합성, float32 narrowing 및 저장할 수 없는
+time/velocity/property는 typed loss다. 64-bit marker, 4D block과 multi-frame append는 tracked gap이다.
+
 PSF writer는 coordinate frame을 요구하거나 출력하지 않고 `PSF EXT XPLOR` topology를 생성한다. 모든 atom에
 explicit `psf.atom_type`, `partial_charge`, `mass`가 있어야 하며 일반 element로 force-field typing을 발명하지
 않는다. Bond order, coordinate frame, chain/alternate-location/formal charge 및 unmodeled auxiliary section은 typed
@@ -177,11 +188,11 @@ loss report에 기록한다. CMAP이 있으면 header와 `NCRTERM`으로 보존�
 |---|---|---|---|
 | PRMTOP/parm7 | force-field topology | atom/residue name, atomic number, Amber atom type/index, charge, mass, bond/angle/proper/improper multiplicity, GB radius/screen, BOX_DIMENSIONS template, section comment provenance | read-only, zero frame |
 | RST7/restrt/inpcrd | restart coordinate | one-frame Cartesian Å, optional AKMA velocity→Å/ps, time ps, temperature K, 3/6-value unit cell | `traj load` read, `traj save` current-frame write |
-| MDCRD/CRD | formatted trajectory | multi-frame Cartesian Å, optional 3/6-value unit cell, frame title | indexed random-access read-only |
-| NetCDF | binary trajectory | Cartesian Å, velocity Å/ps, force kcal/mol/Å, time ps, temperature K, triclinic cell, scale factor와 integer compression | netCDF-C random-access read-only |
+| MDCRD/CRD/CRDBOX | formatted trajectory | multi-frame Cartesian Å, optional 3/6-value unit cell, frame title | indexed random-access read; CRD coordinate-only 또는 CRDBOX length-preserving current-frame write |
+| NetCDF | binary trajectory/restart | Cartesian Å, velocity Å/ps, force kcal/mol/Å, time ps, temperature K, triclinic cell, scale factor와 integer compression; AMBERRESTART는 single frame | netCDF-C random-access read-only, `.ncrst` 포함 |
 | H5MD | HDF5 particle trajectory | SI-unit-normalized position/velocity/force, ID/presence, mass/charge/species/image, step/time, orthorhombic/triclinic box | HDF5 hyperslab random-access read-only; arbitrary observables/partial-periodic box 미지원 |
-| LAMMPS dump | custom text snapshots | ID-mapped x/xs/xu/xsu coordinates, timestep, orthogonal/restricted-triclinic cell, boundary/origin, custom atom columns | indexed random-access read-only; explicit Å/nm required |
-| BINPOS | Scripps binary positions | Cartesian float32 Å, frame atom count, detected little/big byte order | indexed random-access read-only; no cell/time/velocity/force |
+| LAMMPS dump | custom text snapshots | ID-mapped x/xs/xu/xsu coordinates, timestep/time/units, vx/vy/vz, orthogonal/restricted-triclinic cell, boundary/origin, custom atom columns | indexed random-access read-only; explicit Å/nm 및 header 일치 필요 |
+| BINPOS | Scripps binary positions | Cartesian float32 Å, frame atom count, detected little/big byte order | indexed random-access read 및 canonical little-endian current-frame write; no cell/time/velocity/force |
 
 PRMTOP parser는 `%VERSION`, `%FLAG`, `%FORMAT`의 fixed-width A/I/E/F field를 읽고 POINTERS와 실제
 identity/connectivity record count를 대조한다. `CHARGE`는 Amber 공식 18.2223 scale을 elementary charge로
@@ -204,7 +215,10 @@ MDCRD는 title 뒤의 `3*N`개 폭 8 실수를 한 줄 최대 10개씩 읽고 op
 `read_frame(i)`는 요청 frame만 다시 열어 decode하므로 coordinate memory는 O(atom count), index는 O(frame count)다.
 3-value box는 length만 포함하므로 PRMTOP `BOX_DIMENSIONS`의 angle을 결합하고, topology angle이 없으면 attach를
 거부한다. 6-value box는 file의 alpha/beta/gamma를 사용한다. REMD/RXSGLD header, velocity/force archive,
-3원자 미만 multi-frame/box ambiguity와 compressed input은 아직 지원하지 않는다.
+3원자 미만 multi-frame/box ambiguity와 compressed input은 아직 지원하지 않는다. CRD writer는 current frame의
+coordinate만 Å 단위 F8.3으로 출력하고 unit cell omission을 typed loss로 반환한다. Explicit CRDBOX writer는
+세 cell length를 추가하고 matching PRMTOP shared angle을 요구한다. 서로 다른 세 angle은 표현할 수 없어
+거부한다. Velocity, source step/time과 auxiliary metadata는 typed loss이며 multi-frame write/append는 후속이다.
 
 GRO reader는 title, positive atom count, fixed-width residue/atom identity와 가변 정밀도 좌표를 읽는다.
 연속 frame은 atom/residue identity와 순서가 첫 frame과 같아야 하며 optional velocity는 한 frame 안에서
@@ -245,12 +259,23 @@ VTF combined file만 지원한다. 독립 VSF+VCF pairing, userdata, gzip, write
 Normative reference는 [VTF format specification](https://github.com/olenz/vtfplugin/wiki/VTF-format)과
 [VMD vtfplugin documentation](https://www.ks.uiuc.edu/Research/vmd/plugins/doxygen/vtfplugin_8c-source.html)이며,
 reference source는 commit `0435a0e5ccaee73dac36eda0e597260424b17906`에 고정했다. 코드를 복사하거나 vendor하지 않았다.
+VMD catalog의 family version 1.3과 달리 current callback은 VTF/VSF/VCF를 각각 2.4로 등록한다. VTF는
+structure·bond·timestep, VSF는 structure·bond, VCF는 host가 atom count를 제공하는 coordinate-only callback이다.
+Callback timestep은 velocity를 노출하지 않고 `physical_time`을 항상 0으로 반환한다. Tcl userdata parser와 zlib
+입력은 compile-time optional path이므로 core dependency로 채택하지 않았다. Author upstream은 Unlicense와
+public-domain intent를 선언하지만 VMD 배포본의 plugin-tree 기본 UIUC 조건과의 관계를 임의로 단정하지 않고 두 근거를
+함께 provenance에 기록했다. `.vsf`/`.vcf` auto-detection 및 topology-coordinate pairing은 MOL-03 provider contract
+이후 구현할 tracked gap이며, 현재 combined `.vtf` 지원을 세 독립 format 지원으로 표시하지 않는다.
 
 XYZ writer는 selected current frame 또는 known-count source의 모든 frame을 순차적으로 읽는다. File output은
 같은 directory의 temporary file을 완전히 flush한 뒤 target을 교체하고, 취소·decode·flush·publish 실패 시
 temporary file을 제거한다. Existing target은 기본적으로 보존하며 `--overwrite true`일 때만 교체한다.
 Residue, connectivity, charge, typed properties, cell/time/velocity와 decimal quantization은 channel/count/message
 loss table로 반환한다. Missing atom처럼 valid plain XYZ로 표현할 수 없는 상태는 export 자체를 실패시킨다.
+VMD XYZ 1.3 callback이 trailing column과 later-frame label을 버리고 float32로 읽는 동작은 재현하지 않는다.
+Native는 extra column, element mutation, non-finite coordinate와 invalid ordinal을 거부하고 float64를 보존한다.
+VMD callback의 periodic-table mass/radius 합성은 file payload가 아니므로 source property로 위장하지 않으며, 전체
+118-element shared chemistry table이 고정될 때까지 별도 tracked gap으로 유지한다.
 
 PQR writer는 exactly one selected frame과 numeric `partial_charge`/`pqr.radius` property를 요구한다.
 `pqr.radius`가 없는 다른 format object은 explicit numeric `vdw_radius`를 fallback export source로 쓸 수 있다.

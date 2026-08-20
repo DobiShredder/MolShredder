@@ -375,11 +375,18 @@ operation::Result<LoadResult>
 Workspace::load_structure(const std::filesystem::path &path,
                           std::optional<std::string> name,
                           io::StructureFormat format) {
-  const auto document = io::read_structure_file(path, format);
+  auto document = io::read_structure_file(path, format);
   if (!document.has_value()) {
     return operation::Result<LoadResult>::failure(document.error());
   }
-  if (document.value().structures.empty()) {
+  return load_structure_document(std::move(document.value()), path,
+                                 std::move(name));
+}
+
+operation::Result<LoadResult> Workspace::load_structure_document(
+    io::StructureDocument document, const std::filesystem::path &source_path,
+    std::optional<std::string> name) {
+  if (document.structures.empty()) {
     return operation::Result<LoadResult>::failure(
         invalid("structure document contains no data blocks"));
   }
@@ -388,7 +395,7 @@ Workspace::load_structure(const std::filesystem::path &path,
         invalid("explicit workspace object name must not be empty",
                 "omit --name to use names from the file"));
   }
-  const auto structure_count = document.value().structures.size();
+  const auto structure_count = document.structures.size();
   if (structure_count >
       std::numeric_limits<std::uint64_t>::max() - next_object_id_) {
     return operation::Result<LoadResult>::failure(
@@ -400,12 +407,12 @@ Workspace::load_structure(const std::filesystem::path &path,
   for (std::size_t index = 0; index < structure_count; ++index) {
     auto object_name = name.has_value()
                            ? name.value()
-                           : document.value().structures[index].name;
+                           : document.structures[index].name;
     if (name.has_value() && structure_count > 1U) {
       object_name += "_" + std::to_string(index + 1U);
     }
     if (object_name.empty()) {
-      object_name = path.stem().string();
+      object_name = source_path.stem().string();
       if (structure_count > 1U) {
         object_name += "_" + std::to_string(index + 1U);
       }
@@ -440,7 +447,7 @@ Workspace::load_structure(const std::filesystem::path &path,
   loaded_objects.reserve(structure_count);
   for (std::size_t index = 0; index < structure_count; ++index) {
     const auto object_id = next_object_id_ + index;
-    const auto &data = document.value().structures[index];
+    const auto &data = document.structures[index];
     auto coordinate_source = data.coordinates;
     std::optional<TrajectoryState> embedded_trajectory;
     const auto frame_count = data.coordinates->frame_count().value_or(0U);
@@ -464,7 +471,7 @@ Workspace::load_structure(const std::filesystem::path &path,
         return operation::Result<LoadResult>::failure(prefetch.error());
       }
       coordinate_source = cache.value();
-      embedded_trajectory = TrajectoryState{path,
+      embedded_trajectory = TrajectoryState{source_path,
                                             io::TrajectoryFormat::auto_detect,
                                             cache.value(),
                                             std::move(timeline.value()),
@@ -510,7 +517,7 @@ Workspace::load_structure(const std::filesystem::path &path,
   const auto &active = loaded_objects.back();
   return operation::Result<LoadResult>::success(LoadResult{
       active.object_id, active.object_name, active.atom_count,
-      active.frame_count, document.value().format, std::move(loaded_objects)});
+      active.frame_count, document.format, std::move(loaded_objects)});
 }
 
 operation::Result<VolumeLoadResult>

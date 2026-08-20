@@ -318,6 +318,10 @@ public:
   [[nodiscard]] operation::Result<LoadResult>
   load_structure(const std::filesystem::path &path,
                  std::optional<std::string> name, io::StructureFormat format);
+  [[nodiscard]] operation::Result<LoadResult>
+  load_structure_document(io::StructureDocument document,
+                          const std::filesystem::path &source_path,
+                          std::optional<std::string> name = std::nullopt);
   [[nodiscard]] operation::Result<VolumeLoadResult>
   load_volume(const std::filesystem::path &path,
               std::optional<std::string> name, io::VolumeFormat format,

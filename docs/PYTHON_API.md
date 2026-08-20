@@ -31,6 +31,12 @@ import molshredder
 
 molshredder.__version__
 molshredder.invoke(command_name: str, arguments: dict[str, str] = {}) -> dict
+molshredder.run_script(
+    path: str,
+    arguments: list[str] = [],
+    working_directory: str | None = None,
+    trusted: bool = False,
+) -> dict
 ```
 
 예:
@@ -63,14 +69,24 @@ contact_occupancy = molshredder.invoke(
 secondary_structure = molshredder.invoke(
     "analyze secondary-structure", {"selection": "protein"}
 )
+
+script = molshredder.run_script(
+    "analysis.py", ["trajectory.dcd", "--stride", "10"], trusted=True
+)
 ```
 
-Return value는 [result envelope v1](RESULT_FORMAT.md)의 Python dictionary 표현이다. Operation
+Return value는 [result envelope v2](RESULT_FORMAT.md)의 Python dictionary 표현이다. Operation
 validation/unsupported error도 임의의 Python exception으로 바꾸지 않고 동일한 stable error
 envelope로 반환한다. Typed table은 JSON과 같은 `columns` 및 scalar `rows`를 native Python list로
 반환한다. Decimal-precision result `Number`도 Python에서는 float다. Python argument conversion 자체가
 실패한 경우에는 pybind11의 `TypeError`가
 발생할 수 있다.
+
+`run_script`는 사용자가 명시적으로 선택하고 `trusted=True`로 승인한 local `.py` file만 실행한다. Script에서
+다시 `import molshredder`하고 `invoke`를 호출하면 실행을 시작한 동일 Registry/Workspace가 사용된다. 성공 결과에는
+stdout/stderr, canonical nested invocation, mutation count, source SHA-256, interpreter와 working directory가
+들어간다. Runtime/syntax error도 exception으로 변환하지 않고 `script_failed` envelope를 반환하며 같은 정보와
+`partial_mutation`을 `error.details`에 보존한다. 자세한 보안·수명 계약은 [Automation](AUTOMATION.md)을 따른다.
 
 현재 Python API는 command-dispatch smoke surface다. Typed molecular object, NumPy zero-copy
 coordinate view, async task/cancellation, embedded console과 plugin API는 data/trajectory vertical

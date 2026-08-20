@@ -64,10 +64,21 @@ PYTHONPATH=build/dev python -c \
   "import molshredder; print(molshredder.invoke('version'))"
 ```
 
+검토한 local Python script는 명시적 trust와 함께 동일 Workspace에서 실행할 수 있다.
+
+```bash
+./build/dev/molshredder script run --path analysis.py --trust true
+```
+
+```python
+molshredder.run_script("analysis.py", ["trajectory.dcd"], trusted=True)
+```
+
 명령과 desktop 실행 방법은 아래 문서를 참조한다.
 
 - [Command reference](docs/COMMANDS.md)
 - [Python API](docs/PYTHON_API.md)
+- [Automation and script execution](docs/AUTOMATION.md)
 - [Desktop application](docs/DESKTOP_VIEWPORT.md)
 
 ## 문서

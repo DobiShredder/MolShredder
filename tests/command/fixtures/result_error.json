@@ -1,1 +1,1 @@
-{"schema_version":1,"status":"error","command":"invoke \"analyze center\" --selection \"missing\"","error":{"code":"invalid_selection","message":"selection \"missing\"\natom","suggestion":"use protein\tselection"}}
+{"schema_version":2,"status":"error","command":"invoke \"analyze center\" --selection \"missing\"","error":{"code":"invalid_selection","message":"selection \"missing\"\natom","suggestion":"use protein\tselection","details":{"selection":"missing","stdout":"before failure\n"}}}

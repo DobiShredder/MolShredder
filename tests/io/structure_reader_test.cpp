@@ -846,6 +846,30 @@ int main(int argc, char **argv) {
                        changed_xyz.error().message.find(
                            "atom count/order/elements") != std::string::npos,
                    "XYZ later frames must not silently mutate topology");
+  const auto numbered_xyz = io::read_structure(
+      "3\nperiodic-table labels\n6 0 0 0\n8 1 0 0\n0 0 1 0\n",
+      {io::StructureFormat::xyz, "numbered.xmol"});
+  passed &= expect(
+      numbered_xyz.has_value() &&
+          numbered_xyz.value().structures.front().topology->atoms()[0].name ==
+              "C" &&
+          numbered_xyz.value()
+                  .structures.front()
+                  .topology->atoms()[1]
+                  .atomic_number == 8U &&
+          numbered_xyz.value()
+                  .structures.front()
+                  .topology->atoms()[2]
+                  .atomic_number == 0U,
+      "XYZ must canonicalize periodic-table ordinal labels and numeric zero");
+  const auto invalid_ordinal = io::read_structure(
+      "1\ninvalid ordinal\n119 0 0 0\n",
+      {io::StructureFormat::xyz, "ordinal.xyz"});
+  passed &= expect(
+      !invalid_ordinal.has_value() &&
+          invalid_ordinal.error().message.find("between 0 and 118") !=
+              std::string::npos,
+      "XYZ must reject atomic-number labels outside the periodic table");
   const auto extended_xyz = io::read_structure(
       "1\nextended\nC 0 0 0 1.0\n", {io::StructureFormat::xyz, "extended.xyz"});
   passed &=

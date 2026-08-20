@@ -22,9 +22,9 @@ bool near(double left, double right, double tolerance = 1.0e-9) {
 
 int main(int argc, char **argv) {
   using namespace molshredder;
-  if (argc != 6) {
+  if (argc != 7) {
     std::cerr << "expected standard, compressed, bad-convention, partial-cell "
-                 "and missing-data fixtures\n";
+                 "missing-data and restart fixtures\n";
     return 2;
   }
   bool passed = true;
@@ -119,5 +119,42 @@ int main(int argc, char **argv) {
                        "missing-amber-trajectory.nc";
   passed &= expect(!io::open_amber_netcdf(missing, 4U).has_value(),
                    "missing Amber NetCDF path must fail");
+
+  io::AmberNetcdfMetadata restart_metadata;
+  const auto restart = io::open_amber_netcdf(argv[6], 4U, &restart_metadata);
+  passed &= expect(
+      restart.has_value() && restart_metadata.is_restart &&
+          restart_metadata.frame_count == 1U && restart_metadata.has_time &&
+          restart_metadata.has_velocities && restart_metadata.has_temperature &&
+          restart_metadata.has_unit_cell && !restart_metadata.has_forces,
+      "AMBERRESTART metadata must expose one frame and declared channels");
+  if (restart.has_value()) {
+    const auto frame = restart.value()->read_frame(0U);
+    passed &= expect(frame.has_value(), "AMBERRESTART frame must decode");
+    if (frame.has_value()) {
+      const auto &positions = std::get<std::vector<model::Vec3d>>(
+          frame.value()->positions().values());
+      const auto &velocities = std::get<std::vector<model::Vec3d>>(
+          frame.value()->velocities()->values());
+      passed &= expect(
+          positions[3] == model::Vec3d{9.0, 10.0, 11.0} &&
+              velocities[3] == model::Vec3d{0.9, 1.0, 1.1} &&
+              frame.value()->metadata().physical_time.has_value() &&
+              near(frame.value()->metadata().physical_time->value, 12.5) &&
+              frame.value()->metadata().unit_cell.has_value() &&
+              frame.value()->metadata().fields.at("format") ==
+                  "amber-netcdf-restart",
+          "AMBERRESTART coordinates, velocities, scalar time and cell must "
+          "decode");
+    }
+    passed &= expect(!restart.value()->read_frame(1U).has_value(),
+                     "AMBERRESTART must reject frame indices after zero");
+  }
+  const auto restart_auto =
+      io::open_trajectory(argv[6], io::TrajectoryFormat::auto_detect, 4U);
+  passed &= expect(restart_auto.has_value() &&
+                       restart_auto.value().format ==
+                           io::TrajectoryFormat::amber_netcdf,
+                   ".ncrst suffix must auto-detect Amber NetCDF restart");
   return passed ? 0 : 1;
 }

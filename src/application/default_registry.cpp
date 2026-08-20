@@ -1,15 +1,19 @@
 #include "molshredder/application/default_registry.hpp"
 
+#include <algorithm>
 #include <charconv>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <iterator>
 #include <limits>
+#include <mutex>
 #include <string>
 #include <utility>
 
 #include "molshredder/command/foundation_grammar.hpp"
 #include "molshredder/io/format_capabilities.hpp"
+#include "molshredder/io/molfile_provider.hpp"
 #include "molshredder/operation/error.hpp"
 #include "molshredder/operation/result.hpp"
 #include "molshredder/version.hpp"
@@ -163,6 +167,65 @@ command::Value color_value(render::ColorRgba color) {
                                static_cast<double>(color.alpha)};
 }
 
+command::Value provider_value(const io::FormatProvider &provider) {
+  return command::Value::Object{
+      {"available", provider.available},
+      {"id", provider.id},
+      {"license_expression", provider.license_expression},
+      {"license_status", std::string{io::to_string(provider.license_status)}},
+      {"origin", std::string{io::to_string(provider.origin)}},
+      {"trust", std::string{io::to_string(provider.trust)}},
+      {"unavailable_reason",
+       provider.unavailable_reason.empty()
+           ? command::Value{nullptr}
+           : command::Value{provider.unavailable_reason}},
+      {"version", provider.version}};
+}
+
+io::FormatProvider molfile_provider_value(
+    const io::MolfileProviderDescriptor &descriptor) {
+  const auto trust = descriptor.trust == io::MolfileProviderTrust::explicit_path
+                         ? io::FormatProviderTrust::untrusted
+                         : io::FormatProviderTrust::trusted_configured;
+  return io::FormatProvider{
+      descriptor.provider_id,
+      std::to_string(descriptor.major_version) + "." +
+          std::to_string(descriptor.minor_version),
+      io::FormatProviderOrigin::dynamic_plugin,
+      trust,
+      io::FormatProviderLicenseStatus::pending,
+      "NOASSERTION",
+      true,
+      {}};
+}
+
+command::Value direction_value(
+    const io::FormatDirectionCapability &capability) {
+  const auto array = [](const std::vector<std::string> &values) {
+    command::Value::Array result;
+    result.reserve(values.size());
+    for (const auto &value : values) result.emplace_back(value);
+    return command::Value{std::move(result)};
+  };
+  return command::Value::Object{
+      {"available", capability.available},
+      {"channels", array(capability.channels)},
+      {"limitations", array(capability.limitations)},
+      {"typed_loss_reporting", capability.typed_loss_reporting},
+      {"unavailable_reason",
+       capability.unavailable_reason.empty()
+           ? command::Value{nullptr}
+           : command::Value{capability.unavailable_reason}}};
+}
+
+operation::Result<io::FormatProvider>
+requested_provider(const command::Arguments &arguments,
+                   io::FormatDirection direction) {
+  const auto found = arguments.find("provider");
+  return io::resolve_format_provider(
+      {}, direction, found == arguments.end() ? "auto" : found->second);
+}
+
 operation::Result<analysis::SeriesRange>
 series_range(const command::Arguments &arguments, const Workspace &workspace) {
   const auto first = size_argument(arguments, "first");
@@ -275,7 +338,10 @@ io::TrajectoryFormat trajectory_format(std::string_view value) {
     return io::TrajectoryFormat::rst7;
   if (value == "mdcrd" || value == "crd")
     return io::TrajectoryFormat::mdcrd;
-  if (value == "netcdf" || value == "nc" || value == "ncdf")
+  if (value == "crdbox")
+    return io::TrajectoryFormat::crdbox;
+  if (value == "netcdf" || value == "nc" || value == "ncdf" ||
+      value == "ncrst")
     return io::TrajectoryFormat::amber_netcdf;
   if (value == "h5md")
     return io::TrajectoryFormat::h5md;
@@ -395,6 +461,8 @@ command::Registry make_default_registry(std::shared_ptr<Workspace> workspace) {
   using operation::TaskContext;
 
   command::Registry registry;
+  auto molfile_registry = std::make_shared<io::MolfileProviderRegistry>();
+  auto molfile_action_mutex = std::make_shared<std::timed_mutex>();
   const auto version_error = registry.add(
       Descriptor{"system version", "Print the MolShredder version", {}, {}},
       [](const Arguments &, TaskContext &) {
@@ -431,11 +499,27 @@ command::Registry make_default_registry(std::shared_ptr<Workspace> workspace) {
     command::Handler handler;
     if (canonical_name == "format list") {
       handler = [](const Arguments &arguments, TaskContext &) {
+        const auto requested_direction = arguments.at("direction") == "write"
+                                             ? io::FormatDirection::write
+                                             : io::FormatDirection::read;
+        auto selected_provider =
+            requested_provider(arguments, requested_direction);
+        if (!selected_provider.has_value() &&
+            arguments.at("direction") == "all") {
+          selected_provider =
+              requested_provider(arguments, io::FormatDirection::write);
+        }
+        if (!selected_provider.has_value()) {
+          return Result<Response>::failure(selected_provider.error());
+        }
         command::Table table;
         table.columns = {
             "id",        "family",      "extensions",      "read",
             "write",     "multi_frame", "multi_structure", "random_access",
-            "streaming", "channels",    "limitations",     "implementation"};
+            "streaming", "channels",    "limitations",     "implementation",
+            "provider",  "provider_version", "provider_origin",
+            "provider_trust", "license_status", "read_unavailable_reason",
+            "write_unavailable_reason"};
         const auto array = [](const std::vector<std::string> &values) {
           command::Value::Array result;
           result.reserve(values.size());
@@ -454,6 +538,7 @@ command::Registry make_default_registry(std::shared_ptr<Workspace> workspace) {
         };
         command::Value::Array formats;
         for (const auto &capability : io::format_capabilities()) {
+          if (capability.provider.id != selected_provider.value().id) continue;
           if (arguments.at("family") != "all" &&
               arguments.at("family") != capability.family) {
             continue;
@@ -467,16 +552,42 @@ command::Registry make_default_registry(std::shared_ptr<Workspace> workspace) {
                capability.readable, capability.writable, capability.multi_frame,
                capability.multi_structure, capability.random_access,
                capability.streaming, joined(capability.channels),
-               joined(capability.limitations), capability.implementation});
+               joined(capability.limitations), capability.implementation,
+               capability.provider.id, capability.provider.version,
+               std::string{io::to_string(capability.provider.origin)},
+               std::string{io::to_string(capability.provider.trust)},
+               std::string{io::to_string(capability.provider.license_status)},
+               capability.readable
+                   ? command::Value{nullptr}
+                   : command::Value{io::direction_capability(
+                                        capability, io::FormatDirection::read)
+                                        ->unavailable_reason},
+               capability.writable
+                   ? command::Value{nullptr}
+                   : command::Value{io::direction_capability(
+                                        capability, io::FormatDirection::write)
+                                        ->unavailable_reason}});
+          command::Value::Object directions;
+          for (const auto &direction : capability.directions) {
+            directions.emplace(std::string{io::to_string(direction.direction)},
+                               direction_value(direction));
+          }
+          command::Value::Object extension_fields;
+          for (const auto &[name, value] : capability.extension_fields) {
+            extension_fields.emplace(name, value);
+          }
           formats.emplace_back(command::Value::Object{
               {"channels", array(capability.channels)},
+              {"directions", std::move(directions)},
               {"extensions", array(capability.extensions)},
+              {"extension_fields", std::move(extension_fields)},
               {"family", capability.family},
               {"id", capability.id},
               {"implementation", capability.implementation},
               {"limitations", array(capability.limitations)},
               {"multi_frame", capability.multi_frame},
               {"multi_structure", capability.multi_structure},
+              {"provider", provider_value(capability.provider)},
               {"random_access", capability.random_access},
               {"read", capability.readable},
               {"streaming", capability.streaming},
@@ -485,14 +596,18 @@ command::Registry make_default_registry(std::shared_ptr<Workspace> workspace) {
         return Result<Response>::success(
             {"listed " + std::to_string(table.rows.size()) + " formats",
              {{"capability_schema_version", io::kFormatCapabilitySchemaVersion},
-              {"direction", arguments.at("direction")},
-              {"family", arguments.at("family")},
-              {"format_count", static_cast<std::uint64_t>(table.rows.size())},
-              {"formats", std::move(formats)}},
+             {"direction", arguments.at("direction")},
+             {"family", arguments.at("family")},
+             {"format_count", static_cast<std::uint64_t>(table.rows.size())},
+              {"formats", std::move(formats)},
+              {"provider", provider_value(selected_provider.value())}},
              std::move(table)});
       };
     } else if (canonical_name == "volume load") {
       handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const auto provider =
+            requested_provider(arguments, io::FormatDirection::read);
+        if (!provider.has_value()) return Result<Response>::failure(provider.error());
         std::optional<std::string> name;
         if (const auto found = arguments.find("name");
             found != arguments.end()) {
@@ -520,6 +635,7 @@ command::Registry make_default_registry(std::shared_ptr<Workspace> workspace) {
               {"object_id", loaded.value().object_id},
               {"object_name", loaded.value().object_name},
               {"origin", vector_value(loaded.value().origin)},
+              {"provider", provider_value(provider.value())},
               {"precision",
                std::string{volume_precision_name(loaded.value().precision)}},
               {"value_count", loaded.value().value_count}}});
@@ -574,6 +690,9 @@ command::Registry make_default_registry(std::shared_ptr<Workspace> workspace) {
       };
     } else if (canonical_name == "volume save") {
       handler = [workspace](const Arguments &arguments, TaskContext &context) {
+        const auto provider =
+            requested_provider(arguments, io::FormatDirection::write);
+        if (!provider.has_value()) return Result<Response>::failure(provider.error());
         const auto saved = workspace->save_active_volume(
             arguments.at("path"), volume_format(arguments.at("file-format")),
             arguments.at("overwrite") == "true", context);
@@ -597,6 +716,7 @@ command::Registry make_default_registry(std::shared_ptr<Workspace> workspace) {
               {"loss_item_count", lost_item_count},
               {"object_id", saved.value().object_id},
               {"path", saved.value().path.string()},
+              {"provider", provider_value(provider.value())},
               {"precision", std::string{volume_precision_name(
                                 saved.value().report.precision)}},
               {"value_count", saved.value().report.value_count}},
@@ -700,14 +820,110 @@ command::Registry make_default_registry(std::shared_ptr<Workspace> workspace) {
              object_fields(changed.value())});
       };
     } else if (canonical_name == "load") {
-      handler = [workspace](const Arguments &arguments, TaskContext &) {
+      handler = [workspace, molfile_registry,
+                 molfile_action_mutex](const Arguments &arguments,
+                                       TaskContext &context) {
+        const auto requested = arguments.at("provider");
+        const auto is_molfile = requested.starts_with("molfile:");
+        operation::Result<io::FormatProvider> provider =
+            is_molfile
+                ? Result<io::FormatProvider>::failure(operation::Error{
+                      operation::ErrorCode::unsupported,
+                      "molfile provider is not registered: " + requested, {}})
+                : requested_provider(arguments, io::FormatDirection::read);
         std::optional<std::string> name;
         if (const auto found = arguments.find("name");
             found != arguments.end()) {
           name = found->second;
         }
-        const auto loaded = workspace->load_structure(
-            arguments.at("path"), std::move(name), structure_format(arguments));
+        operation::Result<LoadResult> loaded =
+            Result<LoadResult>::failure(operation::Error{
+                operation::ErrorCode::internal, "structure load not started", {}});
+        if (is_molfile) {
+          if (requested != "molfile:pqr") {
+            return Result<Response>::failure(operation::Error{
+                operation::ErrorCode::unsupported,
+                "only molfile:pqr structure staging is currently supported",
+                "select --provider molfile:pqr or use the native provider"});
+          }
+          const auto selected_format = arguments.at("file-format");
+          if (selected_format != "auto" && selected_format != "pqr") {
+            return Result<Response>::failure(operation::Error{
+                operation::ErrorCode::invalid_argument,
+                "molfile:pqr requires --file-format pqr or auto",
+                "set --file-format pqr"});
+          }
+          if (context.cancellation.is_cancelled()) {
+            return Result<Response>::failure(operation::Error{
+                operation::ErrorCode::cancelled,
+                "molfile load cancelled during action scheduling", {}});
+          }
+          std::unique_lock action_lock{*molfile_action_mutex,
+                                       std::defer_lock};
+          if (context.report_progress) {
+            context.report_progress({0.0, "molfile-wait-action"});
+          }
+          while (!action_lock.try_lock_for(std::chrono::milliseconds{10})) {
+            if (context.cancellation.is_cancelled()) {
+              return Result<Response>::failure(operation::Error{
+                  operation::ErrorCode::cancelled,
+                  "molfile load cancelled during action scheduling", {}});
+            }
+          }
+          if (context.cancellation.is_cancelled()) {
+            return Result<Response>::failure(operation::Error{
+                operation::ErrorCode::cancelled,
+                "molfile load cancelled during action scheduling", {}});
+          }
+          auto registered = molfile_registry->descriptors();
+          auto selected = std::find_if(
+              registered.begin(), registered.end(), [&](const auto &entry) {
+                return entry.provider_id == requested;
+              });
+          if (selected == registered.end()) {
+            const auto plugin_path = arguments.find("plugin-path");
+            if (plugin_path == arguments.end()) {
+              return Result<Response>::failure(operation::Error{
+                  operation::ErrorCode::unsupported,
+                  "molfile:pqr requires an explicitly approved plugin path",
+                  "provide --plugin-path with the molfile shared library"});
+            }
+            io::MolfileDiscoveryRequest discovery;
+            discovery.explicit_files.emplace_back(plugin_path->second);
+            const auto discovered = molfile_registry->discover(discovery);
+            if (!discovered.has_value()) {
+              return Result<Response>::failure(discovered.error());
+            }
+            registered = molfile_registry->descriptors();
+            selected = std::find_if(
+                registered.begin(), registered.end(), [&](const auto &entry) {
+                  return entry.provider_id == requested;
+                });
+          }
+          if (selected == registered.end()) {
+            return Result<Response>::failure(operation::Error{
+                operation::ErrorCode::unsupported,
+                "plugin did not register requested provider " + requested,
+                "inspect the plugin's registered molfile format name"});
+          }
+          provider = Result<io::FormatProvider>::success(
+              molfile_provider_value(*selected));
+          auto document = molfile_registry->read_structure(
+              arguments.at("path"), requested, context);
+          if (!document.has_value()) {
+            return Result<Response>::failure(document.error());
+          }
+          loaded = workspace->load_structure_document(
+              std::move(document.value()), arguments.at("path"),
+              std::move(name));
+        } else {
+          if (!provider.has_value()) {
+            return Result<Response>::failure(provider.error());
+          }
+          loaded = workspace->load_structure(arguments.at("path"),
+                                             std::move(name),
+                                             structure_format(arguments));
+        }
         if (!loaded.has_value())
           return Result<Response>::failure(loaded.error());
         command::Value::Array object_ids;
@@ -736,11 +952,15 @@ command::Registry make_default_registry(std::shared_ptr<Workspace> workspace) {
               {"object_ids", std::move(object_ids)},
               {"object_name", loaded.value().object_name},
               {"objects", std::move(loaded_objects)},
+              {"provider", provider_value(provider.value())},
               {"structure_count",
                static_cast<std::uint64_t>(loaded.value().objects.size())}}});
       };
     } else if (canonical_name == "save") {
       handler = [workspace](const Arguments &arguments, TaskContext &context) {
+        const auto provider =
+            requested_provider(arguments, io::FormatDirection::write);
+        if (!provider.has_value()) return Result<Response>::failure(provider.error());
         const auto precision = size_argument(arguments, "precision");
         if (!precision.has_value()) {
           return Result<Response>::failure(precision.error());
@@ -778,7 +998,8 @@ command::Registry make_default_registry(std::shared_ptr<Workspace> workspace) {
                static_cast<std::uint64_t>(saved.value().report.losses.size())},
               {"loss_item_count", lost_item_count},
               {"object_id", saved.value().object_id},
-              {"path", saved.value().path.string()}},
+              {"path", saved.value().path.string()},
+              {"provider", provider_value(provider.value())}},
              std::move(table)});
       };
     } else if (canonical_name == "select") {
@@ -1534,6 +1755,9 @@ command::Registry make_default_registry(std::shared_ptr<Workspace> workspace) {
       };
     } else if (canonical_name == "traj load") {
       handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const auto provider =
+            requested_provider(arguments, io::FormatDirection::read);
+        if (!provider.has_value()) return Result<Response>::failure(provider.error());
         const auto cache_mib = size_argument(arguments, "cache-mib", true);
         const auto prefetch_frames =
             size_argument(arguments, "prefetch-frames");
@@ -1581,6 +1805,7 @@ command::Registry make_default_registry(std::shared_ptr<Workspace> workspace) {
               static_cast<std::uint64_t>(loaded.value().frame_count)},
              {"object_id", loaded.value().object_id}}};
         auto &fields = response.fields;
+        fields.emplace("provider", provider_value(provider.value()));
         fields.emplace(
             "prefetch_frame_count",
             static_cast<std::uint64_t>(loaded.value().prefetch_frame_count));
@@ -1595,6 +1820,9 @@ command::Registry make_default_registry(std::shared_ptr<Workspace> workspace) {
       };
     } else if (canonical_name == "traj save") {
       handler = [workspace](const Arguments &arguments, TaskContext &context) {
+        const auto provider =
+            requested_provider(arguments, io::FormatDirection::write);
+        if (!provider.has_value()) return Result<Response>::failure(provider.error());
         std::string title;
         if (const auto found = arguments.find("title");
             found != arguments.end()) {
@@ -1637,7 +1865,8 @@ command::Registry make_default_registry(std::shared_ptr<Workspace> workspace) {
                static_cast<std::uint64_t>(saved.value().report.losses.size())},
               {"loss_item_count", lost_item_count},
               {"object_id", saved.value().object_id},
-              {"path", saved.value().path.string()}},
+              {"path", saved.value().path.string()},
+              {"provider", provider_value(provider.value())}},
              std::move(table)});
       };
     } else if (canonical_name == "traj frame") {

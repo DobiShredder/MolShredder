@@ -13,7 +13,7 @@ cmake --build --preset desktop
 ctest --preset desktop -R desktop.gpu_smoke --output-on-failure
 ```
 
-Open PDB/PDBx-mmCIF/BinaryCIF/PQR/MOL/SDF/MOL2/PSF/GRO/G96/VTF/XYZ or an
+Open PDB/PDBx-mmCIF/BinaryCIF/PQR/MOL/SDF/MOL2/PSF/GRO/G96/VTF/XYZ/XMol or an
 OpenDX or MRC2014/CCP4 scalar volume from the toolbar or at startup:
 
 ```bash
@@ -58,7 +58,7 @@ canonical `volume load` action as CLI/Python, create a typed volume scene object
 range midpoint through canonical `volume isosurface`. The bottom contour panel moves the level by 5% of the range
 or restores the midpoint; every control replaces the active volume mesh through the shared action. Multi-record
 SDF and multi-molecule MOL2 create one ordered Workspace object per record and activate the last one. Save invokes the same
-canonical writer as CLI/Python and exports the active object as PDB, mmCIF, PQR, MOL, SDF, MOL2, PSF, GRO, G96 or XYZ based on the suffix;
+canonical writer as CLI/Python and exports the active object as PDB, mmCIF, PQR, MOL, SDF, MOL2, PSF, GRO, G96 or XYZ/XMol based on the suffix;
 the status badge reports the semantic-loss item count. All-frame trajectory
 export is currently available through console/Python and startup smoke rather
 than a dedicated desktop dialog option.

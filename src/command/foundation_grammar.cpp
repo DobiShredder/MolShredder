@@ -37,6 +37,8 @@ ParameterSpec unit() {
   return defaulted_text("unit", "angstrom", {"angstrom", "nanometer"});
 }
 
+ParameterSpec provider() { return defaulted_text("provider", "auto"); }
+
 } // namespace
 
 std::vector<Descriptor> foundation_command_descriptors() {
@@ -50,7 +52,8 @@ std::vector<Descriptor> foundation_command_descriptors() {
                                 "auto",
                                 {"auto", "pdb", "mmcif", "cif", "bcif", "pqr",
                                  "mol", "mol2", "psf", "prmtop", "gro", "g96",
-                                 "vtf", "sdf", "xyz"}}},
+                                 "vtf", "sdf", "xyz"}},
+                  provider(), optional_text("plugin-path")},
                  UndoPolicy::undoable},
       Descriptor{"select",
                  "Create or replace a named atom selection",
@@ -166,7 +169,8 @@ std::vector<Descriptor> file_command_descriptors() {
                  "List machine-readable native file format capabilities",
                  {defaulted_text("family", "all",
                                  {"all", "structure", "trajectory", "volume"}),
-                  defaulted_text("direction", "all", {"all", "read", "write"})},
+                  defaulted_text("direction", "all", {"all", "read", "write"}),
+                  provider()},
                  UndoPolicy::not_applicable},
       Descriptor{"volume load",
                  "Load a regular scalar volume into a named scene object",
@@ -174,6 +178,7 @@ std::vector<Descriptor> file_command_descriptors() {
                   defaulted_text(
                       "file-format", "auto",
                       {"auto", "ccp4", "dx", "map", "mrc", "mrcs", "opendx"}),
+                  provider(),
                   defaulted_text("coordinate-unit", "angstrom",
                                  {"angstrom", "nanometer"})},
                  UndoPolicy::undoable},
@@ -187,6 +192,7 @@ std::vector<Descriptor> file_command_descriptors() {
                   defaulted_text("file-format", "auto",
                                  {"auto", "ccp4", "dx", "map", "mrc",
                                   "mrcs", "opendx"}),
+                  provider(),
                   ParameterSpec{"overwrite", ParameterType::boolean, false,
                                 "false", {"false", "true"}}},
                  UndoPolicy::not_applicable},
@@ -208,6 +214,7 @@ std::vector<Descriptor> file_command_descriptors() {
            defaulted_text("file-format", "auto",
                           {"auto", "g96", "gro", "mmcif", "cif", "mol", "mol2",
                            "pdb", "psf", "pqr", "sdf", "xyz"}),
+           provider(),
            defaulted_text("frames", "current", {"current", "all"}), precision(),
            optional_text("comment"),
            ParameterSpec{"overwrite",
@@ -302,9 +309,10 @@ std::vector<Descriptor> trajectory_command_descriptors() {
           "Attach an indexed trajectory to the active topology",
           {required_text("path"),
            defaulted_text("file-format", "auto",
-                          {"auto", "dcd", "trr", "xtc", "rst7", "mdcrd", "crd",
-                           "netcdf", "nc", "ncdf", "lammps", "lammpstrj",
+                          {"auto", "dcd", "trr", "xtc", "rst7", "mdcrd", "crd", "crdbox",
+                           "netcdf", "nc", "ncdf", "ncrst", "lammps", "lammpstrj",
                            "dump", "binpos", "h5md"}),
+           provider(),
            defaulted_text("coordinate-unit", "auto",
                           {"auto", "angstrom", "nanometer"}),
            optional_text("particle-group"),
@@ -316,7 +324,9 @@ std::vector<Descriptor> trajectory_command_descriptors() {
           "Write the current coordinate frame as a trajectory/restart file",
                  {required_text("path"),
                   defaulted_text("file-format", "auto",
-                                 {"auto", "rst7", "trr"}),
+                                 {"auto", "dcd", "binpos", "mdcrd", "crd",
+                                  "crdbox", "rst7", "trr"}),
+                  provider(),
                   optional_text("title"),
                   ParameterSpec{"overwrite", ParameterType::boolean, false,
                                 "false", {"false", "true"}}},

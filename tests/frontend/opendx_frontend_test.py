@@ -5,6 +5,8 @@ import json
 import pathlib
 import subprocess
 import sys
+
+from console_script import portable_console_script
 import tempfile
 
 
@@ -56,6 +58,7 @@ def main() -> int:
         and loaded["origin"] == [-1.0, 2.0, 0.5]
         and loaded["minimum"] == -2.5
         and loaded["maximum"] == 9.5
+        and loaded["provider"]["id"] == "native"
         and loaded["coordinate_unit"] == "nanometer",
         "Python OpenDX result lost grid geometry, precision or range",
     )
@@ -65,6 +68,7 @@ def main() -> int:
         and python_results[1]["data"]["precision"] == "float64"
         and python_results[1]["data"]["value_count"] == 12
         and python_results[1]["data"]["loss_channel_count"] == 1
+        and python_results[1]["data"]["provider"]["id"] == "native"
         and output.exists()
         and "data follows" in output.read_text()
         and python_results[2]["data"]["format"] == "mrc"
@@ -74,6 +78,7 @@ def main() -> int:
         and python_results[3]["data"]["volumes"][0]["name"]
         == "electrostatic"
         and python_results[4]["data"]["format_count"] == 2
+        and python_results[4]["data"]["provider"]["id"] == "native"
         and [item["id"] for item in python_results[4]["data"]["formats"]]
         == ["opendx", "mrc"],
         "volume save, MRC export, list or capability filter lost semantics",
@@ -93,7 +98,8 @@ def main() -> int:
         "exit\n"
     )
     completed = subprocess.run(
-        [str(cli_path), "console"], input=script, text=True,
+        [str(cli_path), "console"], input=portable_console_script(script),
+        text=True,
         capture_output=True, check=True
     )
     cli_results = [

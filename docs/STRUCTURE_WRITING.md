@@ -7,11 +7,16 @@ current/all frame, MOL/SDF/MOL2/PQR은 exactly one current frame을 지원한다
 ```text
 molshredder format list [--family all|structure|trajectory]
                            [--direction all|read|write]
-molshredder save --path OUTPUT.pdb|OUTPUT.cif|OUTPUT.mol|OUTPUT.sdf|OUTPUT.mol2|OUTPUT.psf|OUTPUT.pqr|OUTPUT.gro|OUTPUT.g96|OUTPUT.xyz
+molshredder save --path OUTPUT.pdb|OUTPUT.cif|OUTPUT.mol|OUTPUT.sdf|OUTPUT.mol2|OUTPUT.psf|OUTPUT.pqr|OUTPUT.gro|OUTPUT.g96|OUTPUT.xyz|OUTPUT.xmol
                  [--file-format auto|pdb|mmcif|cif|mol|sdf|mol2|psf|pqr|gro|g96|xyz]
+                 [--provider auto|native]
                  [--frames current|all] [--precision 0..15]
                  [--comment TEXT] [--overwrite false|true]
 ```
+
+`--provider`는 shared schema v3 registry의 provider ID를 선택한다. `auto`는 qualified native provider를 우선하며,
+명시한 provider가 없거나 해당 write 방향을 지원하지 않으면 다른 구현으로 fallback하지 않는다. Save result에는
+선택된 provider의 version/origin/trust/license provenance가 포함된다.
 
 One-shot CLI process는 Workspace를 공유하지 않으므로 `load` 뒤 `save`하는 workflow는 console이나 Python에서
 실행한다.
@@ -50,6 +55,7 @@ File writer는 target과 같은 directory에 temporary output을 만들고 전�
 Plain XYZ는 residue/bond/order, charge, typed property, cell, velocity, time 및 arbitrary metadata를 저장하지
 못한다. Writer는 이 정보를 조용히 버리지 않고 loss report에 누적한다. Missing atom, invalid atomic number,
 unknown frame count 또는 topology/coordinate atom-count mismatch는 valid output을 만들 수 없으므로 hard error다.
+`.xmol` suffix는 같은 plain XYZ writer를 선택하는 XMol 호환 alias이며 explicit format 이름은 `xyz`다.
 
 PDB writer는 wwPDB 3.3 fixed-column `ATOM/HETATM`, optional `MODEL/ENDMDL`, `CRYST1`, formal charge와
 `CONECT`를 출력한다. 첫 selected model은 topology의 모든 atom을 포함해야 하며 later model의 missing atom은

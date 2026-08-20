@@ -60,6 +60,7 @@ struct Variable {
 };
 
 struct ReaderState {
+  bool restart{};
   Variable coordinates;
   Variable velocities;
   Variable forces;
@@ -302,15 +303,16 @@ Result<std::vector<double>> read_values(int ncid, const Variable &variable,
                                         std::size_t frame,
                                         std::size_t value_count,
                                         const std::filesystem::path &path,
-                                        std::string_view name) {
+                                        std::string_view name, bool restart) {
   const std::array<std::size_t, 3U> start{frame, 0U, 0U};
   const std::array<std::size_t, 3U> count{1U, value_count / 3U, 3U};
   std::vector<double> result(value_count);
   int status{};
   if (variable.compressed) {
     std::vector<int> encoded(value_count);
-    status = nc_get_vara_int(ncid, variable.id, start.data(), count.data(),
-                             encoded.data());
+    status = restart ? nc_get_var_int(ncid, variable.id, encoded.data())
+                     : nc_get_vara_int(ncid, variable.id, start.data(),
+                                       count.data(), encoded.data());
     if (status == NC_NOERR) {
       for (std::size_t index = 0U; index < value_count; ++index) {
         if (encoded[index] == NC_FILL_INT ||
@@ -326,8 +328,9 @@ Result<std::vector<double>> read_values(int ncid, const Variable &variable,
       }
     }
   } else {
-    status = nc_get_vara_double(ncid, variable.id, start.data(), count.data(),
-                                result.data());
+    status = restart ? nc_get_var_double(ncid, variable.id, result.data())
+                     : nc_get_vara_double(ncid, variable.id, start.data(),
+                                          count.data(), result.data());
     if (status == NC_NOERR) {
       for (auto &value : result) {
         if (!std::isfinite(value) || missing_value(value, variable)) {
@@ -357,12 +360,15 @@ Result<std::vector<double>> read_values(int ncid, const Variable &variable,
 Result<std::array<double, 3U>> read_triplet(int ncid, const Variable &variable,
                                             std::size_t frame,
                                             const std::filesystem::path &path,
-                                            std::string_view name) {
+                                            std::string_view name,
+                                            bool restart) {
   const std::array<std::size_t, 2U> start{frame, 0U};
   const std::array<std::size_t, 2U> count{1U, 3U};
   std::array<double, 3U> result{};
-  const auto status = nc_get_vara_double(ncid, variable.id, start.data(),
-                                         count.data(), result.data());
+  const auto status =
+      restart ? nc_get_var_double(ncid, variable.id, result.data())
+              : nc_get_vara_double(ncid, variable.id, start.data(),
+                                    count.data(), result.data());
   if (status != NC_NOERR)
     return Result<std::array<double, 3U>>::failure(
         library_error(path, "reading variable " + std::string{name}, status));
@@ -384,11 +390,13 @@ Result<std::array<double, 3U>> read_triplet(int ncid, const Variable &variable,
 
 Result<double> read_scalar(int ncid, const Variable &variable,
                            std::size_t frame, const std::filesystem::path &path,
-                           std::string_view name) {
+                           std::string_view name, bool restart) {
   const std::array<std::size_t, 1U> start{frame};
   double result{};
-  const auto status =
-      nc_get_var1_double(ncid, variable.id, start.data(), &result);
+  const auto status = restart
+                          ? nc_get_var_double(ncid, variable.id, &result)
+                          : nc_get_var1_double(ncid, variable.id, start.data(),
+                                               &result);
   if (status != NC_NOERR)
     return Result<double>::failure(
         library_error(path, "reading variable " + std::string{name}, status));
@@ -458,7 +466,8 @@ public:
     const auto value_count = metadata_.atom_count * 3U;
     auto positions = read_values(
         ncid_, state_.coordinates, frame, value_count, path_,
-        state_.coordinates.compressed ? "compressedpos" : "coordinates");
+        state_.coordinates.compressed ? "compressedpos" : "coordinates",
+        state_.restart);
     if (!positions.has_value())
       return Result<std::shared_ptr<const model::CoordinateFrame>>::failure(
           positions.error());
@@ -467,7 +476,8 @@ public:
     if (state_.velocities.present()) {
       auto velocities = read_values(
           ncid_, state_.velocities, frame, value_count, path_,
-          state_.velocities.compressed ? "compressedvel" : "velocities");
+          state_.velocities.compressed ? "compressedvel" : "velocities",
+          state_.restart);
       if (!velocities.has_value())
         return Result<std::shared_ptr<const model::CoordinateFrame>>::failure(
             velocities.error());
@@ -477,12 +487,14 @@ public:
 
     model::FrameMetadata frame_metadata;
     frame_metadata.coordinate_unit = operation::LengthUnit::angstrom;
-    frame_metadata.fields.emplace("format", "amber-netcdf");
+    frame_metadata.fields.emplace(
+        "format", state_.restart ? "amber-netcdf-restart" : "amber-netcdf");
     frame_metadata.fields.emplace("storage_format", metadata_.storage_format);
     if (state_.velocities.present())
       frame_metadata.velocity_time_unit = model::TimeUnit::picosecond;
     if (state_.time.present()) {
-      auto time = read_scalar(ncid_, state_.time, frame, path_, "time");
+      auto time = read_scalar(ncid_, state_.time, frame, path_, "time",
+                              state_.restart);
       if (!time.has_value())
         return Result<std::shared_ptr<const model::CoordinateFrame>>::failure(
             time.error());
@@ -491,7 +503,8 @@ public:
     }
     if (state_.temperature.present()) {
       auto temperature =
-          read_scalar(ncid_, state_.temperature, frame, path_, "temp0");
+          read_scalar(ncid_, state_.temperature, frame, path_, "temp0",
+                      state_.restart);
       if (!temperature.has_value())
         return Result<std::shared_ptr<const model::CoordinateFrame>>::failure(
             temperature.error());
@@ -501,9 +514,9 @@ public:
     }
     if (state_.cell_lengths.present()) {
       auto lengths = read_triplet(ncid_, state_.cell_lengths, frame, path_,
-                                  "cell_lengths");
-      auto angles =
-          read_triplet(ncid_, state_.cell_angles, frame, path_, "cell_angles");
+                                  "cell_lengths", state_.restart);
+      auto angles = read_triplet(ncid_, state_.cell_angles, frame, path_,
+                                 "cell_angles", state_.restart);
       if (!lengths.has_value())
         return Result<std::shared_ptr<const model::CoordinateFrame>>::failure(
             lengths.error());
@@ -522,7 +535,8 @@ public:
     if (state_.forces.present()) {
       auto forces =
           read_values(ncid_, state_.forces, frame, value_count, path_,
-                      state_.forces.compressed ? "compressedfrc" : "forces");
+                      state_.forces.compressed ? "compressedfrc" : "forces",
+                      state_.restart);
       if (!forces.has_value())
         return Result<std::shared_ptr<const model::CoordinateFrame>>::failure(
             forces.error());
@@ -633,19 +647,25 @@ open_amber_netcdf(const std::filesystem::path &path,
   auto version = required_text_attribute(ncid, "ConventionVersion", path);
   if (!version.has_value())
     return fail(version.error());
-  if (conventions.value() != "AMBER" || version.value() != "1.0") {
-    return fail(invalid(path, "requires Conventions='AMBER' and "
-                              "ConventionVersion='1.0'"));
+  const bool restart = conventions.value() == "AMBERRESTART";
+  if ((!restart && conventions.value() != "AMBER") ||
+      version.value() != "1.0") {
+    return fail(invalid(path, "requires Conventions='AMBER' or "
+                              "'AMBERRESTART' and ConventionVersion='1.0'"));
   }
 
-  std::size_t frame_count{};
+  std::size_t frame_count{1U};
   std::size_t atom_count{};
   std::size_t spatial_count{};
-  auto frame_dimension = dimension(ncid, "frame", frame_count, path);
+  int frame_dimension_id{-1};
+  if (!restart) {
+    auto frame_dimension = dimension(ncid, "frame", frame_count, path);
+    if (!frame_dimension.has_value())
+      return fail(frame_dimension.error());
+    frame_dimension_id = frame_dimension.value();
+  }
   auto atom_dimension = dimension(ncid, "atom", atom_count, path);
   auto spatial_dimension = dimension(ncid, "spatial", spatial_count, path);
-  if (!frame_dimension.has_value())
-    return fail(frame_dimension.error());
   if (!atom_dimension.has_value())
     return fail(atom_dimension.error());
   if (!spatial_dimension.has_value())
@@ -687,12 +707,15 @@ open_amber_netcdf(const std::filesystem::path &path,
   if (labels != std::array<char, 3U>{'x', 'y', 'z'})
     return fail(invalid(path, "spatial labels must be x, y, z"));
 
-  const std::vector<int> frame_atom_spatial{frame_dimension.value(),
-                                            atom_dimension.value(),
-                                            spatial_dimension.value()};
+  std::vector<int> coordinate_dimensions;
+  if (!restart)
+    coordinate_dimensions.push_back(frame_dimension_id);
+  coordinate_dimensions.push_back(atom_dimension.value());
+  coordinate_dimensions.push_back(spatial_dimension.value());
   ReaderState state;
+  state.restart = restart;
   auto coordinates = optional_channel(ncid, "coordinates", "compressedpos",
-                                      frame_atom_spatial, "angstrom", path);
+                                      coordinate_dimensions, "angstrom", path);
   if (!coordinates.has_value())
     return fail(coordinates.error());
   if (!coordinates.value().present())
@@ -700,13 +723,14 @@ open_amber_netcdf(const std::filesystem::path &path,
   state.coordinates = coordinates.value();
 
   auto velocities =
-      optional_channel(ncid, "velocities", "compressedvel", frame_atom_spatial,
+      optional_channel(ncid, "velocities", "compressedvel",
+                       coordinate_dimensions,
                        "angstrom/picosecond", path);
   if (!velocities.has_value())
     return fail(velocities.error());
   state.velocities = velocities.value();
   auto forces =
-      optional_channel(ncid, "forces", "compressedfrc", frame_atom_spatial,
+      optional_channel(ncid, "forces", "compressedfrc", coordinate_dimensions,
                        "kilocalorie/mole/angstrom", path);
   if (!forces.has_value())
     return fail(forces.error());
@@ -719,8 +743,11 @@ open_amber_netcdf(const std::filesystem::path &path,
       return Result<Variable>::failure(id.error());
     if (!id.value().has_value())
       return Result<Variable>::success({});
-    return inspect_variable(ncid, *id.value(), name, {frame_dimension.value()},
-                            units, false, path);
+    const std::vector<int> dimensions = restart
+                                            ? std::vector<int>{}
+                                            : std::vector<int>{frame_dimension_id};
+    return inspect_variable(ncid, *id.value(), name, dimensions, units, false,
+                            path);
   };
   auto time = inspect_optional_scalar("time", "picosecond");
   if (!time.has_value())
@@ -808,13 +835,17 @@ open_amber_netcdf(const std::filesystem::path &path,
     if (angular_labels != expected_angular)
       return fail(
           invalid(path, "cell angular labels must be alpha, beta, gamma"));
-    auto lengths =
-        inspect_variable(ncid, *lengths_id.value(), "cell_lengths",
-                         {frame_dimension.value(), cell_spatial.value()},
-                         "angstrom", false, path);
+    const std::vector<int> length_dimensions =
+        restart ? std::vector<int>{cell_spatial.value()}
+                : std::vector<int>{frame_dimension_id, cell_spatial.value()};
+    const std::vector<int> angle_dimensions =
+        restart ? std::vector<int>{cell_angular.value()}
+                : std::vector<int>{frame_dimension_id, cell_angular.value()};
+    auto lengths = inspect_variable(ncid, *lengths_id.value(), "cell_lengths",
+                                    length_dimensions, "angstrom", false, path);
     auto angles = inspect_variable(
-        ncid, *angles_id.value(), "cell_angles",
-        {frame_dimension.value(), cell_angular.value()}, "degree", false, path);
+        ncid, *angles_id.value(), "cell_angles", angle_dimensions, "degree",
+        false, path);
     if (!lengths.has_value())
       return fail(lengths.error());
     if (!angles.has_value())
@@ -829,6 +860,7 @@ open_amber_netcdf(const std::filesystem::path &path,
     return fail(library_error(path, "reading storage format", status));
   AmberNetcdfMetadata metadata{atom_count,
                                frame_count,
+                               restart,
                                state.time.present(),
                                state.velocities.present(),
                                state.forces.present(),

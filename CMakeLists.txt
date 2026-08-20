@@ -30,6 +30,11 @@ include(GNUInstallDirs)
 
 option(MOLSHREDDER_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
 option(MOLSHREDDER_BUILD_DESKTOP "Build the Qt Quick desktop prototype" OFF)
+option(
+  MOLSHREDDER_ENABLE_THREAD_SANITIZER
+  "Instrument C++ targets with ThreadSanitizer (supported Unix compilers only)"
+  OFF
+)
 
 set(CLI11_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(CLI11_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
@@ -42,7 +47,10 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(CLI11)
 
-find_package(Python3 3.9 REQUIRED COMPONENTS Interpreter Development.Module)
+find_package(
+  Python3 3.9 REQUIRED
+  COMPONENTS Interpreter Development.Module Development.Embed
+)
 set(PYBIND11_FINDPYTHON ON)
 set(PYBIND11_TEST OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(
@@ -94,6 +102,36 @@ else()
     "${MOLSHREDDER_MSGPACK_BINARY_DIR}"
     EXCLUDE_FROM_ALL
   )
+endif()
+
+if(MOLSHREDDER_ENABLE_THREAD_SANITIZER)
+  if(WIN32)
+    message(
+      FATAL_ERROR
+      "MOLSHREDDER_ENABLE_THREAD_SANITIZER is not supported on Windows"
+    )
+  endif()
+  include(CheckCXXSourceCompiles)
+  include(CMakePushCheckState)
+  cmake_push_check_state(RESET)
+  set(CMAKE_REQUIRED_FLAGS "-fsanitize=thread")
+  set(CMAKE_REQUIRED_LINK_OPTIONS "-fsanitize=thread")
+  check_cxx_source_compiles(
+    "int main() { return 0; }"
+    MOLSHREDDER_COMPILER_SUPPORTS_THREAD_SANITIZER
+  )
+  cmake_pop_check_state()
+  if(NOT MOLSHREDDER_COMPILER_SUPPORTS_THREAD_SANITIZER)
+    message(
+      FATAL_ERROR
+      "The selected C++ compiler cannot compile and link ThreadSanitizer"
+    )
+  endif()
+  add_compile_options(
+    $<$<COMPILE_LANGUAGE:CXX>:-fsanitize=thread>
+    $<$<COMPILE_LANGUAGE:CXX>:-fno-omit-frame-pointer>
+  )
+  add_link_options(-fsanitize=thread)
 endif()
 
 function(molshredder_enable_warnings target_name)
@@ -189,6 +227,8 @@ if(BUILD_TESTING)
       "${CMAKE_CURRENT_BINARY_DIR}/trajectory-partial-cell.nc")
   set(MOLSHREDDER_AMBER_NETCDF_MISSING_DATA_FIXTURE
       "${CMAKE_CURRENT_BINARY_DIR}/trajectory-missing-data.nc")
+  set(MOLSHREDDER_AMBER_NETCDF_RESTART_FIXTURE
+      "${CMAKE_CURRENT_BINARY_DIR}/restart.ncrst")
   add_test(
     NAME io.amber_netcdf_fixture_setup
     COMMAND molshredder_amber_netcdf_fixture_generator
@@ -197,6 +237,7 @@ if(BUILD_TESTING)
       "${MOLSHREDDER_AMBER_NETCDF_BAD_FIXTURE}"
       "${MOLSHREDDER_AMBER_NETCDF_PARTIAL_CELL_FIXTURE}"
       "${MOLSHREDDER_AMBER_NETCDF_MISSING_DATA_FIXTURE}"
+      "${MOLSHREDDER_AMBER_NETCDF_RESTART_FIXTURE}"
   )
   set_tests_properties(
     io.amber_netcdf_fixture_setup
@@ -272,6 +313,7 @@ target_sources(
     src/io/amber_ascii_reader.cpp
     src/io/binpos_reader.cpp
     src/io/lammps_dump_reader.cpp
+    src/io/molfile_provider.cpp
     src/io/molfile_reader.cpp
     src/io/mol2_reader.cpp
     src/io/psf_reader.cpp
@@ -336,6 +378,7 @@ target_sources(
       include/molshredder/command/serialization.hpp
       include/molshredder/io/structure_reader.hpp
       include/molshredder/io/structure_writer.hpp
+      include/molshredder/io/molfile_provider.hpp
       include/molshredder/io/format_capabilities.hpp
       include/molshredder/io/trajectory_reader.hpp
       include/molshredder/io/trajectory_writer.hpp
@@ -366,6 +409,7 @@ target_compile_features(molshredder_core PUBLIC cxx_std_20)
 target_link_libraries(
   molshredder_core PUBLIC Threads::Threads netCDF::netcdf
                            ${MOLSHREDDER_HDF5_TARGET}
+                  PRIVATE ${CMAKE_DL_LIBS}
 )
 target_include_directories(
   molshredder_core
@@ -388,6 +432,48 @@ set_target_properties(
 )
 
 molshredder_enable_warnings(molshredder_core)
+
+add_library(molshredder_automation STATIC)
+add_library(MolShredder::Automation ALIAS molshredder_automation)
+target_sources(
+  molshredder_automation
+  PRIVATE
+    src/automation/python_script.cpp
+    src/python/bindings.cpp
+  PUBLIC
+    FILE_SET HEADERS
+    BASE_DIRS include
+    FILES include/molshredder/automation/python_script.hpp
+)
+target_include_directories(
+  molshredder_automation
+  PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/python"
+    ${Python3_INCLUDE_DIRS}
+    ${pybind11_INCLUDE_DIRS}
+)
+target_compile_features(molshredder_automation PUBLIC cxx_std_20)
+target_link_libraries(molshredder_automation PUBLIC MolShredder::Core)
+set_target_properties(
+  molshredder_automation
+  PROPERTIES CXX_EXTENSIONS OFF POSITION_INDEPENDENT_CODE ON
+)
+molshredder_enable_warnings(molshredder_automation)
+
+add_library(molshredder_embedded_python STATIC src/python/embedded_module.cpp)
+target_include_directories(
+  molshredder_embedded_python PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/python"
+)
+target_compile_features(molshredder_embedded_python PRIVATE cxx_std_20)
+target_link_libraries(
+  molshredder_embedded_python PUBLIC MolShredder::Automation
+                              PRIVATE pybind11::embed
+)
+set_target_properties(
+  molshredder_embedded_python
+  PROPERTIES CXX_EXTENSIONS OFF POSITION_INDEPENDENT_CODE ON
+)
+molshredder_enable_warnings(molshredder_embedded_python)
 
 add_library(molshredder_gui STATIC)
 add_library(MolShredder::Gui ALIAS molshredder_gui)
@@ -437,7 +523,12 @@ molshredder_enable_warnings(molshredder_cli)
 
 add_executable(molshredder apps/cli/main.cpp)
 target_compile_features(molshredder PRIVATE cxx_std_20)
-target_link_libraries(molshredder PRIVATE MolShredder::Cli)
+target_include_directories(
+  molshredder PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/python"
+)
+target_link_libraries(
+  molshredder PRIVATE MolShredder::Cli molshredder_embedded_python
+)
 set_target_properties(molshredder PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
 molshredder_enable_warnings(molshredder)
 
@@ -450,7 +541,10 @@ set_target_properties(
     INSTALL_RPATH_USE_LINK_PATH TRUE
 )
 target_compile_features(molshredder_python PRIVATE cxx_std_20)
-target_link_libraries(molshredder_python PRIVATE MolShredder::Core)
+target_include_directories(
+  molshredder_python PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/python"
+)
+target_link_libraries(molshredder_python PRIVATE MolShredder::Automation)
 molshredder_enable_warnings(molshredder_python)
 
 if(MOLSHREDDER_BUILD_DESKTOP)
@@ -891,7 +985,12 @@ if(MOLSHREDDER_BUILD_DESKTOP)
 endif()
 
 install(
-  TARGETS molshredder molshredder_core molshredder_gui molshredder_cli
+  TARGETS
+    molshredder
+    molshredder_core
+    molshredder_automation
+    molshredder_gui
+    molshredder_cli
   EXPORT MolShredderTargets
   RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
   LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
@@ -906,7 +1005,9 @@ install(
 )
 
 install(
-  FILES docs/schemas/result-envelope-v1.schema.json
+  FILES
+    docs/schemas/result-envelope-v1.schema.json
+    docs/schemas/result-envelope-v2.schema.json
   DESTINATION "${CMAKE_INSTALL_DATADIR}/molshredder/schemas"
 )
 install(
@@ -1028,6 +1129,73 @@ if(BUILD_TESTING)
   add_executable(
     molshredder_structure_reader_tests
     tests/io/structure_reader_test.cpp
+  )
+
+  foreach(
+    MOLSHREDDER_MOLFILE_TEST_VARIANT
+    IN ITEMS valid alternate incompatible duplicate missing_entry wrong_type
+  )
+    add_library(
+      molshredder_molfile_test_${MOLSHREDDER_MOLFILE_TEST_VARIANT}
+      SHARED tests/support/molfile_test_plugin.cpp
+    )
+    target_compile_features(
+      molshredder_molfile_test_${MOLSHREDDER_MOLFILE_TEST_VARIANT}
+      PRIVATE cxx_std_20
+    )
+    target_include_directories(
+      molshredder_molfile_test_${MOLSHREDDER_MOLFILE_TEST_VARIANT}
+      PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/io"
+    )
+    set_target_properties(
+      molshredder_molfile_test_${MOLSHREDDER_MOLFILE_TEST_VARIANT}
+      PROPERTIES CXX_EXTENSIONS OFF
+    )
+    molshredder_enable_warnings(
+      molshredder_molfile_test_${MOLSHREDDER_MOLFILE_TEST_VARIANT}
+    )
+  endforeach()
+  target_compile_definitions(
+    molshredder_molfile_test_alternate
+    PRIVATE MOLSHREDDER_TEST_NAME="pqr_alt" MOLSHREDDER_TEST_SLOW_INIT=1
+  )
+  target_compile_definitions(
+    molshredder_molfile_test_incompatible PRIVATE MOLSHREDDER_TEST_ABI=17
+  )
+  target_compile_definitions(
+    molshredder_molfile_test_duplicate PRIVATE MOLSHREDDER_TEST_DUPLICATE=1
+  )
+  target_compile_definitions(
+    molshredder_molfile_test_missing_entry
+    PRIVATE MOLSHREDDER_TEST_OMIT_FINI=1
+  )
+  target_compile_definitions(
+    molshredder_molfile_test_wrong_type
+    PRIVATE MOLSHREDDER_TEST_WRONG_TYPE=1
+  )
+
+  add_executable(
+    molshredder_molfile_provider_tests
+    tests/io/molfile_provider_test.cpp
+  )
+  target_compile_features(
+    molshredder_molfile_provider_tests PRIVATE cxx_std_20
+  )
+  target_link_libraries(
+    molshredder_molfile_provider_tests PRIVATE MolShredder::Core
+  )
+  molshredder_enable_warnings(molshredder_molfile_provider_tests)
+  add_test(
+    NAME io.molfile_provider
+    COMMAND
+      molshredder_molfile_provider_tests
+      $<TARGET_FILE:molshredder_molfile_test_valid>
+      $<TARGET_FILE:molshredder_molfile_test_alternate>
+      $<TARGET_FILE:molshredder_molfile_test_incompatible>
+      $<TARGET_FILE:molshredder_molfile_test_duplicate>
+      $<TARGET_FILE:molshredder_molfile_test_missing_entry>
+      $<TARGET_FILE:molshredder_molfile_test_wrong_type>
+      "${CMAKE_CURRENT_BINARY_DIR}"
   )
 
   add_executable(
@@ -1212,6 +1380,7 @@ if(BUILD_TESTING)
       "${MOLSHREDDER_AMBER_NETCDF_BAD_FIXTURE}"
       "${MOLSHREDDER_AMBER_NETCDF_PARTIAL_CELL_FIXTURE}"
       "${MOLSHREDDER_AMBER_NETCDF_MISSING_DATA_FIXTURE}"
+      "${MOLSHREDDER_AMBER_NETCDF_RESTART_FIXTURE}"
   )
   set_tests_properties(
     io.amber_netcdf_reader PROPERTIES FIXTURES_REQUIRED amber_netcdf_fixture
@@ -1640,6 +1809,25 @@ if(BUILD_TESTING)
       "$<TARGET_FILE:molshredder_gui_probe>"
   )
 
+  add_test(
+    NAME frontend.python_script_parity
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/python_script_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "$<TARGET_FILE:molshredder>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/automation/fixtures/success.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/automation/fixtures/failure_after_mutation.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/synthetic_multimodel.pdb"
+  )
+
+  add_test(
+    NAME frontend.console_script_portability
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/console_script_test.py"
+  )
+
   add_executable(
     molshredder_analysis_probe
     tests/frontend/analysis_probe.cpp
@@ -1666,6 +1854,17 @@ if(BUILD_TESTING)
       "$<TARGET_FILE:molshredder_python>"
       "$<TARGET_FILE:molshredder>"
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/synthetic_multimodel.pdb"
+  )
+
+  add_test(
+    NAME frontend.molfile_provider_parity
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/molfile_provider_frontend_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "$<TARGET_FILE:molshredder>"
+      "$<TARGET_FILE:molshredder_molfile_test_valid>"
+      "${CMAKE_CURRENT_BINARY_DIR}"
   )
 
   add_test(
@@ -1725,6 +1924,17 @@ if(BUILD_TESTING)
   )
   set_tests_properties(
     frontend.trr_writer_parity PROPERTIES FIXTURES_REQUIRED trr_fixture
+  )
+
+  add_test(
+    NAME frontend.dcd_writer_parity
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/dcd_writer_frontend_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "$<TARGET_FILE:molshredder>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/multiframe.xyz"
+      "${CMAKE_CURRENT_BINARY_DIR}"
   )
 
   add_test(

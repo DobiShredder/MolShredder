@@ -25,12 +25,12 @@ molshredder analyze trajectory rmsd|rmsf [--selection EXPR]
                                         [--missing error|skip]
                                         [--precision 0..15]
                                         [--unit angstrom|nanometer]
-molshredder traj load --path PATH [--file-format auto|dcd|trr|xtc|mdcrd|crd|netcdf|nc|ncdf|h5md|rst7|lammps|binpos]
+molshredder traj load --path PATH [--file-format auto|dcd|trr|xtc|mdcrd|crd|crdbox|netcdf|nc|ncdf|ncrst|h5md|rst7|lammps|binpos] [--provider auto|native]
                                       [--coordinate-unit auto|angstrom|nanometer]
                                       [--particle-group NAME]
                                       [--cache-mib POSITIVE_INTEGER]
                                       [--prefetch-frames NON_NEGATIVE_INTEGER]
-molshredder traj save --path PATH [--file-format auto|rst7|trr]
+molshredder traj save --path PATH [--file-format auto|dcd|binpos|rst7|trr|mdcrd|crd|crdbox] [--provider auto|native]
                                       [--title TEXT] [--overwrite false|true]
 molshredder traj frame --frame ZERO_BASED_INDEX
 molshredder traj play [--mode once|loop|rock]
@@ -43,6 +43,9 @@ molshredder traj tick --elapsed-ms NON_NEGATIVE_NUMBER
 molshredder traj pause
 ```
 
+Load/save의 `--provider`는 structure·volume command와 같은 schema v3 선택 정책을 사용한다. Explicit provider가
+요청 방향을 지원하지 않으면 silent fallback 없이 실패하며 성공 result는 provider provenance를 반환한다.
+
 네 `analyze trajectory` command는 attached cache의 frame을 읽되 playback/current scene state를
 변경하지 않는다. Inclusive first/last, positive stride, metadata/provenance table 및 CSV/JSON 계약은
 [Time-series analysis](TIME_SERIES_ANALYSIS.md)에 둔다.
@@ -53,7 +56,7 @@ Python에서는 같은 순서로 `molshredder.invoke()`를 호출한다.
 ## Attach
 
 `traj load`는 active topology의 atom 수를 reader에 전달해 trajectory와 topology mismatch를 attach
-전에 거부한다. `auto`는 case-insensitive `.dcd`, `.trr`, `.xtc`, `.mdcrd`, `.crd`, `.nc`, `.ncdf`, `.netcdf`, `.h5md`, `.rst7`, `.restrt`, `.inpcrd`, `.inprst`
+전에 거부한다. `auto`는 case-insensitive `.dcd`, `.trr`, `.xtc`, `.mdcrd`, `.crd`, `.nc`, `.ncdf`, `.netcdf`, `.ncrst`, `.h5md`, `.rst7`, `.restrt`, `.inpcrd`, `.inprst`
 suffix를 사용하고 알 수 없는 suffix는 추정하지 않는다. 기본 cache budget은 256 MiB이며 decoded scientific payload의 상한이지 process RSS
 hard limit은 아니다.
 
@@ -62,17 +65,27 @@ box를 보존하고 native AKMA velocity는 20.455를 곱해 Å/ps로 정규화�
 attach 전에 실패한다. 1–2 atom file에서 optional trailing block이 velocity인지 box인지 구분할 수 없는
 경우에는 추정하지 않고 오류를 반환한다.
 
-`traj save`는 active object의 current frame을 같은 typed registry를 통해 Amber RST7 또는 GROMACS TRR로
+`traj save`는 active object의 current frame을 같은 typed registry를 통해 CHARMM24 DCD, Scripps BINPOS,
+Amber RST7, GROMACS TRR 또는 coordinate-only Amber MDCRD/CRD로
 쓴다. Coordinate, velocity, force, time, temperature와 unit cell 보존 여부, binary/text precision 및
-metadata loss를 JSON/table에 반환한다. TRR은 source step, physical time과 lambda가 모두 typed metadata로
+metadata loss를 JSON/table에 반환한다. DCD는 source step과 raw delta를 header에 보존하고 없으면 각각 0과 1을
+합성한 사실을 loss로 보고하며, unit cell은 실제 존재할 때만 cosine-encoded CHARMM extra block으로 쓴다. TRR은 source step, physical time과 lambda가 모두 typed metadata로
 존재해야 하며 누락값을 0으로 만들지 않는다.
+MDCRD/CRD writer는 current frame Cartesian coordinate를 Å 단위 F8.3, 한 줄 최대 10개 값으로 쓰고
+unit cell, velocity, step/time과 기타 metadata를 typed loss로 보고한다. `crdbox`는 coordinate 뒤에 세
+cell length를 F8.3으로 쓰고 matching PRMTOP의 shared angle이 있어야 다시 열 수 있다. 세 cell angle이 서로
+다른 cell은 CRDBOX로 축소하지 않고 오류를 반환한다. Multi-frame append는 후속 capability다.
+BINPOS는 portable little-endian float32 Å 한 frame을 쓰며 unit cell, step/time, velocity/force, title과
+auxiliary property 손실을 명시한다.
 CLI와 Python은 동일 operation을 호출하며 desktop GUI의 visible export control은 후속이다.
 
 MDCRD/CRD는 active topology atom count로 frame boundary를 찾고 open 시 byte offset만 index한다. 3-value
 box length에는 matching PRMTOP `BOX_DIMENSIONS` angle이 필요하며, 없으면 90°를 발명하지 않고 attach를
-거부한다. Format 자체에 step/time이 없으므로 frame index를 simulation step이나 physical time으로 표시하지 않는다.
+거부한다. `.crdbox` 또는 `--file-format crdbox`는 매 frame 뒤에 세 length가 있다고 명시하므로 coordinate
+line을 box로 추정하지 않는다. Format 자체에 step/time이 없으므로 frame index를 simulation step이나
+physical time으로 표시하지 않는다.
 
-Amber NetCDF는 `.nc/.ncdf/.netcdf` 또는 `--file-format netcdf`로 열고 global
+Amber NetCDF는 `.nc/.ncdf/.netcdf/.ncrst` 또는 `--file-format netcdf|ncrst`로 열고 global
 `Conventions=AMBER`, `ConventionVersion=1.0`, `spatial=x,y,z` 및 channel shape/unit을 검증한다.
 Classic/64-bit/NetCDF-4 storage, coordinate/velocity/force/time/temperature/cell scale factor와
 CPPTRAJ의 `compressedpos/vel/frc` integer compression을 지원한다. Cell length/angle은 함께 있어야 하며
@@ -86,15 +99,18 @@ H5MD는 `.h5md` 또는 `--file-format h5md`로 연다. `--particle-group`을 주
 timeline은 source step으로 position frame과 맞추며, 맞지 않는 optional channel은 해당 frame에서 생략한다.
 현재 arbitrary `/observables`, partial-periodic box, writer와 external/virtual HDF5 storage는 지원하지 않는다.
 
-LAMMPS custom text dump는 format에 length unit이 없으므로 `--coordinate-unit angstrom|nanometer`를 반드시
-명시한다. `auto`는 오류다. `units real`/`metal`의 native distance는 Å이지만 다른 unit style을 이름만 보고
-추정하지 않는다. Atom row는 frame마다 순서가 바뀔 수 있어 `id` column을 active topology의 complete unique
+LAMMPS custom text dump는 `ITEM: UNITS`가 없으면 length unit을 알 수 없으므로
+`--coordinate-unit angstrom|nanometer`를 반드시 명시한다. `auto`는 오류다. Header가 있으면 `real`/`metal`은
+Å, `nano`는 nm 선택과 일치해야 하며 다른 unit style은 현재 length/time model로 축소하지 않고 거부한다.
+Frame별 `ITEM: TIME`은 real=fs, metal=ps, nano=ns→ps로 typed time에 보존하고 complete `vx/vy/vz`도 같은
+time basis의 velocity buffer로 보존한다. Atom row는 frame마다 순서가 바뀔 수 있어 `id` column을 active topology의 complete unique
 source serial에 매핑하며, ID가 없거나 set이 다르면 attach 전에 실패한다. GUI의 `Traj Å`/`Traj nm` control도
 같은 parameter를 canonical action에 전달한다.
 
 Scripps BINPOS는 `.binpos` suffix 또는 `--file-format binpos`로 연다. Active topology atom count를 각
 frame record와 대조하고 이를 이용해 legacy native-endian file의 little/big byte order를 판별한다. 좌표는
-float32 Cartesian Å이며 format에 없는 unit cell, step/time, velocity/force를 생성하지 않는다.
+float32 Cartesian Å이며 format에 없는 unit cell, step/time, velocity/force를 생성하지 않는다. 같은 format
+선택으로 current frame을 canonical little-endian으로 저장하고 다시 attach할 수 있다.
 
 기본 read-ahead는 현재 direction/mode/range에서 방문할 다음 4 frame이다. `--prefetch-frames 0`은
 비활성화하며 양수 값은 sequence 크기 안에서 deduplicate된다. Attach, seek, range, step play와 tick은

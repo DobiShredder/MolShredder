@@ -143,7 +143,8 @@ bool remd_header(std::string_view line) {
 operation::Result<std::shared_ptr<const AmberAsciiCoordinateSource>>
 open_amber_ascii_trajectory(const std::filesystem::path &path,
                             std::size_t expected_atom_count,
-                            std::optional<double> box_angle_degrees) {
+                            std::optional<double> box_angle_degrees,
+                            AmberAsciiBoxLayout box_layout) {
   if (expected_atom_count == 0U ||
       expected_atom_count > std::numeric_limits<std::size_t>::max() / 3U) {
     return Result<std::shared_ptr<const AmberAsciiCoordinateSource>>::failure(
@@ -157,6 +158,13 @@ open_amber_ascii_trajectory(const std::filesystem::path &path,
         invalid(
             path,
             "topology box angle must be finite and between 0 and 180 degrees"));
+  }
+  if (box_layout == AmberAsciiBoxLayout::three_lengths &&
+      !box_angle_degrees.has_value()) {
+    return Result<std::shared_ptr<const AmberAsciiCoordinateSource>>::failure(
+        invalid(path,
+                "explicit CRDBOX requires the topology BOX_DIMENSIONS angle",
+                "attach CRDBOX to a matching PRMTOP with BOX_DIMENSIONS"));
   }
   std::ifstream input{path, std::ios::binary};
   if (!input) {
@@ -179,7 +187,8 @@ open_amber_ascii_trajectory(const std::filesystem::path &path,
 
   const auto coordinate_count = expected_atom_count * 3U;
   std::vector<std::uint64_t> offsets;
-  std::size_t box_value_count{};
+  std::size_t box_value_count{
+      box_layout == AmberAsciiBoxLayout::three_lengths ? 3U : 0U};
   std::size_t line_number{1U};
   bool first_frame = true;
   while (true) {
@@ -208,7 +217,16 @@ open_amber_ascii_trajectory(const std::filesystem::path &path,
       return Result<std::shared_ptr<const AmberAsciiCoordinateSource>>::failure(
           coordinates.error());
     }
-    if (first_frame) {
+    if (box_layout == AmberAsciiBoxLayout::three_lengths) {
+      auto box = read_box_line(input, path, box_value_count, line_number);
+      if (!box.has_value()) {
+        return Result<std::shared_ptr<const AmberAsciiCoordinateSource>>::
+            failure(box.error());
+      }
+      first_frame = false;
+    } else if (box_layout == AmberAsciiBoxLayout::coordinate_only) {
+      first_frame = false;
+    } else if (first_frame) {
       const auto candidate_position = input.tellg();
       if (candidate_position < std::streampos{}) {
         return Result<std::shared_ptr<const AmberAsciiCoordinateSource>>::

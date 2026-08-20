@@ -31,6 +31,9 @@ molshredder measure distance --from EXPR --to EXPR
                                [--mode atom|centroid|com|minimum|maximum|mean|closest]
                                [--pbc raw|minimum-image]
                                [--precision 0..15] [--unit angstrom|nanometer]
+molshredder script run --path SCRIPT.py --trust true
+                         [--arguments-json '["arg1","arg2"]']
+                         [--working-directory DIRECTORY]
 ```
 
 각 leaf command는 `--format text|json|csv`를 받는다. CSV 성공 출력은 typed table command에 한정한다.
@@ -44,6 +47,7 @@ MD vertical slice의 additive trajectory playback 및 time-series 문법은
 [Molecular objects and visibility](OBJECTS.md)에 둔다.
 Additive `format list`와 `save` 문법, atomic output 및 semantic loss table은
 [Structure writing](STRUCTURE_WRITING.md)에 둔다.
+외부 Python script 실행의 trust, provenance와 failure semantics는 [Automation](AUTOMATION.md)에 둔다.
 
 ## 의미
 

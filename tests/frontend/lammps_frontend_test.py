@@ -6,6 +6,8 @@ import pathlib
 import subprocess
 import sys
 
+from console_script import portable_console_script
+
 
 def require(condition: bool, message: str) -> None:
     if not condition:
@@ -50,7 +52,8 @@ def main() -> int:
         'invoke "traj frame" --frame "1"\n'
         "exit\n"
     )
-    completed = subprocess.run([str(cli_path), "console"], input=script,
+    completed = subprocess.run([str(cli_path), "console"],
+                               input=portable_console_script(script),
                                text=True, capture_output=True, check=True)
     cli_results = [
         json.loads(line[line.find('{"schema_version"'):])
@@ -62,10 +65,11 @@ def main() -> int:
 
     missing_unit = subprocess.run(
         [str(cli_path), "console"],
-        input=("format json\n"
-               f'invoke "load" --file-format "pdb" --path "{topology}"\n'
-               f'invoke "traj load" --file-format "lammps" '
-               f'--path "{trajectory}"\nexit\n'),
+        input=portable_console_script(
+            "format json\n"
+            f'invoke "load" --file-format "pdb" --path "{topology}"\n'
+            f'invoke "traj load" --file-format "lammps" '
+            f'--path "{trajectory}"\nexit\n'),
         text=True, capture_output=True, check=True)
     require("does not encode its coordinate unit" in missing_unit.stderr,
             "CLI must reject an implicit LAMMPS coordinate unit")

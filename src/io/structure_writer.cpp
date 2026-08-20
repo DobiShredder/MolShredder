@@ -60,7 +60,7 @@ StructureFormat resolve_format(StructureFormat requested,
                  [](unsigned char value) {
                    return static_cast<char>(std::tolower(value));
                  });
-  if (extension == ".xyz")
+  if (extension == ".xyz" || extension == ".xmol")
     return StructureFormat::xyz;
   if (extension == ".pdb" || extension == ".ent") {
     return StructureFormat::pdb;
@@ -2892,7 +2892,8 @@ operation::Result<StructureWriteReport> write_structure_file(
   if (options.format == StructureFormat::auto_detect) {
     return operation::Result<StructureWriteReport>::failure(invalid(
         "could not infer structure output format from path: " + path.string(),
-        "use a .cif/.mmcif/.g96/.gro/.mol/.psf/.sdf/.pqr/.xyz suffix or an "
+        "use a .cif/.mmcif/.g96/.gro/.mol/.psf/.sdf/.pqr/.xyz/.xmol suffix "
+        "or an "
         "explicit "
         "--file-format"));
   }

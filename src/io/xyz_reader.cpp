@@ -86,12 +86,25 @@ operation::Result<ParsedAtom> parse_atom(const SourceLine& line,
         source, line.number, "XYZ coordinates must be finite"));
   }
   std::uint8_t number{};
-  if (symbol != "X" && symbol != "x") {
+  unsigned int ordinal{};
+  const auto parsed_ordinal = std::from_chars(
+      symbol.data(), symbol.data() + symbol.size(), ordinal);
+  if (!symbol.empty() && parsed_ordinal.ec == std::errc{} &&
+      parsed_ordinal.ptr == symbol.data() + symbol.size()) {
+    if (ordinal > 118U) {
+      return operation::Result<ParsedAtom>::failure(parse_error(
+          source, line.number,
+          "XYZ atomic number must be between 0 and 118: " + symbol));
+    }
+    number = static_cast<std::uint8_t>(ordinal);
+    symbol = number == 0U ? "X" : std::string{element_symbol(number)};
+  } else if (symbol != "X" && symbol != "x") {
     const auto parsed_number = atomic_number(symbol);
     if (!parsed_number.has_value()) {
       return operation::Result<ParsedAtom>::failure(parse_error(
           source, line.number, "unknown XYZ element symbol: " + symbol,
-          "use an IUPAC element symbol or X for an unknown site"));
+          "use an IUPAC element symbol, atomic number, or X for an unknown "
+          "site"));
     }
     number = parsed_number.value();
     symbol = std::string{element_symbol(number)};

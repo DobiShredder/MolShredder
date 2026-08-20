@@ -15,7 +15,7 @@ molshredder system version --format json
 Interactive console에서는 `format text`, `format json` 또는 `format csv`로 이후 command의 형식을 바꾼다.
 기본값은 text다.
 
-## JSON schema v1
+## JSON schema v2
 
 한 command invocation은 newline으로 끝나는 JSON object 하나를 생성한다. 성공 object는 stdout,
 실패 object는 stderr로 출력되며 실패 시 process exit code는 0이 아니다. `command`에는 alias를
@@ -24,13 +24,13 @@ Interactive console에서는 `format text`, `format json` 또는 `format csv`로
 성공 예:
 
 ```json
-{"schema_version":1,"status":"ok","command":"invoke \"system version\"","summary":"MolShredder 0.1.0","data":{}}
+{"schema_version":2,"status":"ok","command":"invoke \"system version\"","summary":"MolShredder 0.1.0","data":{}}
 ```
 
 실패 예:
 
 ```json
-{"schema_version":1,"status":"error","command":"invoke \"analyze center\"","error":{"code":"invalid_argument","message":"missing required parameter: selection","suggestion":"provide the required parameter"}}
+{"schema_version":2,"status":"error","command":"invoke \"analyze center\"","error":{"code":"invalid_argument","message":"missing required parameter: selection","suggestion":"provide the required parameter","details":{}}}
 ```
 
 `data` value는 null, boolean, signed/unsigned 64-bit integer, finite double, UTF-8 string, array 또는
@@ -44,8 +44,13 @@ serializer가 0..15의 요청 decimal precision을 보존한다. Fixed decimal r
 zero를 제거하므로 반올림된 double의 binary artifact가 다시 노출되지 않는다. 일반 `double`은 기존
 round-trip representation을 유지한다.
 
-정식 machine-readable contract는 [result-envelope-v1.schema.json](schemas/result-envelope-v1.schema.json)에
-있다. Schema version 변경에는 새 schema 파일, migration/compatibility 검토와 golden fixture 갱신이
+V2는 실패에도 deterministic string map인 `error.details`를 추가한다. Script 실행처럼 실패 전에 출력이나
+state mutation이 발생할 수 있는 operation은 stdout/stderr, source hash와 partial-mutation provenance를 이
+field에 보존하면서도 `status=error`와 non-zero process exit를 유지한다. 일반 오류는 빈 object를 반환한다.
+
+현재 machine-readable contract는 [result-envelope-v2.schema.json](schemas/result-envelope-v2.schema.json)에
+있다. 이전 [v1 schema](schemas/result-envelope-v1.schema.json)는 이미 생성된 client와 기록을 해석하기 위해
+그대로 보존한다. Schema version 변경에는 새 schema 파일, migration/compatibility 검토와 golden fixture 갱신이
 필요하다.
 
 ## CSV table contract
@@ -57,6 +62,7 @@ locale과 무관한 round-trip text로 기록한다. UTF-8은 JSON과 동일하�
 CSV를 요청하면 `unsupported`를 반환한다.
 
 실패 envelope는 원래 operation error를 가리지 않도록
-`status,error_code,message,suggestion` header와 한 error row로 출력한다. CSV에는 summary와 global
+`status,error_code,message,suggestion,details` header와 한 error row로 출력한다. `details` cell은
+deterministic JSON object다. CSV에는 summary와 global
 field를 별도 preamble로 섞지 않는다. 따라서 time-series table은 selection, unit, frame, PBC 등
 행을 독립적으로 해석하는 데 필요한 provenance column을 포함해야 한다.

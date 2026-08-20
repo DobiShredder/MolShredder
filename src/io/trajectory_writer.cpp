@@ -65,6 +65,14 @@ TrajectoryFormat resolve_format(TrajectoryFormat requested,
   }
   if (extension == ".trr")
     return TrajectoryFormat::trr;
+  if (extension == ".dcd")
+    return TrajectoryFormat::dcd;
+  if (extension == ".mdcrd" || extension == ".crd")
+    return TrajectoryFormat::mdcrd;
+  if (extension == ".crdbox")
+    return TrajectoryFormat::crdbox;
+  if (extension == ".binpos")
+    return TrajectoryFormat::binpos;
   return TrajectoryFormat::auto_detect;
 }
 
@@ -111,6 +119,25 @@ operation::Result<std::string> fixed12(double value, std::string_view field) {
       std::string(12U - text.size(), ' ') + text);
 }
 
+operation::Result<std::string> fixed8(double value, std::string_view field) {
+  if (!std::isfinite(value)) {
+    return operation::Result<std::string>::failure(
+        invalid("Amber CRD " + std::string{field} + " must be finite"));
+  }
+  std::ostringstream output;
+  output.imbue(std::locale::classic());
+  output << std::fixed << std::setprecision(3) << value;
+  auto text = std::move(output).str();
+  if (text.size() > 8U) {
+    return operation::Result<std::string>::failure(invalid(
+        "Amber CRD " + std::string{field} +
+            " exceeds the F8.3 field: " + text,
+        "translate or rescale values before export"));
+  }
+  return operation::Result<std::string>::success(
+      std::string(8U - text.size(), ' ') + text);
+}
+
 operation::Result<double> metadata_number(const model::FrameMetadata &metadata,
                                           std::string_view name) {
   const auto found = metadata.fields.find(name);
@@ -140,6 +167,45 @@ void append_u32(std::string &output, std::uint32_t value) {
 
 void append_i32(std::string &output, std::int32_t value) {
   append_u32(output, std::bit_cast<std::uint32_t>(value));
+}
+
+void append_le_u32(std::string &output, std::uint32_t value) {
+  output.push_back(static_cast<char>(value & 0xffU));
+  output.push_back(static_cast<char>((value >> 8U) & 0xffU));
+  output.push_back(static_cast<char>((value >> 16U) & 0xffU));
+  output.push_back(static_cast<char>((value >> 24U) & 0xffU));
+}
+
+void put_le_u32(std::string &output, std::size_t offset,
+                std::uint32_t value) {
+  for (unsigned int index = 0; index < 4U; ++index) {
+    output[offset + index] =
+        static_cast<char>((value >> (index * 8U)) & 0xffU);
+  }
+}
+
+void put_le_i32(std::string &output, std::size_t offset, std::int32_t value) {
+  put_le_u32(output, offset, std::bit_cast<std::uint32_t>(value));
+}
+
+void put_le_f32(std::string &output, std::size_t offset, float value) {
+  put_le_u32(output, offset, std::bit_cast<std::uint32_t>(value));
+}
+
+void append_le_f32(std::string &output, float value) {
+  append_le_u32(output, std::bit_cast<std::uint32_t>(value));
+}
+
+void append_le_f64(std::string &output, double value) {
+  const auto bits = std::bit_cast<std::uint64_t>(value);
+  append_le_u32(output, static_cast<std::uint32_t>(bits & 0xffffffffU));
+  append_le_u32(output, static_cast<std::uint32_t>(bits >> 32U));
+}
+
+void append_le_record(std::string &output, std::string_view payload) {
+  append_le_u32(output, static_cast<std::uint32_t>(payload.size()));
+  output.append(payload);
+  append_le_u32(output, static_cast<std::uint32_t>(payload.size()));
 }
 
 template <typename Scalar>
@@ -213,6 +279,511 @@ operation::Result<double> force_component(const model::AtomProperty &property,
             invalid("TRR force properties must be float32 or float64"));
       },
       property.values);
+}
+
+operation::Result<SerializedTrajectoryFrame>
+write_dcd(const model::CoordinateFrame &frame, TrajectoryWriteOptions options,
+          operation::TaskContext &context) {
+  if (context.cancellation.is_cancelled()) {
+    return operation::Result<SerializedTrajectoryFrame>::failure(
+        {operation::ErrorCode::cancelled, "DCD export cancelled", {}});
+  }
+  if (frame.atom_count() == 0U ||
+      frame.atom_count() >
+          static_cast<std::size_t>(
+              std::numeric_limits<std::uint32_t>::max() / 4U)) {
+    return operation::Result<SerializedTrajectoryFrame>::failure(
+        invalid("DCD atom count exceeds the 32-bit coordinate record"));
+  }
+  for (std::size_t atom = 0; atom < frame.atom_count(); ++atom) {
+    if (!frame.atom_present(atom)) {
+      return operation::Result<SerializedTrajectoryFrame>::failure(invalid(
+          "DCD cannot represent missing atom " + std::to_string(atom + 1U),
+          "fill the atom or export a format with explicit presence"));
+    }
+  }
+
+  const auto &metadata = frame.metadata();
+  std::int32_t step{};
+  bool synthesized_step = false;
+  if (const auto found = metadata.fields.find("dcd.signed_step");
+      found != metadata.fields.end()) {
+    const auto parsed = std::from_chars(
+        found->second.data(), found->second.data() + found->second.size(), step);
+    if (parsed.ec != std::errc{} ||
+        parsed.ptr != found->second.data() + found->second.size()) {
+      return operation::Result<SerializedTrajectoryFrame>::failure(
+          invalid("DCD signed step metadata must be a 32-bit integer"));
+    }
+  } else if (metadata.source_step.has_value()) {
+    if (*metadata.source_step >
+        static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max())) {
+      return operation::Result<SerializedTrajectoryFrame>::failure(
+          invalid("DCD source step exceeds the signed 32-bit header field"));
+    }
+    step = static_cast<std::int32_t>(*metadata.source_step);
+  } else {
+    synthesized_step = true;
+  }
+
+  double delta = 1.0;
+  bool synthesized_delta = true;
+  if (const auto found = metadata.fields.find("dcd.raw_delta");
+      found != metadata.fields.end()) {
+    const auto parsed = std::from_chars(
+        found->second.data(), found->second.data() + found->second.size(),
+        delta);
+    if (parsed.ec != std::errc{} ||
+        parsed.ptr != found->second.data() + found->second.size() ||
+        !std::isfinite(delta) || delta <= 0.0) {
+      return operation::Result<SerializedTrajectoryFrame>::failure(
+          invalid("DCD raw delta metadata must be a positive finite number"));
+    }
+    synthesized_delta = false;
+  }
+  const auto narrowed_delta = static_cast<float>(delta);
+  if (!std::isfinite(narrowed_delta)) {
+    return operation::Result<SerializedTrajectoryFrame>::failure(
+        invalid("DCD raw delta exceeds float32 range"));
+  }
+
+  auto title = std::move(options.title);
+  if (title.empty()) {
+    const auto found = metadata.fields.find("dcd.title");
+    title = found == metadata.fields.end() ? "MolShredder DCD frame"
+                                           : found->second;
+  }
+  bool title_changed = false;
+  for (auto &character : title) {
+    const auto code = static_cast<unsigned char>(character);
+    if (code < 0x20U || code == 0x7fU) {
+      character = ' ';
+      title_changed = true;
+    }
+  }
+  if (title.size() > 80U) {
+    title.resize(80U);
+    title_changed = true;
+  }
+
+  const auto has_cell = metadata.unit_cell.has_value();
+  if (has_cell && !metadata.unit_cell->is_valid()) {
+    return operation::Result<SerializedTrajectoryFrame>::failure(
+        invalid("DCD unit cell is invalid"));
+  }
+
+  std::string output;
+  const auto coordinate_bytes = frame.atom_count() * 4U;
+  output.reserve(116U + 92U + 12U +
+                 (has_cell ? 56U : 0U) + 3U * (coordinate_bytes + 8U));
+  std::string header(84U, '\0');
+  std::copy_n("CORD", 4U, header.begin());
+  put_le_i32(header, 4U, 1);
+  put_le_i32(header, 8U, step);
+  put_le_i32(header, 12U, 1);
+  put_le_i32(header, 16U, step);
+  put_le_i32(header, 36U, 0);
+  put_le_f32(header, 40U, narrowed_delta);
+  put_le_i32(header, 44U, has_cell ? 1 : 0);
+  put_le_i32(header, 48U, 0);
+  put_le_i32(header, 80U, 24);
+  append_le_record(output, header);
+
+  std::string title_record(84U, ' ');
+  put_le_i32(title_record, 0U, 1);
+  std::copy(title.begin(), title.end(), title_record.begin() + 4);
+  append_le_record(output, title_record);
+  std::string atom_record;
+  atom_record.reserve(4U);
+  append_le_u32(atom_record, static_cast<std::uint32_t>(frame.atom_count()));
+  append_le_record(output, atom_record);
+
+  if (has_cell) {
+    const auto &cell = *metadata.unit_cell;
+    const auto a = length(cell.a);
+    const auto b = length(cell.b);
+    const auto c = length(cell.c);
+    const auto cos_gamma = dot(cell.a, cell.b) / (a * b);
+    const auto cos_beta = dot(cell.a, cell.c) / (a * c);
+    const auto cos_alpha = dot(cell.b, cell.c) / (b * c);
+    std::string cell_record;
+    cell_record.reserve(48U);
+    for (const auto value :
+         {a, cos_gamma, b, cos_beta, cos_alpha, c}) {
+      if (!std::isfinite(value)) {
+        return operation::Result<SerializedTrajectoryFrame>::failure(
+            invalid("DCD unit cell contains a non-finite value"));
+      }
+      append_le_f64(cell_record, value);
+    }
+    append_le_record(output, cell_record);
+  }
+
+  const auto coordinate_scale =
+      metadata.coordinate_unit == operation::LengthUnit::nanometer ? 10.0
+                                                                   : 1.0;
+  for (std::size_t axis = 0; axis < 3U; ++axis) {
+    std::string axis_record;
+    axis_record.reserve(coordinate_bytes);
+    for (std::size_t atom = 0; atom < frame.atom_count(); ++atom) {
+      if ((atom & 0x3fffU) == 0U && context.cancellation.is_cancelled()) {
+        return operation::Result<SerializedTrajectoryFrame>::failure(
+            {operation::ErrorCode::cancelled,
+             "DCD export cancelled while writing coordinates", {}});
+      }
+      const auto value = vector_at(frame.positions(), atom);
+      const auto component =
+          axis == 0U ? value.x : (axis == 1U ? value.y : value.z);
+      const auto narrowed = static_cast<float>(component * coordinate_scale);
+      if (!std::isfinite(narrowed)) {
+        return operation::Result<SerializedTrajectoryFrame>::failure(
+            invalid("DCD coordinates contain a non-finite or out-of-range "
+                    "value"));
+      }
+      append_le_f32(axis_record, narrowed);
+    }
+    append_le_record(output, axis_record);
+  }
+
+  std::vector<TrajectoryFormatLoss> losses;
+  losses.push_back({"coordinate_precision",
+                    static_cast<std::uint64_t>(frame.atom_count()) * 3U,
+                    "DCD coordinates are narrowed to float32"});
+  if (synthesized_step)
+    losses.push_back({"source_step", 1U,
+                      "DCD header step was synthesized as zero"});
+  if (synthesized_delta)
+    losses.push_back({"raw_delta", 1U,
+                      "DCD raw delta was synthesized as one without a time "
+                      "unit"});
+  if (static_cast<double>(narrowed_delta) != delta)
+    losses.push_back({"raw_delta_precision", 1U,
+                      "CHARMM DCD stores raw delta as float32"});
+  if (title_changed)
+    losses.push_back({"title", 1U,
+                      "DCD title was sanitized or truncated to 80 bytes"});
+  if (metadata.physical_time.has_value())
+    losses.push_back({"physical_time", 1U,
+                      "DCD raw delta has no typed physical-time unit"});
+  if (frame.velocities().has_value())
+    losses.push_back({"velocity", 1U,
+                      "coordinate DCD does not encode velocity vectors"});
+  if (!metadata.atom_properties.empty())
+    losses.push_back({"atom_properties",
+                      static_cast<std::uint64_t>(
+                          metadata.atom_properties.size()),
+                      "DCD does not encode per-atom property columns"});
+  std::uint64_t other_fields{};
+  for (const auto &[name, unused] : metadata.fields) {
+    static_cast<void>(unused);
+    if (name != "dcd.raw_delta" && name != "dcd.title" &&
+        name != "dcd.signed_step" && name != "dcd.fixed_atom_count" &&
+        name != "format")
+      ++other_fields;
+  }
+  if (other_fields != 0U)
+    losses.push_back({"frame_metadata", other_fields,
+                      "DCD does not encode auxiliary frame metadata"});
+  if (context.report_progress)
+    context.report_progress({1.0, "write-dcd"});
+  return operation::Result<SerializedTrajectoryFrame>::success(
+      SerializedTrajectoryFrame{
+          std::move(output),
+          TrajectoryWriteReport{TrajectoryFormat::dcd,
+                                frame.atom_count(),
+                                0U,
+                                false,
+                                false,
+                                false,
+                                false,
+                                has_cell,
+                                TrrPrecision::float32,
+                                std::move(losses)}});
+}
+
+operation::Result<SerializedTrajectoryFrame>
+write_mdcrd(const model::CoordinateFrame &frame,
+            TrajectoryWriteOptions options,
+            operation::TaskContext &context) {
+  const auto write_box = options.format == TrajectoryFormat::crdbox;
+  const std::string format_name =
+      write_box ? "Amber CRDBOX" : "Amber CRD";
+  if (context.cancellation.is_cancelled()) {
+    return operation::Result<SerializedTrajectoryFrame>::failure(
+        {operation::ErrorCode::cancelled, format_name + " export cancelled",
+         {}});
+  }
+  if (frame.atom_count() == 0U) {
+    return operation::Result<SerializedTrajectoryFrame>::failure(
+        invalid(format_name + " export requires at least one atom"));
+  }
+  for (std::size_t atom = 0U; atom < frame.atom_count(); ++atom) {
+    if (!frame.atom_present(atom)) {
+      return operation::Result<SerializedTrajectoryFrame>::failure(invalid(
+          format_name + " cannot represent missing atom " +
+              std::to_string(atom + 1U),
+          "fill the atom or export a format with explicit presence"));
+    }
+  }
+
+  const auto &metadata = frame.metadata();
+  if (write_box && !metadata.unit_cell.has_value()) {
+    return operation::Result<SerializedTrajectoryFrame>::failure(invalid(
+        "Amber CRDBOX export requires a typed unit cell",
+        "use CRD for a non-periodic frame or attach periodic cell metadata"));
+  }
+  if (write_box) {
+    const auto &cell = *metadata.unit_cell;
+    const auto alpha = angle(cell.b, cell.c);
+    const auto beta = angle(cell.a, cell.c);
+    const auto gamma = angle(cell.a, cell.b);
+    constexpr double angle_tolerance = 1.0e-6;
+    if (std::abs(alpha - beta) > angle_tolerance ||
+        std::abs(alpha - gamma) > angle_tolerance) {
+      return operation::Result<SerializedTrajectoryFrame>::failure(invalid(
+          "Amber CRDBOX can represent only three lengths and one shared "
+          "topology angle",
+          "use a trajectory format that stores all three cell angles"));
+    }
+  }
+  auto title = std::move(options.title);
+  if (title.empty()) {
+    const auto found = metadata.fields.find("title");
+    title = found == metadata.fields.end() ? "MolShredder Amber trajectory"
+                                           : found->second;
+  }
+  bool title_changed{};
+  for (auto &character : title) {
+    const auto code = static_cast<unsigned char>(character);
+    if (code < 0x20U || code == 0x7fU) {
+      character = ' ';
+      title_changed = true;
+    }
+  }
+  if (title.size() > 80U) {
+    title.resize(80U);
+    title_changed = true;
+  }
+
+  const auto coordinate_scale =
+      metadata.coordinate_unit == operation::LengthUnit::nanometer ? 10.0
+                                                                   : 1.0;
+  std::string output;
+  output.reserve(title.size() + 1U + frame.atom_count() * 24U +
+                 (frame.atom_count() * 3U + 9U) / 10U);
+  output += title;
+  output.push_back('\n');
+  std::size_t field_count{};
+  for (std::size_t atom = 0U; atom < frame.atom_count(); ++atom) {
+    if ((atom & 0x3fffU) == 0U && context.cancellation.is_cancelled()) {
+      return operation::Result<SerializedTrajectoryFrame>::failure(
+          {operation::ErrorCode::cancelled,
+           format_name + " export cancelled while writing coordinates", {}});
+    }
+    const auto coordinate = vector_at(frame.positions(), atom);
+    for (const auto component : {coordinate.x, coordinate.y, coordinate.z}) {
+      auto formatted = fixed8(component * coordinate_scale, "coordinate");
+      if (!formatted.has_value()) {
+        return operation::Result<SerializedTrajectoryFrame>::failure(
+            formatted.error());
+      }
+      output += formatted.value();
+      ++field_count;
+      if (field_count % 10U == 0U)
+        output.push_back('\n');
+    }
+  }
+  if (field_count % 10U != 0U)
+    output.push_back('\n');
+  if (write_box) {
+    const auto &cell = *metadata.unit_cell;
+    for (const auto cell_length :
+         {length(cell.a), length(cell.b), length(cell.c)}) {
+      auto formatted =
+          fixed8(cell_length * coordinate_scale, "unit-cell length");
+      if (!formatted.has_value()) {
+        return operation::Result<SerializedTrajectoryFrame>::failure(
+            formatted.error());
+      }
+      output += formatted.value();
+    }
+    output.push_back('\n');
+  }
+
+  std::vector<TrajectoryFormatLoss> losses;
+  losses.push_back(
+      {"coordinate_precision",
+       static_cast<std::uint64_t>(frame.atom_count()) * 3U,
+       "Amber CRD coordinates use fixed F8.3 decimal fields"});
+  if (title_changed) {
+    losses.push_back(
+        {"title", 1U,
+         "Amber CRD title was sanitized or truncated to 80 characters"});
+  }
+  if (!write_box && metadata.unit_cell.has_value()) {
+    losses.push_back(
+        {"unit_cell", 1U,
+         "coordinate-only CRD output omits the periodic box; use explicit "
+         "CRDBOX output"});
+  } else if (write_box) {
+    losses.push_back(
+        {"unit_cell_angles", 3U,
+         "Amber CRDBOX stores three lengths; the shared cell angle remains "
+         "defined by the matching topology"});
+  }
+  if (frame.velocities().has_value()) {
+    losses.push_back(
+        {"velocity", 1U,
+         format_name + " does not encode velocity vectors"});
+  }
+  if (metadata.physical_time.has_value()) {
+    losses.push_back(
+        {"physical_time", 1U,
+         format_name + " does not encode typed physical time"});
+  }
+  if (metadata.source_step.has_value()) {
+    losses.push_back(
+        {"source_step", 1U,
+         format_name + " does not encode a source step identifier"});
+  }
+  if (!metadata.atom_properties.empty()) {
+    losses.push_back(
+        {"atom_properties",
+         static_cast<std::uint64_t>(metadata.atom_properties.size()),
+         format_name + " does not encode per-atom property columns"});
+  }
+  std::uint64_t other_fields{};
+  for (const auto &[name, unused] : metadata.fields) {
+    static_cast<void>(unused);
+    if (name != "title" && name != "format" &&
+        name != "coordinate_field" && name != "box_angle_source")
+      ++other_fields;
+  }
+  if (other_fields != 0U) {
+    losses.push_back(
+        {"frame_metadata", other_fields,
+         format_name + " does not encode auxiliary frame metadata"});
+  }
+  if (context.report_progress)
+    context.report_progress({1.0, write_box ? "write-crdbox" : "write-mdcrd"});
+  return operation::Result<SerializedTrajectoryFrame>::success(
+      SerializedTrajectoryFrame{
+          std::move(output),
+          TrajectoryWriteReport{options.format,
+                                frame.atom_count(),
+                                0U,
+                                false,
+                                false,
+                                false,
+                                false,
+                                write_box,
+                                std::nullopt,
+                                std::move(losses)}});
+}
+
+operation::Result<SerializedTrajectoryFrame>
+write_binpos(const model::CoordinateFrame &frame,
+             TrajectoryWriteOptions options,
+             operation::TaskContext &context) {
+  if (context.cancellation.is_cancelled()) {
+    return operation::Result<SerializedTrajectoryFrame>::failure(
+        {operation::ErrorCode::cancelled, "BINPOS export cancelled", {}});
+  }
+  if (frame.atom_count() == 0U ||
+      frame.atom_count() >
+          static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max()) ||
+      frame.atom_count() >
+          (std::numeric_limits<std::size_t>::max() - 8U) / 12U) {
+    return operation::Result<SerializedTrajectoryFrame>::failure(
+        invalid("BINPOS atom count must fit a positive signed 32-bit field"));
+  }
+  for (std::size_t atom = 0U; atom < frame.atom_count(); ++atom) {
+    if (!frame.atom_present(atom)) {
+      return operation::Result<SerializedTrajectoryFrame>::failure(invalid(
+          "BINPOS cannot represent missing atom " + std::to_string(atom + 1U),
+          "fill the atom or export a format with explicit presence"));
+    }
+  }
+
+  const auto &metadata = frame.metadata();
+  const auto coordinate_scale =
+      metadata.coordinate_unit == operation::LengthUnit::nanometer ? 10.0
+                                                                   : 1.0;
+  std::string output;
+  output.reserve(8U + frame.atom_count() * 12U);
+  output.append("fxyz", 4U);
+  append_le_u32(output, static_cast<std::uint32_t>(frame.atom_count()));
+  for (std::size_t atom = 0U; atom < frame.atom_count(); ++atom) {
+    if ((atom & 0x3fffU) == 0U && context.cancellation.is_cancelled()) {
+      return operation::Result<SerializedTrajectoryFrame>::failure(
+          {operation::ErrorCode::cancelled,
+           "BINPOS export cancelled while writing coordinates", {}});
+    }
+    const auto coordinate = vector_at(frame.positions(), atom);
+    for (const auto component :
+         {coordinate.x, coordinate.y, coordinate.z}) {
+      const auto scaled = component * coordinate_scale;
+      const auto narrowed = static_cast<float>(scaled);
+      if (!std::isfinite(scaled) || !std::isfinite(narrowed)) {
+        return operation::Result<SerializedTrajectoryFrame>::failure(
+            invalid("BINPOS coordinate is non-finite or exceeds float32 range"));
+      }
+      append_le_f32(output, narrowed);
+    }
+  }
+
+  std::vector<TrajectoryFormatLoss> losses;
+  if (frame.positions().precision() == model::CoordinatePrecision::float64) {
+    losses.push_back(
+        {"coordinate_precision",
+         static_cast<std::uint64_t>(frame.atom_count()) * 3U,
+         "BINPOS stores Cartesian coordinates as float32"});
+  }
+  if (!options.title.empty())
+    losses.push_back({"title", 1U, "BINPOS does not encode a title"});
+  if (metadata.unit_cell.has_value())
+    losses.push_back({"unit_cell", 1U, "BINPOS does not encode a unit cell"});
+  if (frame.velocities().has_value())
+    losses.push_back({"velocity", 1U,
+                      "BINPOS does not encode velocity vectors"});
+  if (metadata.physical_time.has_value())
+    losses.push_back(
+        {"physical_time", 1U, "BINPOS does not encode physical time"});
+  if (metadata.source_step.has_value())
+    losses.push_back(
+        {"source_step", 1U, "BINPOS does not encode a source step"});
+  if (!metadata.atom_properties.empty()) {
+    losses.push_back(
+        {"atom_properties",
+         static_cast<std::uint64_t>(metadata.atom_properties.size()),
+         "BINPOS does not encode per-atom property columns"});
+  }
+  std::uint64_t metadata_fields{};
+  for (const auto &[name, unused] : metadata.fields) {
+    static_cast<void>(unused);
+    if (name != "format" && name != "byte_order" &&
+        name != "coordinate_unit_source")
+      ++metadata_fields;
+  }
+  if (metadata_fields != 0U) {
+    losses.push_back({"frame_metadata", metadata_fields,
+                      "BINPOS does not encode auxiliary frame metadata"});
+  }
+  if (context.report_progress)
+    context.report_progress({1.0, "write-binpos"});
+  return operation::Result<SerializedTrajectoryFrame>::success(
+      SerializedTrajectoryFrame{
+          std::move(output),
+          TrajectoryWriteReport{TrajectoryFormat::binpos,
+                                frame.atom_count(),
+                                0U,
+                                false,
+                                false,
+                                false,
+                                false,
+                                false,
+                                std::nullopt,
+                                std::move(losses)}});
 }
 
 template <typename Scalar>
@@ -739,16 +1310,28 @@ serialize_trajectory_frame(const model::CoordinateFrame &frame,
                            operation::TaskContext &context) {
   options.format = resolve_format(options.format);
   if (options.format != TrajectoryFormat::rst7 &&
-      options.format != TrajectoryFormat::trr) {
+      options.format != TrajectoryFormat::trr &&
+      options.format != TrajectoryFormat::dcd &&
+      options.format != TrajectoryFormat::mdcrd &&
+      options.format != TrajectoryFormat::crdbox &&
+      options.format != TrajectoryFormat::binpos) {
     return operation::Result<SerializedTrajectoryFrame>::failure(
         {operation::ErrorCode::unsupported,
          "trajectory writer does not support format: " +
              std::string{to_string(options.format)},
-         "use Amber RST7 or GROMACS TRR output"});
+         "use DCD, BINPOS, Amber CRD/RST7 or GROMACS TRR output"});
   }
-  auto result = options.format == TrajectoryFormat::trr
-                    ? write_trr(frame, context)
-                    : write_rst7(frame, std::move(options), context);
+  auto result =
+      options.format == TrajectoryFormat::dcd
+          ? write_dcd(frame, std::move(options), context)
+          : (options.format == TrajectoryFormat::binpos
+                 ? write_binpos(frame, std::move(options), context)
+                 : (options.format == TrajectoryFormat::mdcrd ||
+                     options.format == TrajectoryFormat::crdbox
+                 ? write_mdcrd(frame, std::move(options), context)
+                 : (options.format == TrajectoryFormat::trr
+                        ? write_trr(frame, context)
+                        : write_rst7(frame, std::move(options), context))));
   if (result.has_value())
     result.value().report.byte_count = result.value().content.size();
   return result;
@@ -763,8 +1346,8 @@ write_trajectory_frame_file(const std::filesystem::path &path,
   if (options.format == TrajectoryFormat::auto_detect) {
     return operation::Result<TrajectoryWriteReport>::failure(invalid(
         "could not infer trajectory output format from path: " + path.string(),
-        "use an .rst7/.restrt/.inpcrd/.inprst/.trr suffix or an explicit "
-        "--file-format"));
+        "use a .dcd/.binpos/.mdcrd/.crd/.crdbox/.rst7/.restrt/.inpcrd/.inprst/.trr suffix or an "
+        "explicit --file-format"));
   }
   if (path.empty() || path.filename().empty()) {
     return operation::Result<TrajectoryWriteReport>::failure(

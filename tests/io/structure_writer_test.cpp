@@ -672,6 +672,20 @@ int main(int argc, char **argv) {
   passed &= expect(replaced.has_value(),
                    "explicit overwrite must atomically replace XYZ output");
 
+  const auto xmol_output =
+      std::filesystem::path{argv[9]} / "writer_alias.xmol";
+  std::filesystem::remove(xmol_output, ignored);
+  auto xmol_options = current_options;
+  xmol_options.format = io::StructureFormat::auto_detect;
+  const auto xmol_written = io::write_structure_file(
+      xmol_output, *structure.topology, *structure.coordinates, xmol_options,
+      false, file_context);
+  passed &= expect(
+      xmol_written.has_value() &&
+          xmol_written.value().format == io::StructureFormat::xyz &&
+          std::filesystem::exists(xmol_output),
+      ".xmol output suffix must select the native XYZ writer");
+
   const auto cancelled_output =
       std::filesystem::path{argv[9]} / "writer_cancelled.xyz";
   std::filesystem::remove(cancelled_output, ignored);

@@ -248,7 +248,7 @@ operation::Result<std::shared_ptr<const DcdCoordinateSource>> open_dcd(
   const auto frame_count_value = decode_i32(header.data() + 4U, order);
   const auto start_step = decode_i32(header.data() + 8U, order);
   const auto save_interval = decode_i32(header.data() + 12U, order);
-  const auto fixed_atoms = decode_i32(header.data() + 20U, order);
+  const auto fixed_atoms = decode_i32(header.data() + 36U, order);
   const auto charmm_version = decode_i32(header.data() + 80U, order);
   const auto dialect = charmm_version == 0 ? DcdDialect::xplor
                                            : DcdDialect::charmm;
@@ -265,10 +265,6 @@ operation::Result<std::shared_ptr<const DcdCoordinateSource>> open_dcd(
   if (frame_count_value < 0 || save_interval <= 0 || fixed_atoms < 0) {
     return operation::Result<std::shared_ptr<const DcdCoordinateSource>>::failure(
         read_failure(path, "header contains invalid frame/timestep counts"));
-  }
-  if (fixed_atoms != 0) {
-    return operation::Result<std::shared_ptr<const DcdCoordinateSource>>::failure(
-        read_failure(path, "fixed-atom DCD trajectories are not supported yet"));
   }
   if (has_four_dimensions) {
     return operation::Result<std::shared_ptr<const DcdCoordinateSource>>::failure(
@@ -330,14 +326,55 @@ operation::Result<std::shared_ptr<const DcdCoordinateSource>> open_dcd(
                                std::to_string(expected_atom_count.value())));
   }
 
+  if (fixed_atoms >= atom_count_value) {
+    return operation::Result<std::shared_ptr<const DcdCoordinateSource>>::failure(
+        read_failure(path,
+                     "fixed-atom count must be smaller than atom count"));
+  }
+  std::vector<std::size_t> free_atom_indices;
+  if (fixed_atoms > 0) {
+    const auto free_count = atom_count - static_cast<std::size_t>(fixed_atoms);
+    const auto free_record = read_record(
+        input, order, static_cast<std::uint32_t>(free_count * 4U), path,
+        "free atom indices");
+    if (!free_record.has_value()) {
+      return operation::Result<std::shared_ptr<const DcdCoordinateSource>>::failure(
+          free_record.error());
+    }
+    std::vector<bool> seen(atom_count, false);
+    free_atom_indices.reserve(free_count);
+    for (std::size_t index = 0; index < free_count; ++index) {
+      const auto source_index =
+          decode_i32(free_record.value().data() + index * 4U, order);
+      if (source_index <= 0 ||
+          source_index > static_cast<std::int32_t>(atom_count)) {
+        return operation::Result<
+            std::shared_ptr<const DcdCoordinateSource>>::failure(
+            read_failure(path, "free atom index is outside atom count"));
+      }
+      const auto zero_based = static_cast<std::size_t>(source_index - 1);
+      if (seen[zero_based]) {
+        return operation::Result<
+            std::shared_ptr<const DcdCoordinateSource>>::failure(
+            read_failure(path, "free atom indices contain a duplicate"));
+      }
+      seen[zero_based] = true;
+      free_atom_indices.push_back(zero_based);
+    }
+  }
+
   std::vector<std::uint64_t> offsets;
-  const auto coordinate_bytes = static_cast<std::uint32_t>(atom_count * 4U);
   while (input.peek() != std::char_traits<char>::eof()) {
     const auto position = input.tellg();
     if (position < 0) {
       return operation::Result<std::shared_ptr<const DcdCoordinateSource>>::failure(
           read_failure(path, "failed to index a frame offset"));
     }
+    const auto frame_atom_count =
+        fixed_atoms > 0 && !offsets.empty() ? free_atom_indices.size()
+                                             : atom_count;
+    const auto coordinate_bytes =
+        static_cast<std::uint32_t>(frame_atom_count * 4U);
     offsets.push_back(static_cast<std::uint64_t>(position));
     if (has_unit_cell) {
       if (const auto error =
@@ -368,12 +405,14 @@ operation::Result<std::shared_ptr<const DcdCoordinateSource>> open_dcd(
                        start_step,
                        save_interval,
                        raw_delta,
+                       static_cast<std::size_t>(fixed_atoms),
                        has_unit_cell,
                        order,
                        dialect,
                        std::move(title)};
   auto source = std::shared_ptr<const DcdCoordinateSource>(
-      new DcdCoordinateSource(path, std::move(metadata), std::move(offsets)));
+      new DcdCoordinateSource(path, std::move(metadata), std::move(offsets),
+                              std::move(free_atom_indices)));
   return operation::Result<std::shared_ptr<const DcdCoordinateSource>>::success(
       std::move(source));
 }
@@ -409,9 +448,12 @@ DcdCoordinateSource::read_frame(std::size_t frame_index) const {
                     static_cast<std::int64_t>(metadata_.save_interval) *
                         static_cast<std::int64_t>(frame_index);
   if (step >= 0) frame_metadata.source_step = static_cast<std::uint64_t>(step);
+  frame_metadata.fields.emplace("dcd.signed_step", std::to_string(step));
   frame_metadata.fields.emplace("dcd.raw_delta",
                                 std::to_string(metadata_.raw_delta));
   frame_metadata.fields.emplace("dcd.title", metadata_.title);
+  frame_metadata.fields.emplace("dcd.fixed_atom_count",
+                                std::to_string(metadata_.fixed_atom_count));
   if (metadata_.has_unit_cell) {
     const auto cell_record =
         read_record(input, metadata_.byte_order, 48U, path_, "unit cell");
@@ -427,8 +469,12 @@ DcdCoordinateSource::read_frame(std::size_t frame_index) const {
     }
     frame_metadata.unit_cell = cell.value();
   }
+  const auto frame_atom_count =
+      frame_index > 0U && metadata_.fixed_atom_count > 0U
+          ? free_atom_indices_.size()
+          : metadata_.atom_count;
   const auto coordinate_bytes =
-      static_cast<std::uint32_t>(metadata_.atom_count * 4U);
+      static_cast<std::uint32_t>(frame_atom_count * 4U);
   std::array<std::vector<unsigned char>, 3> axes;
   for (std::size_t axis = 0; axis < axes.size(); ++axis) {
     const auto record = read_record(input, metadata_.byte_order,
@@ -440,12 +486,32 @@ DcdCoordinateSource::read_frame(std::size_t frame_index) const {
     axes[axis] = record.value();
   }
   std::vector<model::Vec3f> positions(metadata_.atom_count);
-  for (std::size_t atom = 0; atom < metadata_.atom_count; ++atom) {
-    positions[atom] = {decode_f32(axes[0].data() + atom * 4U,
+  if (frame_index > 0U && metadata_.fixed_atom_count > 0U) {
+    const auto first = read_frame(0U);
+    if (!first.has_value()) {
+      return operation::Result<
+          std::shared_ptr<const model::CoordinateFrame>>::failure(
+          first.error());
+    }
+    const auto *first_positions =
+        std::get_if<std::vector<model::Vec3f>>(
+            &first.value()->positions().values());
+    if (first_positions == nullptr) {
+      return operation::Result<
+          std::shared_ptr<const model::CoordinateFrame>>::failure(
+          read_failure(path_, "fixed-atom reference frame precision drift"));
+    }
+    positions = *first_positions;
+  }
+  for (std::size_t item = 0; item < frame_atom_count; ++item) {
+    const auto atom = frame_index > 0U && metadata_.fixed_atom_count > 0U
+                          ? free_atom_indices_[item]
+                          : item;
+    positions[atom] = {decode_f32(axes[0].data() + item * 4U,
                                   metadata_.byte_order),
-                       decode_f32(axes[1].data() + atom * 4U,
+                       decode_f32(axes[1].data() + item * 4U,
                                   metadata_.byte_order),
-                       decode_f32(axes[2].data() + atom * 4U,
+                       decode_f32(axes[2].data() + item * 4U,
                                   metadata_.byte_order)};
   }
   return model::CoordinateFrame::create(

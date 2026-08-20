@@ -1,10 +1,12 @@
 #include <algorithm>
 #include <iostream>
+#include <map>
 #include <set>
 #include <string>
 #include <string_view>
 
 #include "molshredder/io/format_capabilities.hpp"
+#include "molshredder/version.hpp"
 
 namespace {
 
@@ -21,7 +23,7 @@ int main() {
   using molshredder::io::FormatCapability;
   bool passed = true;
   const auto &capabilities = format_capabilities();
-  passed &= expect(molshredder::io::kFormatCapabilitySchemaVersion == 2U,
+  passed &= expect(molshredder::io::kFormatCapabilitySchemaVersion == 3U,
                    "format capability schema must remain versioned");
   passed &= expect(capabilities.size() == 24U,
                    "registry must enumerate every implemented format");
@@ -33,7 +35,72 @@ int main() {
         !capability.extensions.empty() && !capability.channels.empty() &&
             !capability.implementation.empty(),
         "every format requires extension/channel/implementation evidence");
+    const auto *read = molshredder::io::direction_capability(
+        capability, molshredder::io::FormatDirection::read);
+    const auto *write = molshredder::io::direction_capability(
+        capability, molshredder::io::FormatDirection::write);
+    passed &= expect(
+        capability.provider.id == "native" &&
+            capability.provider.version == molshredder::version() &&
+            capability.provider.origin ==
+                molshredder::io::FormatProviderOrigin::native_builtin &&
+            capability.provider.trust ==
+                molshredder::io::FormatProviderTrust::trusted_builtin &&
+            capability.provider.license_status ==
+                molshredder::io::FormatProviderLicenseStatus::approved &&
+            capability.provider.license_expression == "GPL-3.0-or-later" &&
+            capability.provider.available,
+        "every migrated format requires approved native provider provenance");
+    passed &= expect(
+        read != nullptr && write != nullptr &&
+            read->available == capability.readable &&
+            write->available == capability.writable &&
+            (read->available || !read->unavailable_reason.empty()) &&
+            (write->available || !write->unavailable_reason.empty()) &&
+            write->typed_loss_reporting == capability.writable,
+        "every migrated format requires directional availability and loss truth");
   }
+  const auto migrated = molshredder::io::migrate_format_capability_v2(
+      {"future", "structure", {".future"}, true, false, false, false, true,
+       false, {"coordinates"}, {"read_only"}, "native"},
+      {{"future.vendor_hint", "preserved"}});
+  passed &= expect(
+      migrated.id == "future" && migrated.readable && !migrated.writable &&
+          migrated.extension_fields.at("future.vendor_hint") == "preserved" &&
+          molshredder::io::direction_capability(
+              migrated, molshredder::io::FormatDirection::write)
+              ->unavailable_reason ==
+              "no registered write implementation for this format",
+      "schema-v2 migration must preserve unknown extension fields and add "
+      "directional unavailable reasons");
+  const auto native_xyz = molshredder::io::resolve_format_provider(
+      "xyz", molshredder::io::FormatDirection::write, "auto");
+  const auto unavailable_xtc = molshredder::io::resolve_format_provider(
+      "xtc", molshredder::io::FormatDirection::write, "native");
+  const auto unknown_provider = molshredder::io::resolve_format_provider(
+      "xyz", molshredder::io::FormatDirection::read, "untrusted-plugin");
+  const auto xmol_extension = molshredder::io::resolve_format_extension(
+      "XMOL", molshredder::io::FormatDirection::read, "auto");
+  const auto xtc_write_extension = molshredder::io::resolve_format_extension(
+      ".xtc", molshredder::io::FormatDirection::write, "auto");
+  const auto unknown_extension = molshredder::io::resolve_format_extension(
+      ".unknown", molshredder::io::FormatDirection::read, "auto");
+  passed &= expect(
+      native_xyz.has_value() && native_xyz.value().id == "native" &&
+          !unavailable_xtc.has_value() &&
+          unavailable_xtc.error().code ==
+              molshredder::operation::ErrorCode::unsupported &&
+          !unknown_provider.has_value() &&
+          unknown_provider.error().code ==
+              molshredder::operation::ErrorCode::unsupported &&
+          xmol_extension.has_value() &&
+          xmol_extension.value().format_id == "xyz" &&
+          xmol_extension.value().extension == ".xmol" &&
+          xmol_extension.value().provider.id == "native" &&
+          !xtc_write_extension.has_value() &&
+          !unknown_extension.has_value(),
+      "provider and extension resolution must be deterministic and never "
+      "silently fall back");
   const auto find =
       [&capabilities](std::string_view id) -> const FormatCapability * {
     const auto found = std::find_if(
@@ -44,7 +111,11 @@ int main() {
   const auto *xyz = find("xyz");
   passed &=
       expect(xyz != nullptr && xyz->readable && xyz->writable &&
-                 xyz->multi_frame && !xyz->multi_structure && xyz->streaming,
+                 xyz->multi_frame && !xyz->multi_structure && xyz->streaming &&
+                 std::find(xyz->extensions.begin(), xyz->extensions.end(),
+                           ".xmol") != xyz->extensions.end() &&
+                 std::find(xyz->channels.begin(), xyz->channels.end(),
+                           "atomic_number") != xyz->channels.end(),
              "XYZ registry row must match native read/write behavior");
   const auto *pdb = find("pdb");
   passed &=
@@ -171,14 +242,17 @@ int main() {
           std::find(prmtop->channels.begin(), prmtop->channels.end(),
                     "topology_only") != prmtop->channels.end(),
       "PRMTOP registry row must expose read-only Amber topology semantics");
-  for (const auto id : {"dcd", "xtc"}) {
-    const auto *trajectory = find(id);
-    passed &=
-        expect(trajectory != nullptr && trajectory->readable &&
-                   !trajectory->writable && trajectory->random_access &&
-                   trajectory->streaming,
-               "trajectory registry row must match indexed read-only behavior");
-  }
+  const auto *dcd = find("dcd");
+  passed &= expect(
+      dcd != nullptr && dcd->readable && dcd->writable &&
+          dcd->random_access && dcd->streaming &&
+          std::find(dcd->channels.begin(), dcd->channels.end(), "raw_delta") !=
+              dcd->channels.end(),
+      "DCD registry row must expose indexed read and current-frame write");
+  const auto *xtc = find("xtc");
+  passed &= expect(xtc != nullptr && xtc->readable && !xtc->writable &&
+                       xtc->random_access && xtc->streaming,
+                   "XTC registry row must match indexed read-only behavior");
   const auto *trr = find("trr");
   passed &= expect(
       trr != nullptr && trr->readable && trr->writable && trr->random_access &&
@@ -188,11 +262,16 @@ int main() {
       "TRR registry row must expose indexed read and current-frame write");
   const auto *mdcrd = find("mdcrd");
   passed &= expect(
-      mdcrd != nullptr && mdcrd->readable && !mdcrd->writable &&
+      mdcrd != nullptr && mdcrd->readable && mdcrd->writable &&
           mdcrd->multi_frame && mdcrd->random_access && mdcrd->streaming &&
+          std::find(mdcrd->extensions.begin(), mdcrd->extensions.end(),
+                    ".crdbox") != mdcrd->extensions.end() &&
           std::find(mdcrd->channels.begin(), mdcrd->channels.end(),
-                    "unit_cell") != mdcrd->channels.end(),
-      "MDCRD registry row must expose indexed ASCII trajectory semantics");
+                    "unit_cell") != mdcrd->channels.end() &&
+          std::find(mdcrd->limitations.begin(), mdcrd->limitations.end(),
+                    "crdbox_requires_topology_angle") !=
+              mdcrd->limitations.end(),
+      "MDCRD registry row must expose indexed CRD/CRDBOX read and write");
   const auto *rst7 = find("rst7");
   passed &= expect(
       rst7 != nullptr && rst7->readable && rst7->writable &&
@@ -206,15 +285,21 @@ int main() {
           lammps->multi_frame && lammps->random_access && lammps->streaming &&
           std::find(lammps->channels.begin(), lammps->channels.end(),
                     "atom_id") != lammps->channels.end() &&
+          std::find(lammps->channels.begin(), lammps->channels.end(),
+                    "velocity") != lammps->channels.end() &&
+          std::find(lammps->channels.begin(), lammps->channels.end(),
+                    "physical_time") != lammps->channels.end() &&
           std::find(lammps->limitations.begin(), lammps->limitations.end(),
                     "coordinate_unit_required") != lammps->limitations.end(),
       "LAMMPS registry row must expose ID mapping and explicit unit contract");
   const auto *binpos = find("binpos");
   passed &= expect(
-      binpos != nullptr && binpos->readable && !binpos->writable &&
+      binpos != nullptr && binpos->readable && binpos->writable &&
           binpos->multi_frame && binpos->random_access && binpos->streaming &&
           std::find(binpos->channels.begin(), binpos->channels.end(),
                     "byte_order") != binpos->channels.end() &&
+          std::find(binpos->channels.begin(), binpos->channels.end(),
+                    "current_frame_write") != binpos->channels.end() &&
           std::find(binpos->limitations.begin(), binpos->limitations.end(),
                     "no_unit_cell") != binpos->limitations.end(),
       "BINPOS registry row must expose binary coordinate-only semantics");
@@ -225,7 +310,11 @@ int main() {
           std::find(netcdf->channels.begin(), netcdf->channels.end(),
                     "force") != netcdf->channels.end() &&
           std::find(netcdf->channels.begin(), netcdf->channels.end(),
-                    "integer_compression") != netcdf->channels.end(),
+                    "integer_compression") != netcdf->channels.end() &&
+          std::find(netcdf->channels.begin(), netcdf->channels.end(),
+                    "single_frame_restart") != netcdf->channels.end() &&
+          std::find(netcdf->extensions.begin(), netcdf->extensions.end(),
+                    ".ncrst") != netcdf->extensions.end(),
       "Amber NetCDF registry row must expose random-access scientific "
       "channels");
   const auto *h5md = find("h5md");

@@ -52,8 +52,8 @@ int main(int argc, char* argv[]) {
 
   passed &= expect(success_envelope.succeeded(),
                    "success result must produce a success envelope");
-  passed &= expect(success_envelope.schema_version == 1,
-                   "result schema version must start at one");
+  passed &= expect(success_envelope.schema_version == 2,
+                   "current result schema version must be two");
 
   const auto text =
       molshredder::command::render(success_envelope, OutputFormat::text);
@@ -74,7 +74,9 @@ int main(int argc, char* argv[]) {
 
   const Error failure{ErrorCode::invalid_selection,
                       "selection \"missing\"\natom",
-                      "use protein\tselection"};
+                      "use protein\tselection",
+                      {{"selection", "missing"},
+                       {"stdout", "before failure\n"}}};
   const auto failed = Result<Response>::failure(failure);
   const auto error_envelope = molshredder::command::make_envelope(
       "invoke \"analyze center\" --selection \"missing\"", failed);
@@ -90,9 +92,10 @@ int main(int argc, char* argv[]) {
   passed &= expect(
       error_csv.has_value() &&
           error_csv.value() ==
-              "status,error_code,message,suggestion\r\n"
+              "status,error_code,message,suggestion,details\r\n"
               "error,invalid_selection,\"selection \"\"missing\"\"\natom\","
-              "use protein\tselection\r\n",
+              "use protein\tselection,\"{\"\"selection\"\":\"\"missing\"\","
+              "\"\"stdout\"\":\"\"before failure\\n\"\"}\"\r\n",
       "CSV mode must preserve stable command errors instead of masking them");
 
   const auto text_format = molshredder::command::parse_output_format("text");

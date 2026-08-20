@@ -6,6 +6,8 @@ import pathlib
 import subprocess
 import sys
 
+from console_script import portable_console_script
+
 
 def require(condition: bool, message: str) -> None:
     if not condition:
@@ -68,7 +70,8 @@ def main() -> int:
         "exit\n"
     )
     completed = subprocess.run(
-        [str(cli_path), "console"], input=script, text=True,
+        [str(cli_path), "console"], input=portable_console_script(script),
+        text=True,
         capture_output=True, check=True
     )
     cli_results = [

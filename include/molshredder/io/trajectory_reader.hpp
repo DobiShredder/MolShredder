@@ -22,6 +22,7 @@ enum class TrajectoryFormat {
   xtc,
   rst7,
   mdcrd,
+  crdbox,
   amber_netcdf,
   h5md,
   lammps_dump,
@@ -38,6 +39,7 @@ struct DcdMetadata {
   std::int32_t start_step{};
   std::int32_t save_interval{};
   double raw_delta{};
+  std::size_t fixed_atom_count{};
   bool has_unit_cell{};
   ByteOrder byte_order{ByteOrder::little_endian};
   DcdDialect dialect{DcdDialect::charmm};
@@ -71,13 +73,16 @@ private:
   open_dcd(const std::filesystem::path &, std::optional<std::size_t>);
 
   DcdCoordinateSource(std::filesystem::path path, DcdMetadata metadata,
-                      std::vector<std::uint64_t> frame_offsets)
+                      std::vector<std::uint64_t> frame_offsets,
+                      std::vector<std::size_t> free_atom_indices)
       : path_{std::move(path)}, metadata_{std::move(metadata)},
-        frame_offsets_{std::move(frame_offsets)} {}
+        frame_offsets_{std::move(frame_offsets)},
+        free_atom_indices_{std::move(free_atom_indices)} {}
 
   std::filesystem::path path_;
   DcdMetadata metadata_;
   std::vector<std::uint64_t> frame_offsets_;
+  std::vector<std::size_t> free_atom_indices_;
 };
 
 [[nodiscard]] operation::Result<std::shared_ptr<const DcdCoordinateSource>>
@@ -202,6 +207,12 @@ struct AmberAsciiTrajectoryMetadata {
   std::string title;
 };
 
+enum class AmberAsciiBoxLayout {
+  auto_detect,
+  coordinate_only,
+  three_lengths
+};
+
 class AmberAsciiCoordinateSource final : public model::CoordinateSource {
 public:
   [[nodiscard]] std::size_t atom_count() const noexcept override {
@@ -227,7 +238,7 @@ public:
 private:
   friend operation::Result<std::shared_ptr<const AmberAsciiCoordinateSource>>
   open_amber_ascii_trajectory(const std::filesystem::path &, std::size_t,
-                              std::optional<double>);
+                              std::optional<double>, AmberAsciiBoxLayout);
 
   AmberAsciiCoordinateSource(std::filesystem::path path,
                              AmberAsciiTrajectoryMetadata metadata,
@@ -247,11 +258,13 @@ private:
     std::shared_ptr<const AmberAsciiCoordinateSource>>
 open_amber_ascii_trajectory(
     const std::filesystem::path &path, std::size_t expected_atom_count,
-    std::optional<double> box_angle_degrees = std::nullopt);
+    std::optional<double> box_angle_degrees = std::nullopt,
+    AmberAsciiBoxLayout box_layout = AmberAsciiBoxLayout::auto_detect);
 
 struct AmberNetcdfMetadata {
   std::size_t atom_count{};
   std::size_t frame_count{};
+  bool is_restart{};
   bool has_time{};
   bool has_velocities{};
   bool has_forces{};
@@ -317,8 +330,11 @@ struct LammpsDumpMetadata {
   std::size_t atom_count{};
   std::size_t frame_count{};
   bool has_restricted_triclinic_cell{};
+  bool has_physical_time{};
+  bool has_velocities{};
   LammpsCoordinateConvention coordinate_convention{
       LammpsCoordinateConvention::wrapped_cartesian};
+  std::string units_style;
 };
 
 class LammpsDumpCoordinateSource final : public model::CoordinateSource {
@@ -352,16 +368,19 @@ private:
   LammpsDumpCoordinateSource(std::filesystem::path path,
                              LammpsDumpMetadata metadata,
                              std::vector<std::uint64_t> frame_offsets,
+                             std::vector<std::string> frame_units,
                              std::vector<std::int64_t> source_atom_ids,
                              operation::LengthUnit coordinate_unit)
       : path_{std::move(path)}, metadata_{metadata},
         frame_offsets_{std::move(frame_offsets)},
+        frame_units_{std::move(frame_units)},
         source_atom_ids_{std::move(source_atom_ids)},
         coordinate_unit_{coordinate_unit} {}
 
   std::filesystem::path path_;
   LammpsDumpMetadata metadata_;
   std::vector<std::uint64_t> frame_offsets_;
+  std::vector<std::string> frame_units_;
   std::vector<std::int64_t> source_atom_ids_;
   operation::LengthUnit coordinate_unit_{operation::LengthUnit::angstrom};
 };

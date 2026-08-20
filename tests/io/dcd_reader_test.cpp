@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "molshredder/io/trajectory_reader.hpp"
+#include "molshredder/io/trajectory_writer.hpp"
 #include "molshredder/model/coordinates.hpp"
 
 namespace {
@@ -82,14 +83,15 @@ void append_record(std::vector<unsigned char>& output,
 void write_dcd(const std::filesystem::path& path, ByteOrder order,
                std::int32_t header_frames, std::int32_t written_frames,
                std::int32_t atom_count, bool with_cell,
-               std::int32_t fixed_atoms = 0, bool xplor = false) {
+               std::int32_t fixed_atoms = 0, bool xplor = false,
+               bool duplicate_free_index = false) {
   std::vector<unsigned char> file;
   std::vector<unsigned char> header(84U, 0U);
   std::memcpy(header.data(), "CORD", 4U);
   put_i32(header, 4U, header_frames, order);
   put_i32(header, 8U, 100, order);
   put_i32(header, 12U, 10, order);
-  put_i32(header, 20U, fixed_atoms, order);
+  put_i32(header, 36U, fixed_atoms, order);
   if (xplor) {
     put_f64(header, 40U, 0.5, order);
   } else {
@@ -108,6 +110,16 @@ void write_dcd(const std::filesystem::path& path, ByteOrder order,
   std::vector<unsigned char> atoms;
   append_u32(atoms, static_cast<std::uint32_t>(atom_count), order);
   append_record(file, atoms, order);
+  if (fixed_atoms > 0) {
+    std::vector<unsigned char> free_indices;
+    for (std::int32_t atom = fixed_atoms; atom < atom_count; ++atom) {
+      const auto source_index =
+          duplicate_free_index && atom == atom_count - 1 ? fixed_atoms + 1
+                                                         : atom + 1;
+      append_u32(free_indices, static_cast<std::uint32_t>(source_index), order);
+    }
+    append_record(file, free_indices, order);
+  }
   for (std::int32_t frame = 0; frame < written_frames; ++frame) {
     if (with_cell) {
       std::vector<unsigned char> cell;
@@ -116,9 +128,10 @@ void write_dcd(const std::filesystem::path& path, ByteOrder order,
       }
       append_record(file, cell, order);
     }
+    const auto first_atom = fixed_atoms > 0 && frame > 0 ? fixed_atoms : 0;
     for (std::int32_t axis = 0; axis < 3; ++axis) {
       std::vector<unsigned char> coordinates;
-      for (std::int32_t atom = 0; atom < atom_count; ++atom) {
+      for (std::int32_t atom = first_atom; atom < atom_count; ++atom) {
         append_f32(coordinates,
                    static_cast<float>(frame * 100 + axis * 10 + atom),
                    order);
@@ -150,10 +163,13 @@ int main(int argc, char** argv) {
   const auto big_path = directory / "synthetic_big.dcd";
   const auto mismatch_path = directory / "synthetic_mismatch.dcd";
   const auto fixed_path = directory / "synthetic_fixed.dcd";
+  const auto duplicate_free_path = directory / "synthetic_bad_free.dcd";
   write_dcd(little_path, io::ByteOrder::little_endian, 2, 2, 3, true);
   write_dcd(big_path, io::ByteOrder::big_endian, 1, 1, 2, false, 0, true);
   write_dcd(mismatch_path, io::ByteOrder::little_endian, 2, 1, 3, false);
-  write_dcd(fixed_path, io::ByteOrder::little_endian, 1, 1, 3, false, 1);
+  write_dcd(fixed_path, io::ByteOrder::little_endian, 2, 2, 3, false, 1);
+  write_dcd(duplicate_free_path, io::ByteOrder::little_endian, 2, 2, 3,
+            false, 1, false, true);
 
   const auto little = io::open_dcd(little_path, 3U);
   passed &= expect(
@@ -190,6 +206,84 @@ int main(int argc, char** argv) {
   passed &= expect(!little.value()->read_frame(2U).has_value(),
                    "out-of-range DCD frame must fail");
 
+  const auto fixed = io::open_dcd(fixed_path, 3U);
+  const auto fixed_second =
+      fixed.has_value()
+          ? fixed.value()->read_frame(1U)
+          : operation::Result<
+                std::shared_ptr<const model::CoordinateFrame>>::failure(
+                fixed.error());
+  const auto *fixed_positions =
+      fixed_second.has_value()
+          ? std::get_if<std::vector<model::Vec3f>>(
+                &fixed_second.value()->positions().values())
+          : nullptr;
+  passed &= expect(
+      fixed.has_value() && fixed.value()->metadata().fixed_atom_count == 1U &&
+          fixed_positions != nullptr &&
+          (*fixed_positions)[0] == model::Vec3f{0.0F, 10.0F, 20.0F} &&
+          (*fixed_positions)[1] == model::Vec3f{101.0F, 111.0F, 121.0F} &&
+          (*fixed_positions)[2] == model::Vec3f{102.0F, 112.0F, 122.0F},
+      "fixed-atom DCD must inherit fixed coordinates and update free atoms");
+
+  if (second.has_value()) {
+    io::TrajectoryWriteOptions write_options;
+    write_options.format = io::TrajectoryFormat::dcd;
+    operation::TaskContext write_context;
+    const auto serialized = io::serialize_trajectory_frame(
+        *second.value(), write_options, write_context);
+    passed &= expect(
+        serialized.has_value() && serialized.value().content.size() > 196U &&
+            serialized.value().content.substr(4U, 4U) == "CORD" &&
+            serialized.value().report.format == io::TrajectoryFormat::dcd &&
+            serialized.value().report.has_unit_cell &&
+            serialized.value().report.precision == io::TrrPrecision::float32,
+        "DCD writer must emit a CHARMM24 frame and typed loss report");
+
+    const auto roundtrip_path = directory / "roundtrip.dcd";
+    std::error_code ignored;
+    std::filesystem::remove(roundtrip_path, ignored);
+    const auto written = io::write_trajectory_frame_file(
+        roundtrip_path, *second.value(), write_options, false, write_context);
+    const auto roundtrip = io::open_dcd(roundtrip_path, 3U);
+    const auto copied = roundtrip.has_value()
+                            ? roundtrip.value()->read_frame(0U)
+                            : operation::Result<std::shared_ptr<
+                                  const model::CoordinateFrame>>::failure(
+                                  roundtrip.error());
+    const auto *copied_positions =
+        copied.has_value()
+            ? std::get_if<std::vector<model::Vec3f>>(
+                  &copied.value()->positions().values())
+            : nullptr;
+    passed &= expect(
+        written.has_value() && roundtrip.has_value() &&
+            roundtrip.value()->metadata().frame_count == 1U &&
+            roundtrip.value()->metadata().start_step == 110 &&
+            std::abs(roundtrip.value()->metadata().raw_delta - 0.5) < 1.0e-6 &&
+            copied_positions != nullptr &&
+            (*copied_positions)[2] == model::Vec3f{102.0F, 112.0F, 122.0F} &&
+            copied.value()->metadata().unit_cell.has_value(),
+        "DCD write-read must preserve coordinate, step, raw delta and cell");
+    const auto collision = io::write_trajectory_frame_file(
+        roundtrip_path, *second.value(), write_options, false, write_context);
+    passed &= expect(!collision.has_value(),
+                     "DCD writer must preserve an existing target by default");
+
+    const auto cancelled_path = directory / "cancelled.dcd";
+    std::filesystem::remove(cancelled_path, ignored);
+    operation::TaskContext cancelled_context;
+    cancelled_context.cancellation.request_cancel();
+    const auto cancelled = io::write_trajectory_frame_file(
+        cancelled_path, *second.value(), write_options, false,
+        cancelled_context);
+    passed &= expect(
+        !cancelled.has_value() &&
+            cancelled.error().code == operation::ErrorCode::cancelled &&
+            !std::filesystem::exists(cancelled_path),
+        "cancelled DCD export must not publish a partial target");
+  }
+
   const auto big = io::open_dcd(big_path, 2U);
   const auto big_frame = big.has_value() ? big.value()->read_frame(0U)
                                          : operation::Result<
@@ -209,9 +303,10 @@ int main(int argc, char** argv) {
   passed &= expect(
       !io::open_dcd(little_path, 4U).has_value() &&
           !io::open_dcd(mismatch_path).has_value() &&
-          !io::open_dcd(fixed_path).has_value() &&
+          !io::open_dcd(duplicate_free_path).has_value() &&
           !io::open_dcd(directory / "missing.dcd").has_value(),
-      "topology mismatch, truncated count, fixed atoms and missing file fail");
+      "topology mismatch, truncated count, bad free indices and missing file "
+      "fail");
 
   return passed ? 0 : 1;
 }

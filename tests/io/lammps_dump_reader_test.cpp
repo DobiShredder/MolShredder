@@ -154,9 +154,105 @@ int main(int argc, char **argv) {
                        unitless.error().message.find("does not encode") !=
                            std::string::npos,
                    "generic LAMMPS open must require an explicit unit");
+
+  const auto timed_path = build / "timed-velocity.lammpstrj";
+  {
+    std::ofstream output{timed_path};
+    output << "ITEM: UNITS\nreal\n"
+              "ITEM: TIME\n0.5\n"
+              "ITEM: TIMESTEP\n10\nITEM: NUMBER OF ATOMS\n3\n"
+              "ITEM: BOX BOUNDS pp pp pp\n0 10\n0 10\n0 10\n"
+              "ITEM: ATOMS id x y z vx vy vz fx\n"
+              "20 2 0 0 2 0 0 20\n10 1 0 0 1 0 0 10\n"
+              "30 3 0 0 3 0 0 30\n"
+              "ITEM: TIME\n1.5\n"
+              "ITEM: TIMESTEP\n20\nITEM: NUMBER OF ATOMS\n3\n"
+              "ITEM: BOX BOUNDS pp pp pp\n0 10\n0 10\n0 10\n"
+              "ITEM: ATOMS id x y z vx vy vz fx\n"
+              "30 4 0 0 4 0 0 40\n10 2 0 0 2 0 0 20\n"
+              "20 3 0 0 3 0 0 30\n";
+  }
+  const auto timed = io::open_lammps_dump(
+      timed_path, ids, operation::LengthUnit::angstrom);
+  passed &= expect(
+      timed.has_value() && timed.value()->metadata().has_physical_time &&
+          timed.value()->metadata().has_velocities &&
+          timed.value()->metadata().units_style == "real",
+      "LAMMPS UNITS/TIME and velocity channels must be indexed");
+  if (timed.has_value()) {
+    const auto second = timed.value()->read_frame(1U);
+    const auto first = timed.value()->read_frame(0U);
+    passed &= expect(first.has_value() && second.has_value(),
+                     "timed LAMMPS frames must decode out of order");
+    if (first.has_value() && second.has_value() &&
+        first.value()->velocities().has_value() &&
+        second.value()->velocities().has_value()) {
+      const auto &first_velocity = std::get<std::vector<model::Vec3d>>(
+          first.value()->velocities()->values());
+      const auto &second_velocity = std::get<std::vector<model::Vec3d>>(
+          second.value()->velocities()->values());
+      const auto *forces = std::get_if<std::vector<std::int64_t>>(
+          &second.value()->metadata().atom_properties.at("lammps.fx").values);
+      passed &= expect(
+          first.value()->metadata().physical_time.has_value() &&
+              first.value()->metadata().physical_time->value == 0.5 &&
+              first.value()->metadata().physical_time->unit ==
+                  model::TimeUnit::femtosecond &&
+              first.value()->metadata().velocity_time_unit ==
+                  model::TimeUnit::femtosecond &&
+              first_velocity[0].x == 1.0 && second_velocity[0].x == 2.0 &&
+              second.value()->metadata().physical_time->value == 1.5 &&
+              forces != nullptr &&
+              *forces == std::vector<std::int64_t>{20, 30, 40},
+          "LAMMPS physical time, velocities and per-frame custom properties "
+          "must follow topology IDs");
+    } else {
+      passed &= expect(false,
+                       "timed LAMMPS frames must retain velocity buffers");
+    }
+  }
+
+  const auto nano_path = build / "nano-velocity.lammpstrj";
+  {
+    std::ofstream output{nano_path};
+    output << "ITEM: UNITS\nnano\nITEM: TIME\n2\n"
+              "ITEM: TIMESTEP\n1\nITEM: NUMBER OF ATOMS\n3\n"
+              "ITEM: BOX BOUNDS pp pp pp\n0 2\n0 2\n0 2\n"
+              "ITEM: ATOMS id x y z vx vy vz\n"
+              "10 0 0 0 1 0 0\n20 1 0 0 2 0 0\n30 0 1 0 3 0 0\n";
+  }
+  const auto nano = io::open_lammps_dump(
+      nano_path, ids, operation::LengthUnit::nanometer);
+  const auto nano_frame =
+      nano.has_value()
+          ? nano.value()->read_frame(0U)
+          : operation::Result<
+                std::shared_ptr<const model::CoordinateFrame>>::failure(
+                nano.error());
+  passed &= expect(
+      nano_frame.has_value() &&
+          nano_frame.value()->metadata().physical_time.has_value() &&
+          nano_frame.value()->velocities().has_value() &&
+          nano_frame.value()->metadata().physical_time->value == 2000.0 &&
+          nano_frame.value()->metadata().physical_time->unit ==
+              model::TimeUnit::picosecond &&
+          std::get<std::vector<model::Vec3d>>(
+              nano_frame.value()->velocities()->values())[0]
+                  .x == 0.001,
+      "LAMMPS nano time and velocity must normalize to picoseconds");
+  const auto mismatched_units = io::open_lammps_dump(
+      nano_path, ids, operation::LengthUnit::angstrom);
+  passed &= expect(
+      !mismatched_units.has_value() &&
+          mismatched_units.error().message.find("requires nanometer") !=
+              std::string::npos,
+      "LAMMPS units header must reject a conflicting coordinate unit");
+
   std::error_code ignored;
   std::filesystem::remove(general_path, ignored);
   std::filesystem::remove(missing_id_path, ignored);
   std::filesystem::remove(unwrapped_path, ignored);
+  std::filesystem::remove(timed_path, ignored);
+  std::filesystem::remove(nano_path, ignored);
   return passed ? 0 : 1;
 }
