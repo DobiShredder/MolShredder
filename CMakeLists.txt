@@ -36,6 +36,31 @@ option(
   OFF
 )
 
+set(MOLSHREDDER_SUPPORT_SCHEMA_VERSION 1)
+set(MOLSHREDDER_SUPPORT_DESKTOP false)
+if(MOLSHREDDER_BUILD_DESKTOP)
+  set(MOLSHREDDER_SUPPORT_DESKTOP true)
+endif()
+set(MOLSHREDDER_SUPPORT_THREAD_SANITIZER false)
+if(MOLSHREDDER_ENABLE_THREAD_SANITIZER)
+  set(MOLSHREDDER_SUPPORT_THREAD_SANITIZER true)
+endif()
+if(NOT DEFINED netCDF_VERSION OR netCDF_VERSION STREQUAL "")
+  set(netCDF_VERSION "unknown")
+endif()
+if(CMAKE_BUILD_TYPE STREQUAL "")
+  set(MOLSHREDDER_SUPPORT_BUILD_CONFIGURATION "multi-config")
+else()
+  string(TOLOWER
+    "${CMAKE_BUILD_TYPE}"
+    MOLSHREDDER_SUPPORT_BUILD_CONFIGURATION
+  )
+endif()
+set(
+  MOLSHREDDER_SUPPORT_GENERATED_DIR
+  "${CMAKE_CURRENT_BINARY_DIR}/generated"
+)
+
 set(CLI11_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(CLI11_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(CLI11_BUILD_DOCS OFF CACHE BOOL "" FORCE)
@@ -50,6 +75,17 @@ FetchContent_MakeAvailable(CLI11)
 find_package(
   Python3 3.9 REQUIRED
   COMPONENTS Interpreter Development.Module Development.Embed
+)
+file(MAKE_DIRECTORY "${MOLSHREDDER_SUPPORT_GENERATED_DIR}")
+configure_file(
+  cmake/molshredder_support_configuration.hpp.in
+  "${MOLSHREDDER_SUPPORT_GENERATED_DIR}/molshredder_support_configuration.hpp"
+  @ONLY
+)
+configure_file(
+  cmake/molshredder-support.json.in
+  "${MOLSHREDDER_SUPPORT_GENERATED_DIR}/molshredder-support.json"
+  @ONLY
 )
 set(PYBIND11_FINDPYTHON ON)
 set(PYBIND11_TEST OFF CACHE BOOL "" FORCE)
@@ -295,10 +331,12 @@ target_sources(
     src/analysis/alignment.cpp
     src/analysis/basic.cpp
     src/analysis/contacts.cpp
+    src/analysis/principal_axes.cpp
     src/analysis/secondary_structure.cpp
     src/analysis/time_series.cpp
     src/application/default_registry.cpp
     src/application/dispatcher.cpp
+    src/application/runtime_diagnostics.cpp
     src/application/session.cpp
     src/application/workspace.cpp
     src/command/foundation_grammar.cpp
@@ -352,6 +390,8 @@ target_sources(
     src/trajectory/playback.cpp
     src/trajectory/pbc.cpp
     src/scene/camera.cpp
+    src/scene/stereo.cpp
+    src/scene/pymol_view.cpp
     src/scene/math.cpp
     src/scene/scene.cpp
   PUBLIC
@@ -361,10 +401,12 @@ target_sources(
       include/molshredder/analysis/alignment.hpp
       include/molshredder/analysis/basic.hpp
       include/molshredder/analysis/contacts.hpp
+      include/molshredder/analysis/principal_axes.hpp
       include/molshredder/analysis/secondary_structure.hpp
       include/molshredder/analysis/time_series.hpp
       include/molshredder/application/default_registry.hpp
       include/molshredder/application/dispatcher.hpp
+      include/molshredder/application/runtime_diagnostics.hpp
       include/molshredder/application/session.hpp
       include/molshredder/application/workspace.hpp
       include/molshredder/command/foundation_grammar.hpp
@@ -387,6 +429,7 @@ target_sources(
       include/molshredder/model/coordinates.hpp
       include/molshredder/model/molecular_system.hpp
       include/molshredder/model/topology.hpp
+      include/molshredder/scene/stereo.hpp
       include/molshredder/model/volume.hpp
       include/molshredder/render/packet.hpp
       include/molshredder/render/reference_renderer.hpp
@@ -400,6 +443,7 @@ target_sources(
       include/molshredder/trajectory/playback.hpp
       include/molshredder/trajectory/pbc.hpp
       include/molshredder/scene/camera.hpp
+      include/molshredder/scene/pymol_view.hpp
       include/molshredder/scene/math.hpp
       include/molshredder/scene/scene.hpp
       include/molshredder/version.hpp
@@ -414,6 +458,7 @@ target_link_libraries(
 target_include_directories(
   molshredder_core
   PRIVATE
+    "${MOLSHREDDER_SUPPORT_GENERATED_DIR}"
     "${msgpack-cxx_SOURCE_DIR}/include"
     "${msgpack-cxx_BINARY_DIR}/include"
 )
@@ -563,12 +608,16 @@ if(MOLSHREDDER_BUILD_DESKTOP)
   )
   target_compile_features(molshredder_desktop PRIVATE cxx_std_20)
   target_include_directories(
-    molshredder_desktop PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/apps/desktop"
+    molshredder_desktop
+    PRIVATE
+      "${CMAKE_CURRENT_SOURCE_DIR}/apps/desktop"
+      "${CMAKE_CURRENT_SOURCE_DIR}/src/python"
   )
   target_link_libraries(
     molshredder_desktop
     PRIVATE
       MolShredder::Gui
+      molshredder_embedded_python
       Qt6::Core
       Qt6::Gui
       Qt6::GuiPrivate
@@ -610,6 +659,8 @@ if(MOLSHREDDER_BUILD_DESKTOP)
       apps/desktop/shaders/pick_sphere.vert
       apps/desktop/shaders/pick_cylinder.vert
       apps/desktop/shaders/pick_line.vert
+      apps/desktop/shaders/anaglyph.vert
+      apps/desktop/shaders/anaglyph.frag
   )
   install(
     TARGETS molshredder_desktop
@@ -647,6 +698,56 @@ if(MOLSHREDDER_BUILD_DESKTOP)
         PASS_REGULAR_EXPRESSION "MolShredder GPU primitives ready: mesh=[1-9][0-9]* lines=[1-9][0-9]* cylinders=[1-9][0-9]* spheres=[1-9][0-9]*"
     )
     add_test(
+      NAME desktop.graphics_info_smoke
+      COMMAND molshredder_desktop --smoke --graphics-info-smoke
+    )
+    set_tests_properties(
+      desktop.graphics_info_smoke
+      PROPERTIES
+        TIMEOUT 10
+        PASS_REGULAR_EXPRESSION "MolShredder desktop graphics diagnostics ready"
+    )
+    add_test(
+      NAME desktop.system_info_panel_smoke
+      COMMAND molshredder_desktop --smoke --system-info-panel-smoke
+    )
+    set_tests_properties(
+      desktop.system_info_panel_smoke
+      PROPERTIES
+        TIMEOUT 10
+        PASS_REGULAR_EXPRESSION "MolShredder system information panel ready: typed-source=exact"
+    )
+    add_test(
+      NAME desktop.named_view_smoke
+      COMMAND molshredder_desktop --smoke --named-view-smoke
+    )
+    set_tests_properties(
+      desktop.named_view_smoke
+      PROPERTIES
+        TIMEOUT 10
+        PASS_REGULAR_EXPRESSION "MolShredder desktop named view ready: stored=1 recalled=animated-exact panel=visible pymol18=animated-roundtrip"
+    )
+    add_test(
+      NAME desktop.stereo_smoke
+      COMMAND molshredder_desktop --smoke --stereo-smoke
+    )
+    set_tests_properties(
+      desktop.stereo_smoke
+      PROPERTIES
+        TIMEOUT 10
+        PASS_REGULAR_EXPRESSION "MolShredder desktop stereo ready: mode=side_by_side eyes=2 shift=2.0 angle=2.1"
+    )
+    add_test(
+      NAME desktop.anaglyph_smoke
+      COMMAND molshredder_desktop --smoke --anaglyph-smoke
+    )
+    set_tests_properties(
+      desktop.anaglyph_smoke
+      PROPERTIES
+        TIMEOUT 10
+        PASS_REGULAR_EXPRESSION "MolShredder desktop anaglyph ready: mode=optimized eyes=2 compositor=QRhi"
+    )
+    add_test(
       NAME desktop.structure_open_smoke
       COMMAND
         molshredder_desktop --smoke
@@ -659,6 +760,30 @@ if(MOLSHREDDER_BUILD_DESKTOP)
       PROPERTIES
         TIMEOUT 10
         PASS_REGULAR_EXPRESSION "MolShredder desktop camera ready: representation=sticks atoms=3"
+    )
+    add_test(
+      NAME desktop.python_script_smoke
+      COMMAND
+        molshredder_desktop --smoke --script-smoke
+        "--script=${CMAKE_CURRENT_SOURCE_DIR}/tests/automation/fixtures/gui_success.py"
+    )
+    set_tests_properties(
+      desktop.python_script_smoke
+      PROPERTIES
+        TIMEOUT 10
+        PASS_REGULAR_EXPRESSION "MolShredder desktop Python script ready: objects=1 atoms=3 output=captured async=true"
+    )
+    add_test(
+      NAME desktop.python_script_cancel_smoke
+      COMMAND
+        molshredder_desktop --smoke --script-cancel-smoke
+        "--script=${CMAKE_CURRENT_SOURCE_DIR}/tests/automation/fixtures/gui_cancel.py"
+    )
+    set_tests_properties(
+      desktop.python_script_cancel_smoke
+      PROPERTIES
+        TIMEOUT 10
+        PASS_REGULAR_EXPRESSION "MolShredder desktop Python script cancellation ready: checkpoint=post-execution output=captured"
     )
     add_test(
       NAME desktop.mmcif_open_smoke
@@ -981,6 +1106,20 @@ if(MOLSHREDDER_BUILD_DESKTOP)
         FIXTURES_REQUIRED binpos_fixture
         PASS_REGULAR_EXPRESSION "MolShredder desktop BINPOS ready: atoms=3 frames=2 precision=float32"
     )
+    get_property(
+      MOLSHREDDER_DESKTOP_TESTS
+      DIRECTORY
+      PROPERTY TESTS
+    )
+    foreach(MOLSHREDDER_DESKTOP_TEST IN LISTS MOLSHREDDER_DESKTOP_TESTS)
+      if(MOLSHREDDER_DESKTOP_TEST MATCHES "^desktop\\.")
+        set_property(
+          TEST "${MOLSHREDDER_DESKTOP_TEST}"
+          PROPERTY FAIL_REGULAR_EXPRESSION
+            "qrc:/.*(TypeError|ReferenceError)|QQmlApplicationEngine failed"
+        )
+      endif()
+    endforeach()
   endif()
 endif()
 
@@ -1008,7 +1147,12 @@ install(
   FILES
     docs/schemas/result-envelope-v1.schema.json
     docs/schemas/result-envelope-v2.schema.json
+    docs/schemas/support-configuration-v1.schema.json
   DESTINATION "${CMAKE_INSTALL_DATADIR}/molshredder/schemas"
+)
+install(
+  FILES "${MOLSHREDDER_SUPPORT_GENERATED_DIR}/molshredder-support.json"
+  DESTINATION "${CMAKE_INSTALL_DATADIR}/molshredder"
 )
 install(
   FILES LICENSE THIRD_PARTY_NOTICES.md TRADEMARKS.md
@@ -1447,6 +1591,23 @@ if(BUILD_TESTING)
   molshredder_enable_warnings(molshredder_camera_tests)
   add_test(NAME scene.camera COMMAND molshredder_camera_tests)
 
+  add_executable(molshredder_stereo_tests tests/scene/stereo_test.cpp)
+  target_compile_features(molshredder_stereo_tests PRIVATE cxx_std_20)
+  target_link_libraries(molshredder_stereo_tests PRIVATE MolShredder::Core)
+  molshredder_enable_warnings(molshredder_stereo_tests)
+  add_test(NAME scene.stereo COMMAND molshredder_stereo_tests)
+
+  add_executable(
+    molshredder_pymol_view_tests
+    tests/scene/pymol_view_test.cpp
+  )
+  target_compile_features(molshredder_pymol_view_tests PRIVATE cxx_std_20)
+  target_link_libraries(
+    molshredder_pymol_view_tests PRIVATE MolShredder::Core
+  )
+  molshredder_enable_warnings(molshredder_pymol_view_tests)
+  add_test(NAME scene.pymol_view COMMAND molshredder_pymol_view_tests)
+
   add_executable(
     molshredder_representation_tests
     tests/render/representation_test.cpp
@@ -1539,6 +1700,20 @@ if(BUILD_TESTING)
   add_test(NAME analysis.alignment COMMAND molshredder_alignment_tests)
 
   add_executable(
+    molshredder_principal_axes_tests
+    tests/analysis/principal_axes_test.cpp
+  )
+  target_compile_features(molshredder_principal_axes_tests PRIVATE cxx_std_20)
+  target_link_libraries(
+    molshredder_principal_axes_tests PRIVATE MolShredder::Core
+  )
+  molshredder_enable_warnings(molshredder_principal_axes_tests)
+  add_test(
+    NAME analysis.principal_axes
+    COMMAND molshredder_principal_axes_tests
+  )
+
+  add_executable(
     molshredder_time_series_tests
     tests/analysis/time_series_test.cpp
   )
@@ -1629,6 +1804,33 @@ if(BUILD_TESTING)
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/topology.prmtop"
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/frame.rst7"
   )
+
+  add_executable(
+    molshredder_runtime_diagnostics_tests
+    tests/application/runtime_diagnostics_test.cpp
+  )
+  target_compile_features(
+    molshredder_runtime_diagnostics_tests PRIVATE cxx_std_20
+  )
+  target_link_libraries(
+    molshredder_runtime_diagnostics_tests PRIVATE MolShredder::Core
+  )
+  molshredder_enable_warnings(molshredder_runtime_diagnostics_tests)
+  add_test(
+    NAME application.runtime_diagnostics
+    COMMAND molshredder_runtime_diagnostics_tests
+  )
+
+  add_executable(
+    molshredder_view_state_tests
+    tests/application/view_state_test.cpp
+  )
+  target_compile_features(molshredder_view_state_tests PRIVATE cxx_std_20)
+  target_link_libraries(
+    molshredder_view_state_tests PRIVATE MolShredder::Core
+  )
+  molshredder_enable_warnings(molshredder_view_state_tests)
+  add_test(NAME application.view_state COMMAND molshredder_view_state_tests)
 
   add_executable(
     molshredder_volume_workspace_tests
@@ -1807,6 +2009,7 @@ if(BUILD_TESTING)
       "$<TARGET_FILE:molshredder_python>"
       "$<TARGET_FILE:molshredder>"
       "$<TARGET_FILE:molshredder_gui_probe>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/trajectory.g96"
   )
 
   add_test(
@@ -1819,6 +2022,17 @@ if(BUILD_TESTING)
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/automation/fixtures/success.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/automation/fixtures/failure_after_mutation.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/synthetic_multimodel.pdb"
+  )
+
+  add_test(
+    NAME frontend.system_info_parity
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/system_info_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "$<TARGET_FILE:molshredder>"
+      "$<TARGET_FILE:molshredder_gui_probe>"
+      "${MOLSHREDDER_SUPPORT_GENERATED_DIR}/molshredder-support.json"
   )
 
   add_test(
@@ -2058,6 +2272,7 @@ if(BUILD_TESTING)
   add_test(NAME cli.version COMMAND molshredder --version)
   add_test(NAME cli.help COMMAND molshredder --help)
   add_test(NAME cli.system_version COMMAND molshredder system version)
+  add_test(NAME cli.system_info COMMAND molshredder system info --format json)
   add_test(NAME cli.version_alias COMMAND molshredder version)
   add_test(
     NAME cli.version_json
@@ -2079,6 +2294,12 @@ if(BUILD_TESTING)
   set_tests_properties(
     cli.system_version
     PROPERTIES PASS_REGULAR_EXPRESSION "MolShredder ${PROJECT_VERSION}"
+  )
+  set_tests_properties(
+    cli.system_info
+    PROPERTIES
+      PASS_REGULAR_EXPRESSION
+        "\"configuration_schema_version\":1"
   )
   set_tests_properties(
     cli.version_alias

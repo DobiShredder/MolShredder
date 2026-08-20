@@ -44,6 +44,7 @@ int main() {
   using scene::NodeKind;
   using scene::Quaterniond;
   using scene::Transform;
+  using scene::operator-;
 
   bool passed = true;
   const auto quarter_turn = scene::quaternion_from_axis_angle(
@@ -143,6 +144,18 @@ int main() {
   passed &= expect(first.has_value() &&
                        !first.value()->world_transform(NodeId{999}).has_value(),
                    "unknown world-transform lookup must fail");
+
+  const auto pivot_quarter_turn = scene::quaternion_from_axis_angle(
+      {0.0, 0.0, 1.0}, std::acos(-1.0) * 0.5);
+  const scene::Transform pivoted{{}, pivot_quarter_turn, {1.0, 1.0, 1.0},
+                                 {1.0, 0.0, 0.0}};
+  const auto pivot_matrix = scene::matrix(pivoted);
+  passed &= expect(
+      scene::length(scene::transform_point(pivot_matrix, {1.0, 0.0, 0.0}) -
+                    model::Vec3d{1.0, 0.0, 0.0}) < 1.0e-12 &&
+          scene::length(scene::transform_point(pivot_matrix, {2.0, 0.0, 0.0}) -
+                        model::Vec3d{1.0, 1.0, 0.0}) < 1.0e-12,
+      "pivoted transform must keep its pivot fixed during rotation");
 
   const auto volume = model::VolumeGrid::create(
       {1U, 1U, 1U}, {},

@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://molshredder.org/schemas/support-configuration-v1.schema.json",
+  "title": "MolShredder support configuration v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "configuration_schema_version",
+    "project_version",
+    "build_configuration",
+    "platform",
+    "toolchain",
+    "features",
+    "dependencies"
+  ],
+  "properties": {
+    "configuration_schema_version": { "const": 1 },
+    "project_version": { "type": "string", "minLength": 1 },
+    "build_configuration": { "type": "string", "minLength": 1 },
+    "platform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operating_system", "architecture"],
+      "properties": {
+        "operating_system": { "type": "string", "minLength": 1 },
+        "architecture": { "type": "string", "minLength": 1 }
+      }
+    },
+    "toolchain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["compiler_id", "compiler_version", "cxx_standard"],
+      "properties": {
+        "compiler_id": { "type": "string", "minLength": 1 },
+        "compiler_version": { "type": "string", "minLength": 1 },
+        "cxx_standard": { "const": 20 }
+      }
+    },
+    "features": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["desktop", "embedded_python", "hdf5", "netcdf", "thread_sanitizer"],
+      "properties": {
+        "desktop": { "type": "boolean" },
+        "embedded_python": { "type": "boolean" },
+        "hdf5": { "type": "boolean" },
+        "netcdf": { "type": "boolean" },
+        "thread_sanitizer": { "type": "boolean" }
+      }
+    },
+    "dependencies": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hdf5", "netcdf", "python"],
+      "properties": {
+        "hdf5": { "type": "string", "minLength": 1 },
+        "netcdf": { "type": "string", "minLength": 1 },
+        "python": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

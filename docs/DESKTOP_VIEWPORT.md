@@ -40,6 +40,69 @@ object, representation, atom count and primitive count. Left drag orbits,
 right drag pans, the wheel dollies and double click reframes through the core
 `scene::Camera` implementation. Toolbar presets send canonical `show
 --replace true`; ordinary CLI/Python `show` remains additive.
+`Run Script` opens a local `.py` picker and an explicit arbitrary-code trust
+confirmation. Approved scripts execute through the same `script run` operation
+as CLI/Python and use the viewport's Registry/Workspace. Captured stdout/stderr
+appears in a dismissible panel, and committed object/trajectory/scene changes
+are synchronized after success or partial failure. The first implementation is
+executed on a dedicated worker so the Qt event loop remains responsive. An
+exclusive overlay pauses viewer editing and trajectory playback while that
+worker owns the mutable Workspace. Cancellation is cooperative: the button
+sets the shared task token, but arbitrary Python bytecode must return before
+the post-execution checkpoint can report cancellation. Worker-process
+isolation and argument editing remain follow-up work.
+`System` opens a modal information panel generated from the exact JSON returned
+by the canonical `system info` operation. It shows build configuration,
+platform, compiler, required dependency versions and the live graphics
+status/API/backend/device. A field which Qt or the platform adapter does not
+report is labelled `Not reported`; the panel does not infer a driver version or
+GPU identity. The full machine-readable form remains available through
+`molshredder system info --format json`.
+`Views` opens a camera workflow with a selection field and Center, Fit, Orient, Set pivot and Reset-all controls, plus an editable named-view name,
+Store, Recall, Delete and Clear-all actions. The list is scrollable and ordered
+by exact view name. Mouse orbit/pan/dolly and reset commit through canonical
+`view set` or `view reset`; selection controls use `view center/zoom/orient/origin`, and named-view actions use `view store/recall/delete/clear`, so the same
+operations are available from CLI and Python. A named view contains camera
+state only, not object/representation state; full scenes remain a separate
+capability. Recall uses a 0.35-second PyMOL-compatible eased transition while
+the canonical operation commits the endpoint immediately. Clear-all requires
+a second explicit confirmation click.
+An object-reference field accepts `current`, an exact object name or ID. The
+object-pivot action evaluates the current selection/state within that object,
+while reset-object clears only its local transform. Three XYZ fields also set
+an explicit camera origin. These controls invoke `view origin --object`,
+`view reset --object` and `view origin --position` rather than maintaining
+desktop-only state.
+The scrollable Views workflow also exposes projection mode, degree field of
+view and an explicit `Scale locked`/`Raw switch` policy. Opening the panel
+reads the current camera rather than showing stale defaults. Apply invokes
+canonical `view projection`; its default keeps target-plane scale continuous
+while switching perspective and orthographic cameras.
+The same panel exposes stereo enable, side-by-side/cross-eye/wall-eye/anaglyph
+mode, eye swap, objective-distance shift percentage, angular scale and five
+anaglyph color policies. QRhi draws adjacent modes with two viewports and
+anaglyph through two offscreen eye targets plus a fullscreen color compositor.
+macOS Metal captures verify both paths; Linux Vulkan/OpenGL and Windows D3D
+captures remain required before cross-platform stereo parity is claimed.
+The same panel has a multiline PyMOL 18-value field. `Export current` fills it
+through canonical `view export-pymol` and selects the text for copying;
+`Import values` calls `view import-pymol`, reports validation failure in the
+normal status surface and animates the renderer to the committed camera only
+after success. Mouse camera interaction cancels an active transition from its
+current visual camera.
+Selection framing starts with a State control. It cycles through `current`,
+`all` and `explicit`; explicit mode reveals a one-based state input. Center,
+Fit, Orient, Set pivot and selection-based clipping pass this value to the canonical
+operation. All-state scans use the shared out-of-core frame source rather than
+copying the trajectory into GUI-owned memory.
+The Camera panel also exposes all seven clipping modes. Its mode button cycles
+through atoms, slab, near, far, move, near-set and far-set; distance and
+selection remain editable. Apply invokes canonical `view clip` and refreshes
+the displayed near/far range through `view get-clip`.
+The axis-navigation row cycles through camera-local X/Y/Z and provides signed
+Move and Turn controls with one editable step. These buttons invoke canonical
+`view move` and `view turn`; the same operations are callable from CLI and
+Python, and turning preserves the separately stored model-origin pivot.
 Left click performs an atom, bond or residue GPU pick. The result is committed
 through the canonical `select` action as the static named selection `picked`
 and shown in the lower-right feedback badge.
@@ -98,6 +161,15 @@ uses the active conda prefix as `CMAKE_PREFIX_PATH`.
   duration to canonical `traj tick`. The core fractional clock owns FPS,
   catch-up and once/loop/rock transitions. A tick that does not cross a frame
   boundary does not replace or upload the composite render packet.
+- Trusted Python scripts run on one owned worker thread. The GUI blocks
+  Workspace editing, stops playback before dispatch, and only rebuilds the
+  immutable render packet after the completion is queued back to the GUI
+  thread. Viewport destruction requests cancellation and joins the worker.
+- Scene-graph initialization snapshots the selected `QSGRendererInterface`
+  API and QRhi backend/device identity into the shared, Qt-independent runtime
+  diagnostics service. `system info` therefore reports the actual Metal,
+  Direct3D, Vulkan or OpenGL selection from the Desktop Registry; invalidation
+  and scene-graph errors replace stale readiness with explicit lifecycle state.
 
 The current demo combines the real `build_representation()` cartoon, lines,
 sticks and spheres paths into one valid packet. The macOS arm64 smoke selected
@@ -148,6 +220,11 @@ geometry, saves through the canonical GUI action and reloads the topology before
 creates the selected representation through the ordinary shared `show` operation.
 A native Amber smoke opens a four-atom PRMTOP, attaches an RST7 containing velocity/time/temperature/triclinic cell,
 builds six half-bond stick instances through the canonical `show` operation and reaches the Metal render loop.
+A desktop Python smoke runs a trusted local script asynchronously through the
+GUI adapter, loads a three-atom object into the viewport Workspace, rebuilds
+the scene and verifies captured stdout before the Metal render loop exits. A
+second smoke requests cancellation while Python sleeps, waits for its return,
+and verifies the post-execution cancelled result and captured pre-cancel output.
 A second Amber smoke attaches a two-frame fixed-width MDCRD, uses PRMTOP `BOX_DIMENSIONS` for the cell angle and reaches
 the same Metal render path.
 

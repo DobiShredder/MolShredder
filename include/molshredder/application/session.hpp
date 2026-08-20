@@ -12,6 +12,8 @@
 
 namespace molshredder::application {
 
+class Workspace;
+
 inline constexpr unsigned int kSessionSchemaVersion = 1;
 
 struct SessionDocument {
@@ -30,6 +32,14 @@ struct SessionReplayResult {
 
 [[nodiscard]] operation::Result<std::string> serialize_session(
     const SessionDocument& document);
+// Product-facing session producer. It appends (or replaces an existing
+// trailing complete snapshots with) the current camera and stereo endpoint
+// before serialization. It deliberately does not infer a full scene.
+[[nodiscard]] operation::Result<SessionDocument>
+finalize_session_camera_snapshot(SessionDocument document,
+                                 const Workspace& workspace);
+[[nodiscard]] operation::Result<std::string> serialize_session(
+    const SessionDocument& document, const Workspace& workspace);
 [[nodiscard]] operation::Result<SessionDocument> parse_session(
     std::string_view text);
 [[nodiscard]] operation::Result<SessionReplayResult> replay_session(

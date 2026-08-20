@@ -8,16 +8,108 @@
 #include <vector>
 
 #include <QGuiApplication>
+#include <QEventLoop>
+#include <QMetaObject>
+#include <QPointer>
 #include <QQmlApplicationEngine>
 #include <QQuickWindow>
 #include <QSGRendererInterface>
 #include <QTimer>
 #include <QUrl>
+#include <rhi/qrhi.h>
 
+#include "embedded_module.hpp"
 #include "molshredder/io/structure_reader.hpp"
 #include "viewport_item.hpp"
 
+namespace {
+
+std::string graphics_api_name(QSGRendererInterface::GraphicsApi api) {
+  switch (api) {
+  case QSGRendererInterface::Software:
+    return "software";
+  case QSGRendererInterface::OpenVG:
+    return "openvg";
+  case QSGRendererInterface::OpenGL:
+    return "opengl";
+  case QSGRendererInterface::Direct3D11:
+    return "direct3d11";
+  case QSGRendererInterface::Vulkan:
+    return "vulkan";
+  case QSGRendererInterface::Metal:
+    return "metal";
+  case QSGRendererInterface::Null:
+    return "null";
+  case QSGRendererInterface::Direct3D12:
+    return "direct3d12";
+  case QSGRendererInterface::Unknown:
+    return "unknown";
+  }
+  return "unknown";
+}
+
+std::string device_type_name(QRhiDriverInfo::DeviceType type) {
+  switch (type) {
+  case QRhiDriverInfo::IntegratedDevice:
+    return "integrated";
+  case QRhiDriverInfo::DiscreteDevice:
+    return "discrete";
+  case QRhiDriverInfo::ExternalDevice:
+    return "external";
+  case QRhiDriverInfo::VirtualDevice:
+    return "virtual";
+  case QRhiDriverInfo::CpuDevice:
+    return "cpu";
+  case QRhiDriverInfo::UnknownDevice:
+    return "unknown";
+  }
+  return "unknown";
+}
+
+molshredder::application::GraphicsRuntimeInfo
+graphics_runtime_info(QQuickWindow &window) {
+  molshredder::application::GraphicsRuntimeInfo result;
+  auto *interface = window.rendererInterface();
+  const auto api = interface->graphicsApi();
+  result.api = graphics_api_name(api);
+  result.rhi_based = QSGRendererInterface::isApiRhiBased(api);
+  if (api == QSGRendererInterface::Unknown) {
+    result.status = molshredder::application::RuntimeStatus::failed;
+    result.failure_reason = "Qt Quick did not select a graphics API";
+    return result;
+  }
+  if (!result.rhi_based) {
+    result.status = molshredder::application::RuntimeStatus::ready;
+    result.backend = result.api;
+    result.failure_reason.reset();
+    return result;
+  }
+
+  auto *rhi = static_cast<QRhi *>(interface->getResource(
+      &window, QSGRendererInterface::RhiResource));
+  if (rhi == nullptr) {
+    result.status = molshredder::application::RuntimeStatus::failed;
+    result.failure_reason = "Qt Quick did not expose its QRhi resource";
+    return result;
+  }
+  result.status = molshredder::application::RuntimeStatus::ready;
+  result.backend = rhi->backendName();
+  const auto driver = rhi->driverInfo();
+  if (!driver.deviceName.isEmpty())
+    result.device_name = driver.deviceName.toStdString();
+  if (driver.deviceId != 0U)
+    result.device_id = driver.deviceId;
+  if (driver.vendorId != 0U)
+    result.vendor_id = driver.vendorId;
+  result.device_type = device_type_name(driver.deviceType);
+  result.failure_reason.reset();
+  return result;
+}
+
+}  // namespace
+
 int main(int argc, char *argv[]) {
+  molshredder::python::link_embedded_module();
   QGuiApplication application{argc, argv};
   QCoreApplication::setApplicationName(QStringLiteral("MolShredder"));
   QCoreApplication::setOrganizationName(QStringLiteral("MolShredder"));
@@ -35,12 +127,20 @@ int main(int argc, char *argv[]) {
   bool binpos_smoke = false;
   bool save_all = false;
   bool save_smoke = false;
+  bool script_smoke = false;
+  bool script_cancel_smoke = false;
+  bool graphics_info_smoke = false;
+  bool system_info_panel_smoke = false;
+  bool named_view_smoke = false;
+  bool stereo_smoke = false;
+  bool anaglyph_smoke = false;
   std::optional<QString> screenshot;
   std::vector<QString> open_paths;
   std::optional<QString> representation;
   std::optional<QString> trajectory;
   QString trajectory_coordinate_unit{QStringLiteral("angstrom")};
   std::optional<QString> save_path;
+  std::optional<QString> script_path;
   for (int index = 1; index < argc; ++index) {
     const std::string_view argument{argv[index]};
     if (argument == "--smoke") {
@@ -69,6 +169,20 @@ int main(int argc, char *argv[]) {
       save_all = true;
     } else if (argument == "--save-smoke") {
       save_smoke = true;
+    } else if (argument == "--script-smoke") {
+      script_smoke = true;
+    } else if (argument == "--script-cancel-smoke") {
+      script_cancel_smoke = true;
+    } else if (argument == "--graphics-info-smoke") {
+      graphics_info_smoke = true;
+    } else if (argument == "--system-info-panel-smoke") {
+      system_info_panel_smoke = true;
+    } else if (argument == "--named-view-smoke") {
+      named_view_smoke = true;
+    } else if (argument == "--stereo-smoke") {
+      stereo_smoke = true;
+    } else if (argument == "--anaglyph-smoke") {
+      anaglyph_smoke = true;
     } else if (argument.starts_with("--screenshot=")) {
       const auto path =
           argument.substr(std::string_view{"--screenshot="}.size());
@@ -100,6 +214,10 @@ int main(int argc, char *argv[]) {
       const auto path = argument.substr(std::string_view{"--save="}.size());
       save_path =
           QString::fromUtf8(path.data(), static_cast<qsizetype>(path.size()));
+    } else if (argument.starts_with("--script=")) {
+      const auto path = argument.substr(std::string_view{"--script="}.size());
+      script_path =
+          QString::fromUtf8(path.data(), static_cast<qsizetype>(path.size()));
     }
   }
 
@@ -122,6 +240,97 @@ int main(int argc, char *argv[]) {
       QStringLiteral("molecularViewport"));
   if (viewport == nullptr)
     return EXIT_FAILURE;
+  QPointer<molshredder::desktop::MolecularViewport> viewport_guard{viewport};
+  QObject::connect(
+      window, &QQuickWindow::sceneGraphInitialized, window,
+      [window, viewport_guard] {
+        auto info = graphics_runtime_info(*window);
+        if (viewport_guard.isNull())
+          return;
+        QMetaObject::invokeMethod(
+            viewport_guard.data(),
+            [viewport_guard, info = std::move(info)]() mutable {
+              if (!viewport_guard.isNull())
+                viewport_guard->setGraphicsRuntimeInfo(std::move(info));
+            },
+            Qt::QueuedConnection);
+      },
+      Qt::DirectConnection);
+  QObject::connect(
+      window, &QQuickWindow::sceneGraphInvalidated, window,
+      [viewport_guard] {
+        molshredder::application::GraphicsRuntimeInfo info;
+        info.status =
+            molshredder::application::RuntimeStatus::not_initialized;
+        info.failure_reason = "Qt Quick scene graph was invalidated";
+        if (viewport_guard.isNull())
+          return;
+        QMetaObject::invokeMethod(
+            viewport_guard.data(),
+            [viewport_guard, info = std::move(info)]() mutable {
+              if (!viewport_guard.isNull())
+                viewport_guard->setGraphicsRuntimeInfo(std::move(info));
+            },
+            Qt::QueuedConnection);
+      },
+      Qt::DirectConnection);
+  QObject::connect(
+      window, &QQuickWindow::sceneGraphError, viewport,
+      [viewport](QQuickWindow::SceneGraphError, const QString &message) {
+        molshredder::application::GraphicsRuntimeInfo info;
+        info.status = molshredder::application::RuntimeStatus::failed;
+        info.failure_reason = message.toStdString();
+        viewport->setGraphicsRuntimeInfo(std::move(info));
+      });
+  if (graphics_info_smoke || system_info_panel_smoke) {
+    QObject::connect(
+        viewport,
+        &molshredder::desktop::MolecularViewport::graphicsDiagnosticsChanged,
+        &application,
+        [viewport, window, system_info_panel_smoke, &application] {
+          const auto info = viewport->systemInfoJson();
+          const auto passed =
+              info.contains(QStringLiteral("\"status\":\"ready\"")) &&
+              info.contains(QStringLiteral("\"rhi_based\":true")) &&
+              !info.contains(QStringLiteral("\"device_name\":null"));
+          if (!passed) {
+            qCritical("MolShredder desktop graphics diagnostics smoke failed: "
+                      "%s",
+                      info.toUtf8().constData());
+            application.exit(EXIT_FAILURE);
+            return;
+          }
+          if (system_info_panel_smoke) {
+            const auto invoked = QMetaObject::invokeMethod(
+                window, "openSystemInfo", Qt::DirectConnection);
+            auto *overlay = window->findChild<QObject *>(
+                QStringLiteral("systemInfoOverlay"));
+            auto *summary = window->findChild<QObject *>(
+                QStringLiteral("systemInfoSummary"));
+            const auto panel_source =
+                window->property("systemInfoPanelSourceJson").toString();
+            const auto panel_passed =
+                invoked && overlay != nullptr && summary != nullptr &&
+                overlay->property("visible").toBool() && panel_source == info &&
+                summary->property("text")
+                    .toString()
+                    .contains(QStringLiteral("canonical system info operation"));
+            if (!panel_passed) {
+              qCritical("MolShredder system information panel smoke failed");
+              application.exit(EXIT_FAILURE);
+              return;
+            }
+            qInfo("MolShredder system information panel ready: typed-source=exact");
+          }
+          qInfo("MolShredder desktop graphics diagnostics ready: %s",
+                info.toUtf8().constData());
+          application.quit();
+        });
+    QTimer::singleShot(5000, &application, [&application] {
+      qCritical("MolShredder desktop system diagnostics timed out");
+      application.exit(EXIT_FAILURE);
+    });
+  }
   if (representation.has_value() &&
       !viewport->setRepresentation(*representation)) {
     qCritical("%s", viewport->statusText().toUtf8().constData());
@@ -143,6 +352,61 @@ int main(int argc, char *argv[]) {
       !viewport->saveStructure(QUrl::fromLocalFile(*save_path), save_all)) {
     qCritical("%s", viewport->statusText().toUtf8().constData());
     return EXIT_FAILURE;
+  }
+  if ((script_smoke || script_cancel_smoke) && !script_path.has_value()) {
+    qCritical("Desktop script smoke requires --script");
+    return EXIT_FAILURE;
+  }
+  if (script_smoke || script_cancel_smoke) {
+    QObject::connect(
+        viewport, &molshredder::desktop::MolecularViewport::scriptFinished,
+        &application,
+        [viewport, script_smoke, script_cancel_smoke,
+         &application](bool succeeded) {
+          if (script_smoke) {
+            const auto passed = succeeded && !viewport->scriptRunning() &&
+                                viewport->objectItems().size() == 1 &&
+                                viewport->scriptOutput().contains(
+                                    QStringLiteral("gui-script-output")) &&
+                                viewport->atomCount() == 3U;
+            if (!passed) {
+              qCritical("MolShredder desktop Python script smoke failed");
+              application.exit(EXIT_FAILURE);
+              return;
+            }
+            qInfo("MolShredder desktop Python script ready: objects=1 atoms=3 "
+                  "output=captured async=true");
+          } else if (script_cancel_smoke) {
+            const auto passed = !succeeded && !viewport->scriptRunning() &&
+                                viewport->statusText().contains(
+                                    QStringLiteral("cancelled")) &&
+                                viewport->scriptOutput().contains(
+                                    QStringLiteral("cancel-smoke-started"));
+            if (!passed) {
+              qCritical("MolShredder desktop Python script cancellation smoke "
+                        "failed");
+              application.exit(EXIT_FAILURE);
+              return;
+            }
+            qInfo("MolShredder desktop Python script cancellation ready: "
+                  "checkpoint=post-execution output=captured");
+          }
+          application.quit();
+        });
+    QTimer::singleShot(5000, &application, [&application] {
+      qCritical("MolShredder desktop Python script smoke timed out");
+      application.exit(EXIT_FAILURE);
+    });
+  }
+  if (script_path.has_value() &&
+      !viewport->runPythonScript(QUrl::fromLocalFile(*script_path))) {
+    qCritical("%s", viewport->statusText().toUtf8().constData());
+    return EXIT_FAILURE;
+  }
+  if (script_cancel_smoke) {
+    QTimer::singleShot(
+        50, viewport,
+        &molshredder::desktop::MolecularViewport::cancelPythonScript);
   }
   if (save_smoke) {
     if (!save_path.has_value())
@@ -215,10 +479,176 @@ int main(int argc, char *argv[]) {
       qCritical("MolShredder desktop camera interaction smoke failed");
       return EXIT_FAILURE;
     }
-    viewport->resetView();
+    const auto centered = viewport->centerSelection(
+        QStringLiteral("index 1"), false, QStringLiteral("current"), 0.0, 1);
+    const auto origin =
+        viewport->setOriginSelection(QStringLiteral("all"), QStringLiteral("1"));
+    const auto coordinate_origin = viewport->setOriginPosition(
+        1.5, -2.0, 3.25, QString{});
+    const auto object_origin = viewport->setObjectOriginSelection(
+        QStringLiteral("current"), QStringLiteral("all"),
+        QStringLiteral("current"));
+    const auto object_reset =
+        viewport->resetObjectTransform(QStringLiteral("current"));
+    const auto projection_span_before =
+        viewport->camera()->vertical_span_at_target();
+    const auto projected = viewport->setProjection(
+        QStringLiteral("orthographic"), 60.0, true);
+    const auto projection_parameters = viewport->camera()->parameters();
+    const auto projection_span_after =
+        viewport->camera()->vertical_span_at_target();
+    const auto zoomed = viewport->zoomSelection(
+        QStringLiteral("all"), 0.0, true, QStringLiteral("all"), 0.0, 1);
+    const auto oriented = viewport->orientSelection(
+        QStringLiteral("all"), QStringLiteral("all"), 0.0, 1);
+    const auto clipped = viewport->clipCamera(
+        QStringLiteral("atoms"), 1.0, QStringLiteral("all"),
+        QStringLiteral("all"));
+    const auto moved =
+        viewport->moveCamera(QStringLiteral("x"), 1.0);
+    const auto turned =
+        viewport->turnCamera(QStringLiteral("y"), 15.0);
+    const auto reset = viewport->resetViewAnimated(0.0, 1);
+    if (!centered || !origin || !coordinate_origin || !object_origin ||
+        !object_reset || !projected || !zoomed || !oriented || !clipped || !moved ||
+        !turned || !reset ||
+        projection_parameters.projection !=
+            molshredder::scene::ProjectionMode::orthographic ||
+        std::abs(projection_span_after - projection_span_before) > 1.0e-10) {
+      qCritical("MolShredder desktop shared camera action smoke failed");
+      return EXIT_FAILURE;
+    }
     qInfo("MolShredder desktop camera ready: representation=%s atoms=%llu",
           viewport->representation().toUtf8().constData(),
           static_cast<unsigned long long>(viewport->atomCount()));
+  }
+  if (named_view_smoke) {
+    viewport->orbit(18.0, -11.0);
+    const auto stored_camera = viewport->camera()->parameters();
+    const auto stored = viewport->storeNamedView(QStringLiteral("smoke view"));
+    viewport->orbit(-42.0, 3.0);
+    const auto recalled = viewport->recallNamedViewAnimated(
+        QStringLiteral("smoke view"), 0.05, 1);
+    QEventLoop recall_wait;
+    QTimer::singleShot(120, &recall_wait, &QEventLoop::quit);
+    recall_wait.exec();
+    const auto recall_exact =
+        recalled && viewport->camera()->parameters() == stored_camera;
+    const auto invoked =
+        QMetaObject::invokeMethod(window, "openViews", Qt::DirectConnection);
+    auto *overlay =
+        window->findChild<QObject *>(QStringLiteral("viewsOverlay"));
+    auto *pymol_input =
+        window->findChild<QObject *>(QStringLiteral("pymolViewInput"));
+    auto *camera_selection_input =
+        window->findChild<QObject *>(QStringLiteral("cameraSelectionInput"));
+    auto *camera_state_mode_button =
+        window->findChild<QObject *>(QStringLiteral("cameraStateModeButton"));
+    auto *camera_state_input =
+        window->findChild<QObject *>(QStringLiteral("cameraStateInput"));
+    auto *camera_orient_button =
+        window->findChild<QObject *>(QStringLiteral("cameraOrientButton"));
+    auto *object_origin_input =
+        window->findChild<QObject *>(QStringLiteral("objectOriginInput"));
+    auto *object_origin_x =
+        window->findChild<QObject *>(QStringLiteral("objectOriginX"));
+    auto *projection_mode_button =
+        window->findChild<QObject *>(QStringLiteral("projectionModeButton"));
+    auto *projection_fov_input =
+        window->findChild<QObject *>(QStringLiteral("projectionFovInput"));
+    auto *projection_preserve_button = window->findChild<QObject *>(
+        QStringLiteral("projectionPreserveButton"));
+    auto *stereo_enabled_button = window->findChild<QObject *>(
+        QStringLiteral("stereoEnabledButton"));
+    auto *stereo_mode_button =
+        window->findChild<QObject *>(QStringLiteral("stereoModeButton"));
+    auto *stereo_swap_button =
+        window->findChild<QObject *>(QStringLiteral("stereoSwapButton"));
+    auto *stereo_shift_input =
+        window->findChild<QObject *>(QStringLiteral("stereoShiftInput"));
+    auto *stereo_angle_input =
+        window->findChild<QObject *>(QStringLiteral("stereoAngleInput"));
+    auto *stereo_apply_button =
+        window->findChild<QObject *>(QStringLiteral("stereoApplyButton"));
+    auto *clip_mode_button =
+        window->findChild<QObject *>(QStringLiteral("clipModeButton"));
+    auto *clip_distance_input =
+        window->findChild<QObject *>(QStringLiteral("clipDistanceInput"));
+    auto *clip_selection_input =
+        window->findChild<QObject *>(QStringLiteral("clipSelectionInput"));
+    auto *navigation_axis_button =
+        window->findChild<QObject *>(QStringLiteral("navigationAxisButton"));
+    auto *navigation_step_input =
+        window->findChild<QObject *>(QStringLiteral("navigationStepInput"));
+    const auto pymol_export = viewport->pymolViewText();
+    const auto clip_range = viewport->clipRangeText();
+    const auto pymol_import = viewport->importPymolViewAnimated(
+        QStringLiteral(
+            "0,1,0,-1,0,0,0,0,1,2,-3,-40,10,20,30,.5,100,-60"),
+        0.05, -1);
+    QEventLoop import_wait;
+    QTimer::singleShot(120, &import_wait, &QEventLoop::quit);
+    import_wait.exec();
+    const auto pymol_camera = viewport->camera()->parameters();
+    if (!stored || !recall_exact || stored_camera == pymol_camera ||
+        viewport->viewItems().size() != 1 ||
+        !invoked || overlay == nullptr || pymol_input == nullptr ||
+        camera_orient_button == nullptr || object_origin_input == nullptr ||
+        object_origin_x == nullptr || projection_mode_button == nullptr ||
+        projection_fov_input == nullptr ||
+        projection_preserve_button == nullptr ||
+        stereo_enabled_button == nullptr || stereo_mode_button == nullptr ||
+        stereo_swap_button == nullptr || stereo_shift_input == nullptr ||
+        stereo_angle_input == nullptr || stereo_apply_button == nullptr ||
+        camera_selection_input == nullptr ||
+        camera_state_mode_button == nullptr || camera_state_input == nullptr ||
+        clip_mode_button == nullptr || clip_distance_input == nullptr ||
+        clip_selection_input == nullptr ||
+        navigation_axis_button == nullptr || navigation_step_input == nullptr ||
+        !overlay->property("visible").toBool() || pymol_export.isEmpty() ||
+        !clip_range.startsWith(QStringLiteral("near ")) ||
+        !pymol_import ||
+        pymol_camera.target != molshredder::model::Vec3d{13.0, 22.0, 30.0} ||
+        pymol_camera.model_origin !=
+            molshredder::model::Vec3d{10.0, 20.0, 30.0}) {
+      qCritical("MolShredder desktop named view smoke failed");
+      return EXIT_FAILURE;
+    }
+    qInfo("MolShredder desktop named view ready: stored=1 "
+          "recalled=animated-exact panel=visible "
+          "pymol18=animated-roundtrip");
+  }
+  if (stereo_smoke) {
+    const auto enabled = viewport->setStereo(
+        true, QStringLiteral("side_by_side"), false, 2.0, 2.1,
+        QStringLiteral("optimized"));
+    if (!enabled || !viewport->stereoEnabled() ||
+        viewport->stereoModeText() != QStringLiteral("side_by_side") ||
+        viewport->stereoSwapEyes() ||
+        std::abs(viewport->stereoShiftPercent() - 2.0) > 1.0e-12 ||
+        std::abs(viewport->stereoAngleScale() - 2.1) > 1.0e-12) {
+      qCritical("MolShredder desktop stereo smoke failed");
+      return EXIT_FAILURE;
+    }
+    qInfo("MolShredder desktop stereo ready: mode=side_by_side eyes=2 "
+          "shift=2.0 angle=2.1");
+    if (!screenshot.has_value())
+      QTimer::singleShot(1000, &application, &QCoreApplication::quit);
+  }
+  if (anaglyph_smoke) {
+    const auto enabled = viewport->setStereo(
+        true, QStringLiteral("anaglyph"), false, 2.0, 2.1,
+        QStringLiteral("optimized"));
+    if (!enabled || !viewport->stereoEnabled() ||
+        viewport->stereoModeText() != QStringLiteral("anaglyph") ||
+        viewport->anaglyphModeText() != QStringLiteral("optimized") ||
+        viewport->stereoSwapEyes()) {
+      qCritical("MolShredder desktop anaglyph smoke failed");
+      return EXIT_FAILURE;
+    }
+    qInfo("MolShredder desktop anaglyph ready: mode=optimized eyes=2 compositor=QRhi");
+    if (!screenshot.has_value())
+      QTimer::singleShot(1000, &application, &QCoreApplication::quit);
   }
   if (picking_smoke) {
     const auto capture_requested = screenshot.has_value();
@@ -365,7 +795,9 @@ int main(int argc, char *argv[]) {
       }
       application.quit();
     });
-  } else if (smoke && !picking_smoke && !trajectory_smoke) {
+  } else if (smoke && !picking_smoke && !trajectory_smoke && !script_smoke &&
+             !script_cancel_smoke && !graphics_info_smoke &&
+             !system_info_panel_smoke && !stereo_smoke && !anaglyph_smoke) {
     QTimer::singleShot(1500, &application, &QCoreApplication::quit);
   }
   return application.exec();

@@ -3,6 +3,7 @@
 #include <array>
 #include <cstdint>
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <optional>
 #include <span>
@@ -12,6 +13,7 @@
 
 #include "molshredder/analysis/basic.hpp"
 #include "molshredder/analysis/contacts.hpp"
+#include "molshredder/analysis/principal_axes.hpp"
 #include "molshredder/analysis/secondary_structure.hpp"
 #include "molshredder/analysis/time_series.hpp"
 #include "molshredder/io/structure_reader.hpp"
@@ -29,6 +31,8 @@
 #include "molshredder/render/representation.hpp"
 #include "molshredder/render/volume_isosurface.hpp"
 #include "molshredder/scene/scene.hpp"
+#include "molshredder/scene/camera.hpp"
+#include "molshredder/scene/stereo.hpp"
 #include "molshredder/selection/named_selection.hpp"
 #include "molshredder/trajectory/frame_cache.hpp"
 #include "molshredder/trajectory/playback.hpp"
@@ -109,6 +113,114 @@ struct WorkspaceVolumeInfo {
   bool active{};
   bool visible{true};
   bool effectively_visible{true};
+};
+
+struct SpatialExtent {
+  model::Vec3d minimum;
+  model::Vec3d maximum;
+  model::Vec3d center;
+  double maximum_radius{};
+  std::size_t selected_atom_count{};
+  std::size_t used_atom_count{};
+  std::size_t skipped_missing_atom_count{};
+  std::size_t evaluated_frame_count{};
+};
+
+enum class CameraStateScopeKind { current, all, explicit_state };
+
+struct CameraStateScope {
+  CameraStateScopeKind kind{CameraStateScopeKind::current};
+  // Zero-based internally. User-facing explicit states are one-based.
+  std::size_t frame_index{};
+};
+
+struct CameraSelectionResult {
+  std::uint64_t object_id{};
+  std::string selection_expression;
+  CameraStateScope state_scope;
+  SpatialExtent extent;
+  scene::Camera camera;
+};
+
+struct CameraOrientResult {
+  std::uint64_t object_id{};
+  std::string selection_expression;
+  CameraStateScope state_scope;
+  SpatialExtent extent;
+  analysis::PrincipalAxesResult principal_axes;
+  model::Vec3d oriented_center;
+  model::Vec3d oriented_half_extents;
+  scene::Camera camera;
+};
+
+struct ObjectOriginResult {
+  std::uint64_t object_id{};
+  std::string object_name;
+  model::Vec3d position;
+  std::optional<std::string> selection_expression;
+  std::optional<CameraStateScope> state_scope;
+  std::optional<SpatialExtent> extent;
+  scene::Transform transform;
+  std::uint64_t scene_version{};
+};
+
+struct ObjectTransformResetResult {
+  std::string object_reference;
+  std::vector<std::uint64_t> object_ids;
+  std::uint64_t scene_version{};
+};
+
+struct CameraResetResult {
+  scene::Camera camera;
+  std::optional<SpatialExtent> extent;
+  std::size_t molecular_object_count{};
+  std::size_t volume_object_count{};
+};
+
+enum class CameraClipMode {
+  near_relative,
+  far_relative,
+  move,
+  slab,
+  atoms,
+  near_absolute,
+  far_absolute,
+};
+
+struct CameraDepthExtent {
+  SpatialExtent spatial;
+  double minimum_depth{};
+  double maximum_depth{};
+};
+
+struct CameraClipResult {
+  CameraClipMode mode{CameraClipMode::near_relative};
+  double distance{};
+  std::optional<std::string> selection_expression;
+  std::optional<CameraDepthExtent> extent;
+  CameraStateScope state_scope;
+  scene::Camera camera;
+};
+
+struct CameraNavigationResult {
+  scene::CameraAxis axis{scene::CameraAxis::x};
+  double amount{};
+  scene::Camera camera;
+};
+
+struct CameraProjectionResult {
+  scene::ProjectionMode previous_mode{scene::ProjectionMode::perspective};
+  scene::ProjectionMode mode{scene::ProjectionMode::perspective};
+  double previous_vertical_span{};
+  double vertical_span{};
+  double field_of_view_degrees{};
+  bool preserve_scale{true};
+  scene::Camera camera;
+};
+
+struct StereoConfigurationResult {
+  scene::StereoParameters previous;
+  scene::StereoParameters current;
 };
 
 struct TrajectoryLoadResult {
@@ -311,6 +423,26 @@ struct HydrogenBondTimeSeriesResult {
   analysis::HydrogenBondSeriesResult series;
 };
 
+struct NamedViewRecord {
+  std::string name;
+  scene::CameraParameters camera;
+
+  friend bool operator==(const NamedViewRecord&, const NamedViewRecord&) =
+      default;
+};
+
+struct NamedViewStoreResult {
+  NamedViewRecord view;
+  std::size_t view_count{};
+  bool replaced{};
+};
+
+struct NamedViewDeleteResult {
+  std::string name;
+  std::size_t view_count{};
+  bool cleared_all{};
+};
+
 class Workspace {
 public:
   Workspace();
@@ -352,6 +484,59 @@ public:
        bool replace_existing = false);
   [[nodiscard]] operation::Result<CenterAnalysisResult>
   analyze_center(std::string selection_expression, analysis::CenterMode mode);
+  [[nodiscard]] operation::Result<SpatialExtent>
+  selection_extent(std::string_view selection_expression,
+                   CameraStateScope state_scope = {},
+                   operation::TaskContext *context = nullptr) const;
+  [[nodiscard]] operation::Result<CameraDepthExtent>
+  selection_camera_depth_extent(
+      std::string_view selection_expression,
+      CameraStateScope state_scope = {},
+      operation::TaskContext *context = nullptr) const;
+  [[nodiscard]] operation::Result<CameraSelectionResult>
+  center_camera(std::string selection_expression, bool move_origin,
+                CameraStateScope state_scope = {},
+                operation::TaskContext *context = nullptr);
+  [[nodiscard]] operation::Result<CameraSelectionResult>
+  zoom_camera(std::string selection_expression, double buffer,
+              bool complete, CameraStateScope state_scope = {},
+              operation::TaskContext *context = nullptr);
+  [[nodiscard]] operation::Result<CameraSelectionResult>
+  set_camera_origin(std::string selection_expression,
+                    CameraStateScope state_scope = {},
+                    operation::TaskContext *context = nullptr);
+  [[nodiscard]] operation::Result<scene::Camera>
+  set_camera_origin(model::Vec3d position);
+  [[nodiscard]] operation::Result<ObjectOriginResult>
+  set_object_origin_from_selection(
+      std::string object_reference, std::string selection_expression,
+      CameraStateScope state_scope = {},
+      operation::TaskContext *context = nullptr);
+  [[nodiscard]] operation::Result<ObjectOriginResult>
+  set_object_origin(std::string object_reference, model::Vec3d position);
+  [[nodiscard]] operation::Result<ObjectTransformResetResult>
+  reset_object_transforms(std::string object_reference);
+  [[nodiscard]] operation::Result<CameraOrientResult>
+  orient_camera(std::string selection_expression,
+                CameraStateScope state_scope = {},
+                operation::TaskContext *context = nullptr);
+  [[nodiscard]] operation::Result<CameraResetResult> reset_camera();
+  [[nodiscard]] operation::Result<CameraClipResult>
+  clip_camera(CameraClipMode mode, double distance,
+              std::optional<std::string> selection_expression = std::nullopt,
+              CameraStateScope state_scope = {},
+              operation::TaskContext *context = nullptr);
+  [[nodiscard]] operation::Result<CameraNavigationResult>
+  move_camera(scene::CameraAxis axis, double distance);
+  [[nodiscard]] operation::Result<CameraNavigationResult>
+  turn_camera(scene::CameraAxis axis, double angle_degrees);
+  [[nodiscard]] operation::Result<CameraProjectionResult>
+  set_camera_projection(
+      scene::ProjectionMode mode,
+      std::optional<double> field_of_view_degrees = std::nullopt,
+      bool preserve_scale = true);
+  [[nodiscard]] operation::Result<StereoConfigurationResult>
+  set_stereo(scene::StereoParameters parameters);
   [[nodiscard]] operation::Result<DistanceMeasurementRecord> measure_distance(
       std::string from_expression, std::string to_expression,
       analysis::DistanceBoundary boundary = analysis::DistanceBoundary::raw);
@@ -443,6 +628,23 @@ public:
   [[nodiscard]] operation::Result<TrajectoryFrameResult>
   tick_trajectory(double elapsed_seconds);
 
+  [[nodiscard]] const scene::Camera &camera() const noexcept {
+    return camera_.value();
+  }
+  [[nodiscard]] const scene::StereoParameters &stereo() const noexcept {
+    return stereo_;
+  }
+  [[nodiscard]] operation::Result<scene::Camera>
+  set_camera(scene::CameraParameters parameters);
+  [[nodiscard]] operation::Result<NamedViewStoreResult>
+  store_named_view(std::string name);
+  [[nodiscard]] operation::Result<NamedViewRecord>
+  recall_named_view(std::string_view name);
+  [[nodiscard]] operation::Result<NamedViewDeleteResult>
+  delete_named_view(std::string_view name);
+  [[nodiscard]] NamedViewDeleteResult clear_named_views();
+  [[nodiscard]] std::vector<NamedViewRecord> list_named_views() const;
+
   [[nodiscard]] const std::shared_ptr<const scene::Scene> &scene() const {
     return scene_;
   }
@@ -470,6 +672,8 @@ public:
 private:
   [[nodiscard]] WorkspaceObject *mutable_active_object() noexcept;
   [[nodiscard]] WorkspaceVolume *mutable_active_volume() noexcept;
+  [[nodiscard]] operation::Result<std::size_t>
+  object_index_by_reference(std::string_view reference) const;
   [[nodiscard]] operation::Result<std::shared_ptr<const model::CoordinateFrame>>
   active_frame(const WorkspaceObject &object) const;
 
@@ -481,6 +685,9 @@ private:
   std::optional<std::size_t> active_volume_index_;
   std::shared_ptr<const scene::Scene> scene_;
   std::vector<DistanceMeasurementRecord> measurements_;
+  std::optional<scene::Camera> camera_;
+  scene::StereoParameters stereo_;
+  std::map<std::string, scene::CameraParameters, std::less<>> named_views_;
 };
 
 } // namespace molshredder::application

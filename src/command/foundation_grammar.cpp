@@ -18,6 +18,19 @@ ParameterSpec optional_text(std::string name) {
   return ParameterSpec{std::move(name), ParameterType::text, false};
 }
 
+ParameterSpec optional_number(std::string name) {
+  return ParameterSpec{std::move(name), ParameterType::number, false};
+}
+
+ParameterSpec animation_duration() {
+  return ParameterSpec{"duration", ParameterType::number, false, "0"};
+}
+
+ParameterSpec animation_hand() {
+  return ParameterSpec{"hand", ParameterType::integer, false, "1",
+                       {"-1", "0", "1"}};
+}
+
 ParameterSpec defaulted_text(std::string name, std::string default_value,
                              std::vector<std::string> allowed = {}) {
   return ParameterSpec{std::move(name), ParameterType::text, false,
@@ -141,6 +154,14 @@ std::vector<AliasSpec> foundation_command_aliases() {
   };
 }
 
+std::vector<AliasSpec> view_command_aliases() {
+  return {
+      AliasSpec{"perspective", "view projection", {{"mode", "perspective"}}},
+      AliasSpec{"orthographic", "view projection", {{"mode", "orthographic"}}},
+      AliasSpec{"orthoscopic", "view projection", {{"mode", "orthographic"}}},
+  };
+}
+
 std::vector<Descriptor> object_command_descriptors() {
   return {
       Descriptor{"object list",
@@ -159,6 +180,135 @@ std::vector<Descriptor> object_command_descriptors() {
                                 true,
                                 std::nullopt,
                                 {"false", "true"}}},
+                 UndoPolicy::undoable},
+  };
+}
+
+std::vector<Descriptor> view_command_descriptors() {
+  return {
+      Descriptor{"view get", "Return the current validated camera snapshot", {},
+                 UndoPolicy::not_applicable},
+      Descriptor{"view center",
+                 "Center the camera target on a state-scoped selection",
+                 {defaulted_text("selection", "all"),
+                  defaulted_text("state", "current"),
+                  ParameterSpec{"move-origin", ParameterType::boolean, false,
+                                "true", {"false", "true"}},
+                  animation_duration(), animation_hand()},
+                 UndoPolicy::undoable},
+      Descriptor{"view zoom",
+                 "Frame a state-scoped selection in the current camera",
+                 {defaulted_text("selection", "all"),
+                  defaulted_text("state", "current"),
+                  ParameterSpec{"buffer", ParameterType::number, false, "0"},
+                  ParameterSpec{"complete", ParameterType::boolean, false,
+                                "false", {"false", "true"}},
+                  animation_duration(), animation_hand()},
+                 UndoPolicy::undoable},
+      Descriptor{"view orient",
+                 "Align selection principal axes and frame the result",
+                 {defaulted_text("selection", "all"),
+                  defaulted_text("state", "current"),
+                  animation_duration(), animation_hand()},
+                 UndoPolicy::undoable},
+      Descriptor{"view origin",
+                 "Set a camera or object origin from coordinates or selection",
+                 {defaulted_text("selection", "all"),
+                  defaulted_text("state", "current"), optional_text("position"),
+                  optional_text("object")},
+                 UndoPolicy::undoable},
+      Descriptor{"view reset",
+                 "Reset the camera or selected object transforms",
+                 {optional_text("object"), animation_duration(),
+                  animation_hand()},
+                 UndoPolicy::undoable},
+      Descriptor{
+          "view clip",
+          "Move, size, fit or set the camera clipping planes",
+          {required_text("mode", {"near", "far", "move", "slab", "atoms",
+                                  "near-set", "far-set"}),
+           ParameterSpec{"distance", ParameterType::number, true},
+           optional_text("selection"), defaulted_text("state", "current")},
+          UndoPolicy::undoable},
+      Descriptor{"view get-clip", "Return the current clipping-plane range",
+                 {}, UndoPolicy::not_applicable},
+      Descriptor{"view move", "Translate the camera along a local axis",
+                 {required_text("axis", {"x", "y", "z"}),
+                  ParameterSpec{"distance", ParameterType::number, true}},
+                 UndoPolicy::undoable},
+      Descriptor{"view turn",
+                 "Rotate the camera around its model origin on a local axis",
+                 {required_text("axis", {"x", "y", "z"}),
+                  ParameterSpec{"angle", ParameterType::number, true}},
+                 UndoPolicy::undoable},
+      Descriptor{"view projection",
+                 "Switch projection with optional scale preservation",
+                 {required_text("mode", {"perspective", "orthographic"}),
+                  optional_number("field-of-view-degrees"),
+                  ParameterSpec{"preserve-scale", ParameterType::boolean,
+                                false, "true", {"false", "true"}}},
+                 UndoPolicy::undoable},
+      Descriptor{"stereo get", "Return the current stereo configuration", {},
+                 UndoPolicy::not_applicable},
+      Descriptor{"stereo modes",
+                 "Report implemented stereo modes and runtime availability",
+                 {}, UndoPolicy::not_applicable},
+      Descriptor{"stereo set",
+                 "Configure stereoscopic presentation and eye cameras",
+                 {ParameterSpec{"enabled", ParameterType::boolean, false,
+                                "true", {"false", "true"}},
+                  defaulted_text("mode", "side_by_side",
+                                 {"side_by_side", "crosseye", "walleye",
+                                  "anaglyph", "quad_buffer",
+                                  "row_interleaved", "column_interleaved",
+                                  "checkerboard", "openvr"}),
+                  ParameterSpec{"swap-eyes", ParameterType::boolean, false,
+                                "false", {"false", "true"}},
+                  ParameterSpec{"shift-percent", ParameterType::number, false,
+                                "2.0"},
+                  ParameterSpec{"angle-scale", ParameterType::number, false,
+                                "2.1"},
+                  defaulted_text("anaglyph-mode", "optimized",
+                                 {"true", "gray", "color", "half_color",
+                                  "optimized"})},
+                 UndoPolicy::undoable},
+      Descriptor{
+          "view set",
+          "Update selected fields of the current validated camera snapshot",
+          {optional_number("target-x"), optional_number("target-y"),
+           optional_number("target-z"), optional_number("model-origin-x"),
+           optional_number("model-origin-y"),
+           optional_number("model-origin-z"),
+           optional_number("orientation-w"),
+           optional_number("orientation-x"),
+           optional_number("orientation-y"),
+           optional_number("orientation-z"), optional_number("distance"),
+           ParameterSpec{"projection", ParameterType::text, false,
+                         std::nullopt, {"perspective", "orthographic"}},
+           optional_number("field-of-view"),
+           optional_number("orthographic-height"),
+           optional_number("aspect-ratio"), optional_number("near-clip"),
+           optional_number("far-clip")},
+          UndoPolicy::undoable},
+      Descriptor{"view export-pymol",
+                 "Export the current camera in PyMOL's public 18-value layout",
+                 {}, UndoPolicy::not_applicable},
+      Descriptor{"view import-pymol",
+                 "Import PyMOL get_view/set_view 18-value camera data",
+                 {required_text("values"), animation_duration(),
+                  animation_hand()},
+                 UndoPolicy::undoable},
+      Descriptor{"view list", "List stored named camera views", {},
+                 UndoPolicy::not_applicable},
+      Descriptor{"view store", "Store or replace the current named view",
+                 {required_text("name")}, UndoPolicy::undoable},
+      Descriptor{"view recall", "Recall a stored named view",
+                 {required_text("name"), animation_duration(),
+                  animation_hand()},
+                 UndoPolicy::undoable},
+      Descriptor{"view delete", "Delete one stored named view",
+                 {required_text("name")}, UndoPolicy::undoable},
+      Descriptor{"view clear", "Delete all stored named views", {},
                  UndoPolicy::undoable},
   };
 }

@@ -44,6 +44,7 @@ int main(int argc, char *argv[]) {
   const auto descriptors =
       molshredder::command::foundation_command_descriptors();
   const auto aliases = molshredder::command::foundation_command_aliases();
+  const auto view_aliases = molshredder::command::view_command_aliases();
   const auto file_descriptors =
       molshredder::command::file_command_descriptors();
   const auto trajectory_descriptors =
@@ -52,6 +53,8 @@ int main(int argc, char *argv[]) {
                    "foundation grammar must define exactly eight commands");
   passed &= expect(aliases.size() == 9,
                    "foundation grammar v1 must expose nine shorthand aliases");
+  passed &= expect(view_aliases.size() == 3,
+                   "view grammar must expose three projection aliases");
   passed &= expect(
       file_descriptors.size() == 6U &&
           file_descriptors.front().canonical_name == "format list" &&

@@ -27,8 +27,8 @@ bool is_valid(Quaterniond value) noexcept {
 
 bool is_valid(const Transform& value) noexcept {
   return is_finite(value.translation) && is_valid(value.rotation) &&
-         is_finite(value.scale) && value.scale.x > 0.0 && value.scale.y > 0.0 &&
-         value.scale.z > 0.0;
+         is_finite(value.scale) && is_finite(value.pivot) &&
+         value.scale.x > 0.0 && value.scale.y > 0.0 && value.scale.z > 0.0;
 }
 
 model::Vec3d operator+(model::Vec3d left, model::Vec3d right) noexcept {
@@ -100,6 +100,39 @@ Quaterniond quaternion_from_axis_angle(model::Vec3d axis,
                                 unit_axis.y * sine, unit_axis.z * sine});
 }
 
+Quaterniond quaternion_from_basis(model::Vec3d right, model::Vec3d up,
+                                  model::Vec3d backward) noexcept {
+  const double m00 = right.x;
+  const double m01 = up.x;
+  const double m02 = backward.x;
+  const double m10 = right.y;
+  const double m11 = up.y;
+  const double m12 = backward.y;
+  const double m20 = right.z;
+  const double m21 = up.z;
+  const double m22 = backward.z;
+  Quaterniond result;
+  const auto trace = m00 + m11 + m22;
+  if (trace > 0.0) {
+    const auto scale = std::sqrt(trace + 1.0) * 2.0;
+    result = {0.25 * scale, (m21 - m12) / scale,
+              (m02 - m20) / scale, (m10 - m01) / scale};
+  } else if (m00 > m11 && m00 > m22) {
+    const auto scale = std::sqrt(1.0 + m00 - m11 - m22) * 2.0;
+    result = {(m21 - m12) / scale, 0.25 * scale,
+              (m01 + m10) / scale, (m02 + m20) / scale};
+  } else if (m11 > m22) {
+    const auto scale = std::sqrt(1.0 + m11 - m00 - m22) * 2.0;
+    result = {(m02 - m20) / scale, (m01 + m10) / scale,
+              0.25 * scale, (m12 + m21) / scale};
+  } else {
+    const auto scale = std::sqrt(1.0 + m22 - m00 - m11) * 2.0;
+    result = {(m10 - m01) / scale, (m02 + m20) / scale,
+              (m12 + m21) / scale, 0.25 * scale};
+  }
+  return normalized(result);
+}
+
 model::Vec3d rotate(Quaterniond rotation, model::Vec3d value) noexcept {
   const auto unit = normalized(rotation);
   const auto vector = Quaterniond{0.0, value.x, value.y, value.z};
@@ -118,6 +151,13 @@ Matrix4d matrix(const Transform& transform) noexcept {
   const auto wx = rotation.w * rotation.x;
   const auto wy = rotation.w * rotation.y;
   const auto wz = rotation.w * rotation.z;
+  const auto scaled_pivot = model::Vec3d{
+      transform.pivot.x * transform.scale.x,
+      transform.pivot.y * transform.scale.y,
+      transform.pivot.z * transform.scale.z};
+  const auto rotated_pivot = rotate(rotation, scaled_pivot);
+  const auto affine_translation =
+      transform.translation + transform.pivot - rotated_pivot;
 
   Matrix4d result;
   result.values = {
@@ -133,9 +173,9 @@ Matrix4d matrix(const Transform& transform) noexcept {
       (2.0 * (yz - wx)) * transform.scale.z,
       (1.0 - 2.0 * (xx + yy)) * transform.scale.z,
       0.0,
-      transform.translation.x,
-      transform.translation.y,
-      transform.translation.z,
+      affine_translation.x,
+      affine_translation.y,
+      affine_translation.z,
       1.0};
   return result;
 }

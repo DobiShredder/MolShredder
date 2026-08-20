@@ -24,6 +24,9 @@ pin한다. 개발 도구는 `environment.yml`에 기록한다.
 Compiler와 platform SDK는 conda에 고정하지 않고 각 OS의 native toolchain을 사용한다.
 Thread support는 CMake `Threads::Threads` portable target으로 link하며 별도 vendored library를
 추가하지 않는다.
+선택된 OS/architecture/compiler와 HDF5/netCDF/Python version 및 compile feature는 generated
+`molshredder-support.json`과 `system info`에서 확인한다. 이 metadata는 실제 GPU backend 실행 검증이나
+최소 지원 OS 약속을 대신하지 않는다.
 
 CLI는 script command를 실제로 호출할 때 embedded CPython을 초기화한다. Python extension은 host interpreter를
 사용하며 `libpython`을 별도로 link하지 않는다. macOS에서 두 runtime을 한 module에 link하지 않도록 automation

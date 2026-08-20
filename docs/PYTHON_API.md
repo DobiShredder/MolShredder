@@ -43,6 +43,7 @@ molshredder.run_script(
 
 ```python
 version = molshredder.invoke("version")
+support = molshredder.invoke("system info")
 center = molshredder.invoke("com", {"selection": "protein"})
 series = molshredder.invoke(
     "analyze trajectory distance",
@@ -68,6 +69,60 @@ contact_occupancy = molshredder.invoke(
 )
 secondary_structure = molshredder.invoke(
     "analyze secondary-structure", {"selection": "protein"}
+)
+
+molshredder.invoke("view set", {"target-x": "3", "distance": "25"})
+molshredder.invoke(
+    "view center",
+    {"selection": "chain A", "move-origin": "true", "state": "current"},
+)
+molshredder.invoke(
+    "view orient",
+    {"selection": "polymer", "state": "all", "duration": "0.35"},
+)
+molshredder.invoke(
+    "view zoom",
+    {"selection": "protein", "buffer": "2", "complete": "true", "state": "all",
+     "duration": "0.35", "hand": "1"},
+)
+molshredder.invoke("view origin", {"selection": "resn LIG", "state": "2"})
+molshredder.invoke("view origin", {"position": "1.5,-2,3.25"})
+molshredder.invoke(
+    "view origin", {"object": "current", "selection": "polymer", "state": "all"}
+)
+molshredder.invoke("view reset", {"object": "current"})
+molshredder.invoke("view reset", {"duration": "0.35", "hand": "1"})
+molshredder.invoke(
+    "view clip",
+    {"mode": "atoms", "distance": "2", "selection": "protein", "state": "all"},
+)
+clip_range = molshredder.invoke("view get-clip")
+molshredder.invoke("view move", {"axis": "x", "distance": "5"})
+molshredder.invoke("view turn", {"axis": "z", "angle": "15"})
+molshredder.invoke(
+    "view projection",
+    {"mode": "orthographic", "field-of-view-degrees": "45",
+     "preserve-scale": "true"},
+)
+# Convenience aliases normalize to the same operation
+molshredder.invoke("orthoscopic")
+molshredder.invoke(
+    "stereo set",
+    {"enabled": "true", "mode": "side_by_side", "swap-eyes": "false",
+     "shift-percent": "2.0", "angle-scale": "2.1",
+     "anaglyph-mode": "optimized"},
+)
+stereo_capabilities = molshredder.invoke("stereo modes")
+molshredder.invoke("view store", {"name": "active site close-up"})
+views = molshredder.invoke("view list")
+molshredder.invoke(
+    "view recall",
+    {"name": "active site close-up", "duration": "0.35", "hand": "1"},
+)
+pymol_view = molshredder.invoke("view export-pymol")
+molshredder.invoke(
+    "view import-pymol",
+    {"values": pymol_view["data"]["text"], "duration": "0.35", "hand": "1"},
 )
 
 script = molshredder.run_script(

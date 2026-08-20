@@ -2,12 +2,14 @@
 
 #include <algorithm>
 #include <charconv>
+#include <cctype>
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <iterator>
 #include <limits>
 #include <memory>
+#include <numbers>
 #include <string>
 #include <utility>
 #include <variant>
@@ -20,6 +22,10 @@
 namespace molshredder::application {
 namespace {
 
+using scene::operator+;
+using scene::operator-;
+using scene::operator*;
+
 operation::Error invalid(std::string message, std::string suggestion = {}) {
   return operation::Error{operation::ErrorCode::invalid_argument,
                           std::move(message), std::move(suggestion)};
@@ -29,6 +35,47 @@ operation::Error missing_active() {
   return operation::Error{operation::ErrorCode::not_found,
                           "workspace has no active molecular object",
                           "load a structure first"};
+}
+
+model::Vec3d coordinate_at(const model::CoordinateFrame &frame,
+                           std::size_t index) {
+  return std::visit(
+      [index](const auto &values) {
+        return model::Vec3d{static_cast<double>(values[index].x),
+                            static_cast<double>(values[index].y),
+                            static_cast<double>(values[index].z)};
+      },
+      frame.positions().values());
+}
+
+void include_point(model::Vec3d point, model::Vec3d &minimum,
+                   model::Vec3d &maximum, bool &empty) {
+  if (empty) {
+    minimum = point;
+    maximum = point;
+    empty = false;
+    return;
+  }
+  minimum.x = std::min(minimum.x, point.x);
+  minimum.y = std::min(minimum.y, point.y);
+  minimum.z = std::min(minimum.z, point.z);
+  maximum.x = std::max(maximum.x, point.x);
+  maximum.y = std::max(maximum.y, point.y);
+  maximum.z = std::max(maximum.z, point.z);
+}
+
+std::optional<operation::Error> validate_view_name(std::string_view name) {
+  if (name.empty() || name.size() > 128U) {
+    return invalid("view name must contain between 1 and 128 bytes",
+                   "provide a short descriptive view name");
+  }
+  if (std::any_of(name.begin(), name.end(), [](char value) {
+        return std::iscntrl(static_cast<unsigned char>(value)) != 0;
+      })) {
+    return invalid("view name must not contain control characters",
+                   "use printable characters in the view name");
+  }
+  return std::nullopt;
 }
 
 render::AtomVisual default_visual(const model::AtomRecord &atom) {
@@ -247,6 +294,136 @@ resolve_weights(const model::Topology &topology, analysis::WeightMode mode) {
                        masses.value().unit, masses.value().estimated}});
 }
 
+struct CameraFrameRange {
+  std::size_t first{};
+  std::size_t count{1U};
+};
+
+operation::Result<CameraFrameRange>
+resolve_camera_frame_range(const WorkspaceObject &object,
+                           CameraStateScope state_scope) {
+  const auto frame_count = object.system->coordinates()->frame_count();
+  CameraFrameRange range;
+  switch (state_scope.kind) {
+  case CameraStateScopeKind::current:
+    range.first = object.trajectory.has_value()
+                      ? object.trajectory->timeline.snapshot().frame
+                      : 0U;
+    break;
+  case CameraStateScopeKind::all:
+    if (!frame_count.has_value()) {
+      return operation::Result<CameraFrameRange>::failure(operation::Error{
+          operation::ErrorCode::unsupported,
+          "all-state camera operation requires a known frame count",
+          "use state=current or a one-based explicit state"});
+    }
+    range.count = *frame_count;
+    break;
+  case CameraStateScopeKind::explicit_state:
+    range.first = state_scope.frame_index;
+    break;
+  }
+  if (range.count == 0U) {
+    return operation::Result<CameraFrameRange>::failure(operation::Error{
+        operation::ErrorCode::invalid_selection,
+        "camera state scope contains no coordinate frames",
+        "load coordinates or choose a state containing coordinates"});
+  }
+  if (frame_count.has_value() && range.first >= *frame_count) {
+    return operation::Result<CameraFrameRange>::failure(invalid(
+        "camera state is outside the available frame range",
+        "choose a one-based state between 1 and " +
+            std::to_string(*frame_count)));
+  }
+  return operation::Result<CameraFrameRange>::success(range);
+}
+
+operation::Result<SpatialExtent> object_selection_extent(
+    const WorkspaceObject &object, std::string_view selection_expression,
+    CameraStateScope state_scope, operation::TaskContext *context) {
+  const auto mask = selection_mask(object, selection_expression);
+  if (!mask.has_value())
+    return operation::Result<SpatialExtent>::failure(mask.error());
+  const auto frame_range = resolve_camera_frame_range(object, state_scope);
+  if (!frame_range.has_value())
+    return operation::Result<SpatialExtent>::failure(frame_range.error());
+  SpatialExtent extent;
+  extent.evaluated_frame_count = frame_range.value().count;
+  extent.selected_atom_count = static_cast<std::size_t>(std::count_if(
+      mask.value().begin(), mask.value().end(),
+      [](std::uint8_t selected) { return selected != 0U; }));
+  bool empty = true;
+  for (std::size_t frame_offset = 0; frame_offset < frame_range.value().count;
+       ++frame_offset) {
+    if (context != nullptr && context->cancellation.is_cancelled()) {
+      return operation::Result<SpatialExtent>::failure(operation::Error{
+          operation::ErrorCode::cancelled,
+          "object origin extent cancelled after " +
+              std::to_string(frame_offset) + " of " +
+              std::to_string(frame_range.value().count) + " frames",
+          {}});
+    }
+    const auto frame = object.system->coordinates()->read_frame(
+        frame_range.value().first + frame_offset);
+    if (!frame.has_value())
+      return operation::Result<SpatialExtent>::failure(frame.error());
+    for (std::size_t index = 0; index < mask.value().size(); ++index) {
+      if (mask.value()[index] == 0U)
+        continue;
+      if (!frame.value()->atom_present(index)) {
+        ++extent.skipped_missing_atom_count;
+        continue;
+      }
+      include_point(coordinate_at(*frame.value(), index), extent.minimum,
+                    extent.maximum, empty);
+      ++extent.used_atom_count;
+    }
+    if (context != nullptr && context->report_progress) {
+      context->report_progress(operation::ProgressUpdate{
+          0.5 * static_cast<double>(frame_offset + 1U) /
+              static_cast<double>(frame_range.value().count),
+          "object origin bounds"});
+    }
+  }
+  if (empty) {
+    return operation::Result<SpatialExtent>::failure(operation::Error{
+        operation::ErrorCode::invalid_selection,
+        "object origin selection contains no present coordinates",
+        "choose a non-empty selection and state scope"});
+  }
+  extent.center = (extent.minimum + extent.maximum) * 0.5;
+  for (std::size_t frame_offset = 0; frame_offset < frame_range.value().count;
+       ++frame_offset) {
+    if (context != nullptr && context->cancellation.is_cancelled()) {
+      return operation::Result<SpatialExtent>::failure(operation::Error{
+          operation::ErrorCode::cancelled,
+          "object origin radius cancelled after " +
+              std::to_string(frame_offset) + " of " +
+              std::to_string(frame_range.value().count) + " frames",
+          {}});
+    }
+    const auto frame = object.system->coordinates()->read_frame(
+        frame_range.value().first + frame_offset);
+    if (!frame.has_value())
+      return operation::Result<SpatialExtent>::failure(frame.error());
+    for (std::size_t index = 0; index < mask.value().size(); ++index) {
+      if (mask.value()[index] == 0U || !frame.value()->atom_present(index))
+        continue;
+      extent.maximum_radius =
+          std::max(extent.maximum_radius,
+                   scene::length(coordinate_at(*frame.value(), index) -
+                                 extent.center));
+    }
+    if (context != nullptr && context->report_progress) {
+      context->report_progress(operation::ProgressUpdate{
+          0.5 + 0.5 * static_cast<double>(frame_offset + 1U) /
+                    static_cast<double>(frame_range.value().count),
+          "object origin radius"});
+    }
+  }
+  return operation::Result<SpatialExtent>::success(extent);
+}
+
 } // namespace
 
 Workspace::Workspace() {
@@ -254,6 +431,89 @@ Workspace::Workspace() {
   if (!built.has_value())
     std::terminate();
   scene_ = built.value();
+  auto camera = scene::Camera::create();
+  if (!camera.has_value())
+    std::terminate();
+  camera_ = std::move(camera.value());
+}
+
+operation::Result<scene::Camera>
+Workspace::set_camera(scene::CameraParameters parameters) {
+  auto camera = scene::Camera::create(std::move(parameters));
+  if (!camera.has_value())
+    return operation::Result<scene::Camera>::failure(camera.error());
+  camera_ = camera.value();
+  return operation::Result<scene::Camera>::success(camera.value());
+}
+
+operation::Result<StereoConfigurationResult>
+Workspace::set_stereo(scene::StereoParameters parameters) {
+  const auto validated = scene::validate_stereo_parameters(parameters);
+  if (!validated.has_value())
+    return operation::Result<StereoConfigurationResult>::failure(
+        validated.error());
+  const auto previous = stereo_;
+  stereo_ = validated.value();
+  return operation::Result<StereoConfigurationResult>::success(
+      StereoConfigurationResult{previous, stereo_});
+}
+
+operation::Result<NamedViewStoreResult>
+Workspace::store_named_view(std::string name) {
+  if (const auto error = validate_view_name(name); error.has_value())
+    return operation::Result<NamedViewStoreResult>::failure(*error);
+  const auto replaced = named_views_.contains(name);
+  named_views_.insert_or_assign(name, camera().parameters());
+  return operation::Result<NamedViewStoreResult>::success(
+      NamedViewStoreResult{{std::move(name), camera().parameters()},
+                           named_views_.size(), replaced});
+}
+
+operation::Result<NamedViewRecord>
+Workspace::recall_named_view(std::string_view name) {
+  if (const auto error = validate_view_name(name); error.has_value())
+    return operation::Result<NamedViewRecord>::failure(*error);
+  const auto found = named_views_.find(name);
+  if (found == named_views_.end()) {
+    return operation::Result<NamedViewRecord>::failure(operation::Error{
+        operation::ErrorCode::not_found,
+        "named view does not exist: " + std::string{name},
+        "use view list to inspect stored view names"});
+  }
+  const auto updated = set_camera(found->second);
+  if (!updated.has_value())
+    return operation::Result<NamedViewRecord>::failure(updated.error());
+  return operation::Result<NamedViewRecord>::success(
+      NamedViewRecord{found->first, updated.value().parameters()});
+}
+
+operation::Result<NamedViewDeleteResult>
+Workspace::delete_named_view(std::string_view name) {
+  if (const auto error = validate_view_name(name); error.has_value())
+    return operation::Result<NamedViewDeleteResult>::failure(*error);
+  const auto found = named_views_.find(name);
+  if (found == named_views_.end()) {
+    return operation::Result<NamedViewDeleteResult>::failure(operation::Error{
+        operation::ErrorCode::not_found,
+        "named view does not exist: " + std::string{name},
+        "use view list to inspect stored view names"});
+  }
+  named_views_.erase(found);
+  return operation::Result<NamedViewDeleteResult>::success(
+      NamedViewDeleteResult{std::string{name}, named_views_.size(), false});
+}
+
+NamedViewDeleteResult Workspace::clear_named_views() {
+  named_views_.clear();
+  return NamedViewDeleteResult{"", 0U, true};
+}
+
+std::vector<NamedViewRecord> Workspace::list_named_views() const {
+  std::vector<NamedViewRecord> result;
+  result.reserve(named_views_.size());
+  for (const auto &[name, camera] : named_views_)
+    result.push_back(NamedViewRecord{name, camera});
+  return result;
 }
 
 WorkspaceObject *Workspace::mutable_active_object() noexcept {
@@ -271,6 +531,42 @@ Workspace::object_by_scene_node(std::uint64_t scene_node_id) const noexcept {
         return object.scene_node.value == scene_node_id;
       });
   return found == objects_.end() ? nullptr : &*found;
+}
+
+operation::Result<std::size_t>
+Workspace::object_index_by_reference(std::string_view reference) const {
+  if (reference.empty() || reference == "current") {
+    if (!active_index_.has_value())
+      return operation::Result<std::size_t>::failure(missing_active());
+    return operation::Result<std::size_t>::success(*active_index_);
+  }
+
+  std::uint64_t requested_id{};
+  const auto parsed = std::from_chars(reference.data(),
+                                      reference.data() + reference.size(),
+                                      requested_id);
+  if (parsed.ec == std::errc{} &&
+      parsed.ptr == reference.data() + reference.size() && requested_id != 0U) {
+    const auto found = std::find_if(
+        objects_.begin(), objects_.end(), [requested_id](const auto &object) {
+          return object.id == requested_id;
+        });
+    if (found != objects_.end()) {
+      return operation::Result<std::size_t>::success(
+          static_cast<std::size_t>(found - objects_.begin()));
+    }
+  } else {
+    for (std::size_t index = 0; index < objects_.size(); ++index) {
+      const auto *node = scene_->find(objects_[index].scene_node);
+      if (node != nullptr && node->name() == reference)
+        return operation::Result<std::size_t>::success(index);
+    }
+  }
+
+  return operation::Result<std::size_t>::failure(operation::Error{
+      operation::ErrorCode::not_found,
+      "workspace object does not exist: " + std::string{reference},
+      "use object list to obtain an object name or ID, or use current"});
 }
 
 std::vector<WorkspaceObjectInfo> Workspace::list_objects() const {
@@ -818,6 +1114,642 @@ Workspace::analyze_center(std::string selection_expression,
   }
   return operation::Result<CenterAnalysisResult>::success(CenterAnalysisResult{
       object->id, std::move(selection_expression), mode, center.value()});
+}
+
+operation::Result<SpatialExtent>
+Workspace::selection_extent(std::string_view selection_expression,
+                            CameraStateScope state_scope,
+                            operation::TaskContext *context) const {
+  const auto depth_extent = selection_camera_depth_extent(
+      selection_expression, state_scope, context);
+  if (!depth_extent.has_value())
+    return operation::Result<SpatialExtent>::failure(depth_extent.error());
+  return operation::Result<SpatialExtent>::success(
+      depth_extent.value().spatial);
+}
+
+operation::Result<CameraDepthExtent>
+Workspace::selection_camera_depth_extent(
+    std::string_view selection_expression, CameraStateScope state_scope,
+    operation::TaskContext *context) const {
+  const auto *object = active_object();
+  if (object == nullptr)
+    return operation::Result<CameraDepthExtent>::failure(missing_active());
+  const auto parsed = selection::Expression::parse(selection_expression);
+  if (!parsed.has_value())
+    return operation::Result<CameraDepthExtent>::failure(parsed.error());
+  const auto mask = selection::evaluate(
+      parsed.value(), *object->system->topology(),
+      [&](std::string_view name) {
+        return object->selections.evaluate(name, *object->system->topology());
+      });
+  if (!mask.has_value())
+    return operation::Result<CameraDepthExtent>::failure(mask.error());
+
+  const auto frame_range = resolve_camera_frame_range(*object, state_scope);
+  if (!frame_range.has_value())
+    return operation::Result<CameraDepthExtent>::failure(frame_range.error());
+  const auto first_frame_index = frame_range.value().first;
+  const auto scoped_frame_count = frame_range.value().count;
+
+  CameraDepthExtent result;
+  auto &extent = result.spatial;
+  extent.evaluated_frame_count = scoped_frame_count;
+  extent.selected_atom_count = static_cast<std::size_t>(std::count_if(
+      mask.value().begin(), mask.value().end(),
+      [](std::uint8_t selected) { return selected != 0U; }));
+  bool empty = true;
+  for (std::size_t frame_offset = 0; frame_offset < scoped_frame_count;
+       ++frame_offset) {
+    if (context != nullptr && context->cancellation.is_cancelled()) {
+      return operation::Result<CameraDepthExtent>::failure(operation::Error{
+          operation::ErrorCode::cancelled,
+          "camera extent cancelled after " + std::to_string(frame_offset) +
+              " of " + std::to_string(scoped_frame_count) + " frames",
+          {}});
+    }
+    const auto frame = object->system->coordinates()->read_frame(
+        first_frame_index + frame_offset);
+    if (!frame.has_value())
+      return operation::Result<CameraDepthExtent>::failure(frame.error());
+    for (std::size_t index = 0; index < mask.value().size(); ++index) {
+      if (mask.value()[index] == 0U)
+        continue;
+      if (!frame.value()->atom_present(index)) {
+        ++extent.skipped_missing_atom_count;
+        continue;
+      }
+      const auto coordinate = coordinate_at(*frame.value(), index);
+      const auto depth = scene::dot(coordinate - camera().position(),
+                                    camera().forward());
+      if (empty) {
+        result.minimum_depth = depth;
+        result.maximum_depth = depth;
+      } else {
+        result.minimum_depth = std::min(result.minimum_depth, depth);
+        result.maximum_depth = std::max(result.maximum_depth, depth);
+      }
+      include_point(coordinate, extent.minimum, extent.maximum, empty);
+      ++extent.used_atom_count;
+    }
+    if (context != nullptr && context->report_progress) {
+      context->report_progress(operation::ProgressUpdate{
+          0.5 * static_cast<double>(frame_offset + 1U) /
+              static_cast<double>(scoped_frame_count),
+          "camera extent bounds"});
+    }
+  }
+  if (empty) {
+    return operation::Result<CameraDepthExtent>::failure(operation::Error{
+        operation::ErrorCode::invalid_selection,
+        "camera selection does not contain present coordinates",
+        "choose a non-empty selection and state scope"});
+  }
+  extent.center = (extent.minimum + extent.maximum) * 0.5;
+  for (std::size_t frame_offset = 0; frame_offset < scoped_frame_count;
+       ++frame_offset) {
+    if (context != nullptr && context->cancellation.is_cancelled()) {
+      return operation::Result<CameraDepthExtent>::failure(operation::Error{
+          operation::ErrorCode::cancelled,
+          "camera extent radius calculation cancelled after " +
+              std::to_string(frame_offset) + " of " +
+              std::to_string(scoped_frame_count) + " frames",
+          {}});
+    }
+    const auto frame = object->system->coordinates()->read_frame(
+        first_frame_index + frame_offset);
+    if (!frame.has_value())
+      return operation::Result<CameraDepthExtent>::failure(frame.error());
+    for (std::size_t index = 0; index < mask.value().size(); ++index) {
+      if (mask.value()[index] == 0U || !frame.value()->atom_present(index))
+        continue;
+      extent.maximum_radius =
+          std::max(extent.maximum_radius,
+                   scene::length(coordinate_at(*frame.value(), index) -
+                                 extent.center));
+    }
+    if (context != nullptr && context->report_progress) {
+      context->report_progress(operation::ProgressUpdate{
+          0.5 + 0.5 * static_cast<double>(frame_offset + 1U) /
+                    static_cast<double>(scoped_frame_count),
+          "camera extent radius"});
+    }
+  }
+  return operation::Result<CameraDepthExtent>::success(result);
+}
+
+operation::Result<CameraSelectionResult>
+Workspace::center_camera(std::string selection_expression,
+                         bool move_origin, CameraStateScope state_scope,
+                         operation::TaskContext *context) {
+  const auto extent =
+      selection_extent(selection_expression, state_scope, context);
+  if (!extent.has_value())
+    return operation::Result<CameraSelectionResult>::failure(extent.error());
+  auto parameters = camera().parameters();
+  parameters.target = extent.value().center;
+  if (move_origin)
+    parameters.model_origin = extent.value().center;
+  const auto updated = set_camera(parameters);
+  if (!updated.has_value())
+    return operation::Result<CameraSelectionResult>::failure(updated.error());
+  return operation::Result<CameraSelectionResult>::success(
+      CameraSelectionResult{active_object()->id, std::move(selection_expression),
+                            state_scope, extent.value(), updated.value()});
+}
+
+operation::Result<CameraSelectionResult>
+Workspace::zoom_camera(std::string selection_expression, double buffer,
+                       bool complete, CameraStateScope state_scope,
+                       operation::TaskContext *context) {
+  if (!std::isfinite(buffer)) {
+    return operation::Result<CameraSelectionResult>::failure(
+        invalid("camera zoom buffer must be finite"));
+  }
+  const auto extent =
+      selection_extent(selection_expression, state_scope, context);
+  if (!extent.has_value())
+    return operation::Result<CameraSelectionResult>::failure(extent.error());
+  const auto dimensions = extent.value().maximum - extent.value().minimum;
+  auto radius = complete
+                    ? extent.value().maximum_radius
+                    : 0.5 * std::max({dimensions.x, dimensions.y,
+                                      dimensions.z});
+  radius += buffer;
+  // PyMOL applies a MAX_VDW floor for degenerate/small selections. Keep an
+  // explicit molecular-scale floor until atom-radius-aware framing lands.
+  radius = std::max(radius, 2.0);
+  const auto framed = camera().frame_sphere(extent.value().center, radius, 1.0);
+  if (!framed.has_value())
+    return operation::Result<CameraSelectionResult>::failure(framed.error());
+  const auto updated = set_camera(framed.value().parameters());
+  if (!updated.has_value())
+    return operation::Result<CameraSelectionResult>::failure(updated.error());
+  return operation::Result<CameraSelectionResult>::success(
+      CameraSelectionResult{active_object()->id, std::move(selection_expression),
+                            state_scope, extent.value(), updated.value()});
+}
+
+operation::Result<CameraSelectionResult>
+Workspace::set_camera_origin(std::string selection_expression,
+                             CameraStateScope state_scope,
+                             operation::TaskContext *context) {
+  const auto extent =
+      selection_extent(selection_expression, state_scope, context);
+  if (!extent.has_value())
+    return operation::Result<CameraSelectionResult>::failure(extent.error());
+  auto parameters = camera().parameters();
+  parameters.model_origin = extent.value().center;
+  const auto updated = set_camera(parameters);
+  if (!updated.has_value())
+    return operation::Result<CameraSelectionResult>::failure(updated.error());
+  return operation::Result<CameraSelectionResult>::success(
+      CameraSelectionResult{active_object()->id, std::move(selection_expression),
+                            state_scope, extent.value(), updated.value()});
+}
+
+operation::Result<scene::Camera>
+Workspace::set_camera_origin(model::Vec3d position) {
+  if (!scene::is_finite(position)) {
+    return operation::Result<scene::Camera>::failure(
+        invalid("camera model origin position must be finite"));
+  }
+  auto parameters = camera().parameters();
+  parameters.model_origin = position;
+  return set_camera(parameters);
+}
+
+operation::Result<ObjectOriginResult>
+Workspace::set_object_origin_from_selection(
+    std::string object_reference, std::string selection_expression,
+    CameraStateScope state_scope, operation::TaskContext *context) {
+  const auto index = object_index_by_reference(object_reference);
+  if (!index.has_value())
+    return operation::Result<ObjectOriginResult>::failure(index.error());
+  const auto extent = object_selection_extent(
+      objects_[index.value()], selection_expression, state_scope, context);
+  if (!extent.has_value())
+    return operation::Result<ObjectOriginResult>::failure(extent.error());
+  const auto updated = set_object_origin(object_reference, extent.value().center);
+  if (!updated.has_value())
+    return updated;
+  auto result = updated.value();
+  result.selection_expression = std::move(selection_expression);
+  result.state_scope = state_scope;
+  result.extent = extent.value();
+  return operation::Result<ObjectOriginResult>::success(std::move(result));
+}
+
+operation::Result<ObjectOriginResult>
+Workspace::set_object_origin(std::string object_reference,
+                             model::Vec3d position) {
+  if (!scene::is_finite(position)) {
+    return operation::Result<ObjectOriginResult>::failure(
+        invalid("object origin position must be finite"));
+  }
+  const auto index = object_index_by_reference(object_reference);
+  if (!index.has_value())
+    return operation::Result<ObjectOriginResult>::failure(index.error());
+  const auto &object = objects_[index.value()];
+  const auto *node = scene_->find(object.scene_node);
+  if (node == nullptr) {
+    return operation::Result<ObjectOriginResult>::failure(operation::Error{
+        operation::ErrorCode::internal, "object scene node is missing", {}});
+  }
+
+  const auto object_name = node->name();
+  auto transform = node->local_transform();
+  const auto old_origin = scene::transform_point(scene::matrix(transform), {});
+  transform.pivot = position;
+  const auto new_origin = scene::transform_point(scene::matrix(transform), {});
+  transform.translation = transform.translation + old_origin - new_origin;
+
+  auto builder = scene::SceneBuilder::from(*scene_);
+  if (const auto error = builder.set_transform(object.scene_node, transform);
+      error.has_value()) {
+    return operation::Result<ObjectOriginResult>::failure(*error);
+  }
+  const auto next_scene = builder.build();
+  if (!next_scene.has_value())
+    return operation::Result<ObjectOriginResult>::failure(next_scene.error());
+  scene_ = next_scene.value();
+  return operation::Result<ObjectOriginResult>::success(ObjectOriginResult{
+      object.id, object_name, position, std::nullopt, std::nullopt,
+      std::nullopt, transform, scene_->version()});
+}
+
+operation::Result<ObjectTransformResetResult>
+Workspace::reset_object_transforms(std::string object_reference) {
+  std::vector<std::size_t> indices;
+  if (object_reference == "all") {
+    indices.resize(objects_.size());
+    for (std::size_t index = 0; index < indices.size(); ++index)
+      indices[index] = index;
+  } else {
+    const auto index = object_index_by_reference(object_reference);
+    if (!index.has_value()) {
+      return operation::Result<ObjectTransformResetResult>::failure(
+          index.error());
+    }
+    indices.push_back(index.value());
+  }
+  if (indices.empty()) {
+    return operation::Result<ObjectTransformResetResult>::failure(
+        missing_active());
+  }
+
+  auto builder = scene::SceneBuilder::from(*scene_);
+  ObjectTransformResetResult result;
+  result.object_reference = std::move(object_reference);
+  result.object_ids.reserve(indices.size());
+  for (const auto index : indices) {
+    const auto &object = objects_[index];
+    if (const auto error =
+            builder.set_transform(object.scene_node, scene::Transform{});
+        error.has_value()) {
+      return operation::Result<ObjectTransformResetResult>::failure(*error);
+    }
+    result.object_ids.push_back(object.id);
+  }
+  const auto next_scene = builder.build();
+  if (!next_scene.has_value()) {
+    return operation::Result<ObjectTransformResetResult>::failure(
+        next_scene.error());
+  }
+  scene_ = next_scene.value();
+  result.scene_version = scene_->version();
+  return operation::Result<ObjectTransformResetResult>::success(
+      std::move(result));
+}
+
+operation::Result<CameraOrientResult>
+Workspace::orient_camera(std::string selection_expression,
+                         CameraStateScope state_scope,
+                         operation::TaskContext *context) {
+  const auto *object = active_object();
+  if (object == nullptr)
+    return operation::Result<CameraOrientResult>::failure(missing_active());
+  const auto mask = selection_mask(*object, selection_expression);
+  if (!mask.has_value())
+    return operation::Result<CameraOrientResult>::failure(mask.error());
+  const auto frame_range = resolve_camera_frame_range(*object, state_scope);
+  if (!frame_range.has_value())
+    return operation::Result<CameraOrientResult>::failure(frame_range.error());
+
+  SpatialExtent extent;
+  extent.evaluated_frame_count = frame_range.value().count;
+  extent.selected_atom_count = static_cast<std::size_t>(std::count_if(
+      mask.value().begin(), mask.value().end(),
+      [](std::uint8_t selected) { return selected != 0U; }));
+  analysis::PrincipalMoments moments;
+  bool empty = true;
+  for (std::size_t frame_offset = 0; frame_offset < frame_range.value().count;
+       ++frame_offset) {
+    if (context != nullptr && context->cancellation.is_cancelled()) {
+      return operation::Result<CameraOrientResult>::failure(operation::Error{
+          operation::ErrorCode::cancelled,
+          "camera orientation cancelled after " +
+              std::to_string(frame_offset) + " of " +
+              std::to_string(frame_range.value().count) + " frames",
+          {}});
+    }
+    const auto frame = object->system->coordinates()->read_frame(
+        frame_range.value().first + frame_offset);
+    if (!frame.has_value())
+      return operation::Result<CameraOrientResult>::failure(frame.error());
+    for (std::size_t index = 0; index < mask.value().size(); ++index) {
+      if (mask.value()[index] == 0U)
+        continue;
+      if (!frame.value()->atom_present(index)) {
+        ++extent.skipped_missing_atom_count;
+        continue;
+      }
+      const auto coordinate = coordinate_at(*frame.value(), index);
+      if (!analysis::accumulate(moments, coordinate)) {
+        return operation::Result<CameraOrientResult>::failure(invalid(
+            "principal-axis coordinate moments exceed the numeric range"));
+      }
+      include_point(coordinate, extent.minimum, extent.maximum, empty);
+      ++extent.used_atom_count;
+    }
+    if (context != nullptr && context->report_progress) {
+      context->report_progress(operation::ProgressUpdate{
+          0.5 * static_cast<double>(frame_offset + 1U) /
+              static_cast<double>(frame_range.value().count),
+          "camera principal moments"});
+    }
+  }
+  if (empty) {
+    return operation::Result<CameraOrientResult>::failure(operation::Error{
+        operation::ErrorCode::invalid_selection,
+        "camera orientation selection contains no present coordinates",
+        "choose a non-empty selection and state scope"});
+  }
+  extent.center = (extent.minimum + extent.maximum) * 0.5;
+  const std::array<model::Vec3d, 3U> preferred_axes{
+      camera().right(), camera().up(), camera().forward() * -1.0};
+  const auto principal =
+      analysis::calculate_principal_axes(moments, preferred_axes);
+  if (!principal.has_value())
+    return operation::Result<CameraOrientResult>::failure(principal.error());
+
+  model::Vec3d projected_minimum;
+  model::Vec3d projected_maximum;
+  bool projected_empty = true;
+  for (std::size_t frame_offset = 0; frame_offset < frame_range.value().count;
+       ++frame_offset) {
+    if (context != nullptr && context->cancellation.is_cancelled()) {
+      return operation::Result<CameraOrientResult>::failure(operation::Error{
+          operation::ErrorCode::cancelled,
+          "camera orientation bounds cancelled after " +
+              std::to_string(frame_offset) + " of " +
+              std::to_string(frame_range.value().count) + " frames",
+          {}});
+    }
+    const auto frame = object->system->coordinates()->read_frame(
+        frame_range.value().first + frame_offset);
+    if (!frame.has_value())
+      return operation::Result<CameraOrientResult>::failure(frame.error());
+    for (std::size_t index = 0; index < mask.value().size(); ++index) {
+      if (mask.value()[index] == 0U || !frame.value()->atom_present(index))
+        continue;
+      const auto coordinate = coordinate_at(*frame.value(), index);
+      include_point({scene::dot(coordinate, principal.value().axes[0]),
+                     scene::dot(coordinate, principal.value().axes[1]),
+                     scene::dot(coordinate, principal.value().axes[2])},
+                    projected_minimum, projected_maximum, projected_empty);
+      extent.maximum_radius =
+          std::max(extent.maximum_radius,
+                   scene::length(coordinate - extent.center));
+    }
+    if (context != nullptr && context->report_progress) {
+      context->report_progress(operation::ProgressUpdate{
+          0.5 + 0.5 * static_cast<double>(frame_offset + 1U) /
+                    static_cast<double>(frame_range.value().count),
+          "camera oriented bounds"});
+    }
+  }
+  const auto local_center = (projected_minimum + projected_maximum) * 0.5;
+  const auto half_extents = (projected_maximum - projected_minimum) * 0.5;
+  const auto oriented_center =
+      principal.value().axes[0] * local_center.x +
+      principal.value().axes[1] * local_center.y +
+      principal.value().axes[2] * local_center.z;
+  auto parameters = camera().parameters();
+  parameters.orientation = scene::quaternion_from_basis(
+      principal.value().axes[0], principal.value().axes[1],
+      principal.value().axes[2]);
+  const auto oriented = scene::Camera::create(parameters);
+  if (!oriented.has_value())
+    return operation::Result<CameraOrientResult>::failure(oriented.error());
+  const auto framed = oriented.value().frame_box(oriented_center, half_extents);
+  if (!framed.has_value())
+    return operation::Result<CameraOrientResult>::failure(framed.error());
+  const auto updated = set_camera(framed.value().parameters());
+  if (!updated.has_value())
+    return operation::Result<CameraOrientResult>::failure(updated.error());
+  return operation::Result<CameraOrientResult>::success(CameraOrientResult{
+      object->id, std::move(selection_expression), state_scope, extent,
+      principal.value(), oriented_center, half_extents, updated.value()});
+}
+
+operation::Result<CameraResetResult> Workspace::reset_camera() {
+  SpatialExtent extent;
+  bool empty = true;
+  std::size_t molecular_object_count{};
+  std::size_t volume_object_count{};
+  for (const auto &object : objects_) {
+    if (!scene_->effectively_visible(object.scene_node))
+      continue;
+    const auto frame = active_frame(object);
+    if (!frame.has_value())
+      continue;
+    ++extent.evaluated_frame_count;
+    auto contributed = false;
+    for (std::size_t index = 0; index < frame.value()->atom_count(); ++index) {
+      ++extent.selected_atom_count;
+      if (!frame.value()->atom_present(index)) {
+        ++extent.skipped_missing_atom_count;
+        continue;
+      }
+      include_point(coordinate_at(*frame.value(), index), extent.minimum,
+                    extent.maximum, empty);
+      ++extent.used_atom_count;
+      contributed = true;
+    }
+    if (contributed)
+      ++molecular_object_count;
+  }
+  for (const auto &volume : volumes_) {
+    if (!scene_->effectively_visible(volume.scene_node))
+      continue;
+    const auto shape = volume.grid->shape();
+    for (const auto x : {std::size_t{0U}, shape.x - 1U}) {
+      for (const auto y : {std::size_t{0U}, shape.y - 1U}) {
+        for (const auto z : {std::size_t{0U}, shape.z - 1U}) {
+          include_point(volume.grid->position(x, y, z), extent.minimum,
+                        extent.maximum, empty);
+        }
+      }
+    }
+    ++volume_object_count;
+  }
+
+  scene::CameraParameters parameters;
+  // Preserve the live viewport shape, but reset every other camera field to
+  // the application defaults before framing visible data.
+  parameters.aspect_ratio = camera().parameters().aspect_ratio;
+  operation::Result<scene::Camera> reset = scene::Camera::create(parameters);
+  if (!reset.has_value())
+    return operation::Result<CameraResetResult>::failure(reset.error());
+  std::optional<SpatialExtent> result_extent;
+  if (!empty) {
+    extent.center = (extent.minimum + extent.maximum) * 0.5;
+    extent.maximum_radius =
+        scene::length((extent.maximum - extent.minimum) * 0.5);
+    const auto radius = std::max(extent.maximum_radius, 2.0);
+    parameters.model_origin = extent.center;
+    reset = scene::Camera::create(parameters);
+    if (!reset.has_value())
+      return operation::Result<CameraResetResult>::failure(reset.error());
+    reset = reset.value().frame_sphere(extent.center, radius, 1.0);
+    result_extent = extent;
+  }
+  if (!reset.has_value())
+    return operation::Result<CameraResetResult>::failure(reset.error());
+  const auto updated = set_camera(reset.value().parameters());
+  if (!updated.has_value())
+    return operation::Result<CameraResetResult>::failure(updated.error());
+  return operation::Result<CameraResetResult>::success(CameraResetResult{
+      updated.value(), result_extent, molecular_object_count,
+      volume_object_count});
+}
+
+operation::Result<CameraClipResult>
+Workspace::clip_camera(CameraClipMode mode, double distance,
+                       std::optional<std::string> selection_expression,
+                       CameraStateScope state_scope,
+                       operation::TaskContext *context) {
+  if (!std::isfinite(distance)) {
+    return operation::Result<CameraClipResult>::failure(
+        invalid("camera clip distance must be finite"));
+  }
+
+  auto parameters = camera().parameters();
+  std::optional<CameraDepthExtent> depth_extent;
+  std::optional<std::string> effective_selection;
+  switch (mode) {
+  case CameraClipMode::near_relative:
+    parameters.near_clip -= distance;
+    break;
+  case CameraClipMode::far_relative:
+    parameters.far_clip -= distance;
+    break;
+  case CameraClipMode::move:
+    parameters.near_clip -= distance;
+    parameters.far_clip -= distance;
+    break;
+  case CameraClipMode::slab: {
+    if (!(distance > 0.0)) {
+      return operation::Result<CameraClipResult>::failure(invalid(
+          "camera clip slab thickness must be positive",
+          "provide a positive slab thickness in angstrom"));
+    }
+    auto center_depth =
+        (parameters.near_clip + parameters.far_clip) * 0.5;
+    if (selection_expression.has_value() &&
+        !selection_expression->empty()) {
+      const auto selected = selection_camera_depth_extent(
+          *selection_expression, state_scope, context);
+      if (!selected.has_value())
+        return operation::Result<CameraClipResult>::failure(selected.error());
+      depth_extent = selected.value();
+      effective_selection = std::move(selection_expression);
+      center_depth = scene::dot(depth_extent->spatial.center -
+                                    camera().position(),
+                                camera().forward());
+    }
+    parameters.near_clip = center_depth - distance * 0.5;
+    parameters.far_clip = center_depth + distance * 0.5;
+    break;
+  }
+  case CameraClipMode::atoms: {
+    effective_selection =
+        selection_expression.has_value() && !selection_expression->empty()
+            ? std::move(selection_expression)
+            : std::optional<std::string>{"all"};
+    const auto selected = selection_camera_depth_extent(
+        *effective_selection, state_scope, context);
+    if (!selected.has_value())
+      return operation::Result<CameraClipResult>::failure(selected.error());
+    depth_extent = selected.value();
+    parameters.near_clip = depth_extent->minimum_depth - distance;
+    parameters.far_clip = depth_extent->maximum_depth + distance;
+    break;
+  }
+  case CameraClipMode::near_absolute:
+    parameters.near_clip = distance;
+    break;
+  case CameraClipMode::far_absolute:
+    parameters.far_clip = distance;
+    break;
+  }
+
+  const auto updated = set_camera(parameters);
+  if (!updated.has_value())
+    return operation::Result<CameraClipResult>::failure(updated.error());
+  return operation::Result<CameraClipResult>::success(CameraClipResult{
+      mode, distance, std::move(effective_selection), std::move(depth_extent),
+      state_scope, updated.value()});
+}
+
+operation::Result<CameraNavigationResult>
+Workspace::move_camera(scene::CameraAxis axis, double distance) {
+  const auto moved = camera().move_axis(axis, distance);
+  if (!moved.has_value())
+    return operation::Result<CameraNavigationResult>::failure(moved.error());
+  const auto updated = set_camera(moved.value().parameters());
+  if (!updated.has_value())
+    return operation::Result<CameraNavigationResult>::failure(updated.error());
+  return operation::Result<CameraNavigationResult>::success(
+      CameraNavigationResult{axis, distance, updated.value()});
+}
+
+operation::Result<CameraNavigationResult>
+Workspace::turn_camera(scene::CameraAxis axis, double angle_degrees) {
+  const auto turned = camera().turn_axis_degrees(axis, angle_degrees);
+  if (!turned.has_value())
+    return operation::Result<CameraNavigationResult>::failure(turned.error());
+  const auto updated = set_camera(turned.value().parameters());
+  if (!updated.has_value())
+    return operation::Result<CameraNavigationResult>::failure(updated.error());
+  return operation::Result<CameraNavigationResult>::success(
+      CameraNavigationResult{axis, angle_degrees, updated.value()});
+}
+
+operation::Result<CameraProjectionResult>
+Workspace::set_camera_projection(
+    scene::ProjectionMode mode,
+    std::optional<double> field_of_view_degrees, bool preserve_scale) {
+  const auto previous_mode = camera().parameters().projection;
+  const auto previous_span = camera().vertical_span_at_target();
+  const auto projected =
+      camera().with_projection(mode, field_of_view_degrees, preserve_scale);
+  if (!projected.has_value()) {
+    return operation::Result<CameraProjectionResult>::failure(
+        projected.error());
+  }
+  const auto updated = set_camera(projected.value().parameters());
+  if (!updated.has_value()) {
+    return operation::Result<CameraProjectionResult>::failure(updated.error());
+  }
+  return operation::Result<CameraProjectionResult>::success(
+      CameraProjectionResult{
+          previous_mode, mode, previous_span,
+          updated.value().vertical_span_at_target(),
+          updated.value().parameters().vertical_field_of_view_radians *
+              180.0 / std::numbers::pi,
+          preserve_scale, updated.value()});
 }
 
 operation::Result<DistanceMeasurementRecord>

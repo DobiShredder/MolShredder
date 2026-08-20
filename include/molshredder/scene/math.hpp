@@ -34,6 +34,7 @@ struct Transform {
   model::Vec3d translation{};
   Quaterniond rotation{};
   model::Vec3d scale{1.0, 1.0, 1.0};
+  model::Vec3d pivot{};
 
   friend bool operator==(const Transform&, const Transform&) = default;
 };
@@ -62,6 +63,9 @@ struct Transform {
                                     Quaterniond right) noexcept;
 [[nodiscard]] Quaterniond quaternion_from_axis_angle(model::Vec3d axis,
                                                      double radians) noexcept;
+[[nodiscard]] Quaterniond quaternion_from_basis(model::Vec3d right,
+                                                model::Vec3d up,
+                                                model::Vec3d backward) noexcept;
 [[nodiscard]] model::Vec3d rotate(Quaterniond rotation,
                                   model::Vec3d value) noexcept;
 

@@ -1,6 +1,7 @@
 #include <cmath>
 #include <iostream>
 #include <limits>
+#include <numbers>
 #include <string_view>
 
 #include "molshredder/model/coordinates.hpp"
@@ -104,6 +105,112 @@ int main() {
                             orthographic.value().parameters().distance),
                    "orthographic dolly must scale span but retain eye distance");
 
+  const auto perspective_span = camera.value().vertical_span_at_target();
+  const auto projected_orthographic = camera.value().with_projection(
+      scene::ProjectionMode::orthographic);
+  const auto projected_perspective =
+      projected_orthographic.value().with_projection(
+          scene::ProjectionMode::perspective, 60.0, true);
+  passed &= expect(
+      projected_orthographic.has_value() &&
+          projected_perspective.has_value() &&
+          near(projected_orthographic.value().parameters().orthographic_height,
+               perspective_span) &&
+          near(projected_orthographic.value().vertical_span_at_target(),
+               perspective_span) &&
+          near(projected_perspective.value().vertical_span_at_target(),
+               perspective_span) &&
+          near(projected_perspective.value()
+                   .parameters()
+                   .vertical_field_of_view_radians,
+               std::numbers::pi / 3.0) &&
+          near(projected_perspective.value().parameters().near_clip /
+                   projected_perspective.value().parameters().distance,
+               camera.value().parameters().near_clip /
+                   camera.value().parameters().distance) &&
+          near(projected_perspective.value().parameters().far_clip /
+                   projected_perspective.value().parameters().distance,
+               camera.value().parameters().far_clip /
+                   camera.value().parameters().distance),
+      "projection conversion must preserve target-plane scale and normalized clipping");
+  const auto raw_orthographic = camera.value().with_projection(
+      scene::ProjectionMode::orthographic, 30.0, false);
+  passed &= expect(
+      raw_orthographic.has_value() &&
+          raw_orthographic.value().parameters().orthographic_height ==
+              camera.value().parameters().orthographic_height &&
+          raw_orthographic.value().parameters().distance ==
+              camera.value().parameters().distance &&
+          !camera.value()
+               .with_projection(scene::ProjectionMode::perspective, 0.0)
+               .has_value() &&
+          !camera.value()
+               .with_projection(scene::ProjectionMode::perspective, 180.0)
+               .has_value(),
+      "raw projection switching must preserve inactive parameters and reject invalid degree FOV");
+
+  auto navigation_parameters = camera.value().parameters();
+  navigation_parameters.target = {3.0, 4.0, 5.0};
+  navigation_parameters.model_origin = {1.0, 2.0, 3.0};
+  navigation_parameters.distance = 50.0;
+  navigation_parameters.near_clip = 10.0;
+  navigation_parameters.far_clip = 100.0;
+  const auto navigation = scene::Camera::create(navigation_parameters);
+  const auto moved_x = navigation.value().move_axis(scene::CameraAxis::x, 5.0);
+  const auto moved_y = navigation.value().move_axis(scene::CameraAxis::y, -2.0);
+  const auto moved_z = navigation.value().move_axis(scene::CameraAxis::z, 5.0);
+  passed &= expect(
+      moved_x.has_value() && moved_y.has_value() && moved_z.has_value() &&
+          near(moved_x.value().parameters().target, {-2.0, 4.0, 5.0}) &&
+          near(moved_y.value().parameters().target, {3.0, 6.0, 5.0}) &&
+          moved_x.value().parameters().model_origin ==
+              navigation_parameters.model_origin &&
+          near(moved_z.value().parameters().distance, 45.0) &&
+          near(moved_z.value().parameters().near_clip, 5.0) &&
+          near(moved_z.value().parameters().far_clip, 95.0),
+      "axis move must translate in camera space and preserve the model pivot");
+
+  auto orthographic_move_parameters = orthographic.value().parameters();
+  orthographic_move_parameters.near_clip = 20.0;
+  orthographic_move_parameters.far_clip = 200.0;
+  const auto orthographic_move =
+      scene::Camera::create(orthographic_move_parameters)
+          .value()
+          .move_axis(scene::CameraAxis::z, 10.0);
+  passed &= expect(
+      orthographic_move.has_value() &&
+          near(orthographic_move.value().parameters().distance, 90.0) &&
+          near(orthographic_move.value().parameters().orthographic_height,
+               72.0),
+      "orthographic z move must preserve encoded FOV by scaling view height");
+
+  auto turn_parameters = camera.value().parameters();
+  turn_parameters.target = {2.0, 0.0, 0.0};
+  turn_parameters.model_origin = {};
+  turn_parameters.distance = 10.0;
+  const auto turn_camera = scene::Camera::create(turn_parameters);
+  const auto turned =
+      turn_camera.value().turn_axis_degrees(scene::CameraAxis::z, 90.0);
+  passed &= expect(
+      turned.has_value() &&
+          near(turned.value().parameters().target, {0.0, 2.0, 0.0}) &&
+          near(turned.value().position(), {0.0, 2.0, 10.0}) &&
+          turned.value().parameters().model_origin == model::Vec3d{} &&
+          near(turned.value().parameters().distance, 10.0) &&
+          scene::is_valid(turned.value().parameters().orientation),
+      "axis turn must rotate camera target and eye around model origin");
+
+  passed &= expect(
+      !navigation.value()
+           .move_axis(scene::CameraAxis::z, 45.0)
+           .has_value() &&
+          !navigation.value()
+               .turn_axis_degrees(
+                   scene::CameraAxis::x,
+                   std::numeric_limits<double>::infinity())
+               .has_value(),
+      "axis navigation must reject clip crossing and non-finite angle");
+
   const auto framed = viewport.value().frame_sphere({4.0, 5.0, 6.0}, 10.0);
   passed &= expect(framed.has_value() &&
                        framed.value().parameters().target ==
@@ -118,6 +225,21 @@ int main() {
                                 .orthographic_height,
                             12.0),
                    "orthographic framing must fit padded diameter");
+  const auto framed_box = viewport.value().frame_box(
+      {4.0, -2.0, 1.0}, {10.0, 2.0, 1.0}, 1.0, 0.5);
+  passed &= expect(
+      framed_box.has_value() &&
+          framed_box.value().parameters().target ==
+              model::Vec3d{4.0, -2.0, 1.0} &&
+          framed_box.value().parameters().model_origin ==
+              model::Vec3d{4.0, -2.0, 1.0} &&
+          framed_box.value().parameters().near_clip > 0.0 &&
+          framed_box.value().parameters().far_clip >
+              framed_box.value().parameters().near_clip,
+      "box framing must fit oriented extents and preserve camera invariants");
+  passed &= expect(
+      !viewport.value().frame_box({}, {-1.0, 0.0, 0.0}).has_value(),
+      "box framing must reject negative half extents");
 
   auto invalid_parameters = camera.value().parameters();
   invalid_parameters.orientation = {2.0, 0.0, 0.0, 0.0};

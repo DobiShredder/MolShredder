@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <charconv>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -26,10 +27,12 @@
 #include <rhi/qrhi.h>
 
 #include "molshredder/analysis/secondary_structure.hpp"
+#include "molshredder/automation/python_script.hpp"
 #include "molshredder/model/coordinates.hpp"
 #include "molshredder/model/topology.hpp"
 #include "molshredder/operation/task_context.hpp"
 #include "molshredder/render/representation.hpp"
+#include "molshredder/scene/pymol_view.hpp"
 
 namespace molshredder::desktop {
 namespace {
@@ -122,6 +125,16 @@ QString outcome_error(const application::DispatchOutcome &outcome) {
   const auto *error = std::get_if<operation::Error>(&outcome.envelope.payload);
   return error == nullptr ? QStringLiteral("unknown operation failure")
                           : QString::fromStdString(error->message);
+}
+
+std::string number_text(double value) {
+  std::array<char, 64U> buffer{};
+  const auto converted = std::to_chars(
+      buffer.data(), buffer.data() + buffer.size(), value,
+      std::chars_format::general, std::numeric_limits<double>::max_digits10);
+  return converted.ec == std::errc{}
+             ? std::string{buffer.data(), converted.ptr}
+             : std::string{};
 }
 
 std::optional<std::uint64_t>
@@ -439,11 +452,14 @@ public:
       reset_pipelines();
     }
     ensure_pick_target(renderTarget()->pixelSize());
+    ensure_anaglyph_resources(renderTarget()->pixelSize(),
+                               final_texture->format());
     if (!uniform_buffer_)
       create_uniform_resources();
     if (!mesh_pipeline_ || !sphere_pipeline_ || !cylinder_pipeline_ ||
         !line_pipeline_ || !pick_mesh_pipeline_ || !pick_sphere_pipeline_ ||
-        !pick_cylinder_pipeline_ || !pick_line_pipeline_) {
+        !pick_cylinder_pipeline_ || !pick_line_pipeline_ ||
+        !anaglyph_pipeline_) {
       create_pipelines();
     }
     if (geometry_dirty_)
@@ -458,8 +474,11 @@ public:
       camera_revision_ = viewport->cameraRevision();
       if (const auto *camera = viewport->camera(); camera != nullptr) {
         camera_parameters_ = camera->parameters();
-        camera_view_ = qt_matrix(camera->view_matrix());
       }
+    }
+    if (stereo_revision_ != viewport->stereoRevision()) {
+      stereo_revision_ = viewport->stereoRevision();
+      stereo_parameters_ = viewport->stereo();
     }
     if (pick_request_revision_ != viewport->pickRequestRevision()) {
       pick_request_revision_ = viewport->pickRequestRevision();
@@ -583,11 +602,11 @@ public:
   }
 
   void render(QRhiCommandBuffer *command_buffer) override {
-    if (!uniform_buffer_ || !bindings_)
+    if (!uniform_buffer_ || !bindings_ || !stereo_uniform_buffer_ ||
+        !stereo_bindings_)
       return;
     if (geometry_dirty_)
       upload_geometry(command_buffer);
-    update_view_projection();
     auto *updates = rhi_->nextResourceUpdateBatch();
     QMatrix4x4 model;
     model.translate(static_cast<float>(center_.x),
@@ -597,28 +616,131 @@ public:
     model.translate(static_cast<float>(-center_.x),
                     static_cast<float>(-center_.y),
                     static_cast<float>(-center_.z));
-    const auto mvp = view_projection_ * model;
     const auto size = renderTarget()->pixelSize();
-    const std::array<float, 4> viewport{static_cast<float>(size.width()),
-                                        static_cast<float>(size.height()), 0.0F,
-                                        0.0F};
-    updates->updateDynamicBuffer(uniform_buffer_.get(), 0U, 64U,
-                                 mvp.constData());
-    updates->updateDynamicBuffer(uniform_buffer_.get(), 64U, 64U,
-                                 model.constData());
-    updates->updateDynamicBuffer(uniform_buffer_.get(), 128U, 16U,
-                                 viewport.data());
-    command_buffer->beginPass(renderTarget(),
-                              QColor::fromRgbF(0.018F, 0.025F, 0.04F),
-                              {1.0F, 0U}, updates);
-    command_buffer->setViewport(
-        QRhiViewport{0.0F, 0.0F, static_cast<float>(size.width()),
-                     static_cast<float>(size.height())});
-    draw_mesh(command_buffer);
-    draw_cylinders(command_buffer);
-    draw_spheres(command_buffer);
-    draw_lines(command_buffer);
-    command_buffer->endPass();
+    const auto update_uniform = [updates, &model](QRhiBuffer *buffer,
+                                                  const QMatrix4x4 &vp,
+                                                  const QSize &viewport_size) {
+      const auto mvp = vp * model;
+      const std::array<float, 4> viewport{
+          static_cast<float>(viewport_size.width()),
+          static_cast<float>(viewport_size.height()), 0.0F, 0.0F};
+      updates->updateDynamicBuffer(buffer, 0U, 64U, mvp.constData());
+      updates->updateDynamicBuffer(buffer, 64U, 64U, model.constData());
+      updates->updateDynamicBuffer(buffer, 128U, 16U, viewport.data());
+    };
+    std::optional<scene::StereoPair> stereo_pair;
+    const auto base_camera = scene::Camera::create(camera_parameters_);
+    if (stereo_parameters_.enabled && base_camera.has_value()) {
+      const auto generated =
+          scene::make_stereo_pair(base_camera.value(), stereo_parameters_);
+      if (generated.has_value()) stereo_pair = generated.value();
+    }
+    const auto anaglyph_active =
+        stereo_pair.has_value() &&
+        stereo_parameters_.mode == scene::StereoMode::anaglyph &&
+        left_eye_target_.target && right_eye_target_.target &&
+        anaglyph_uniform_buffer_ && anaglyph_bindings_ && anaglyph_pipeline_;
+    const auto adjacent_active =
+        stereo_pair.has_value() &&
+        stereo_parameters_.mode != scene::StereoMode::anaglyph;
+    const auto stereo_active = anaglyph_active || adjacent_active;
+    QSize left_size{size.width() / 2, size.height()};
+    QSize right_size{size.width() - left_size.width(), size.height()};
+    if (anaglyph_active) {
+      const auto &pair = stereo_pair.value();
+      const auto &left_camera =
+          stereo_parameters_.swap_eyes ? pair.right.camera : pair.left.camera;
+      const auto &right_camera =
+          stereo_parameters_.swap_eyes ? pair.left.camera : pair.right.camera;
+      update_uniform(uniform_buffer_.get(),
+                     view_projection(left_camera, size), size);
+      update_uniform(stereo_uniform_buffer_.get(),
+                     view_projection(right_camera, size), size);
+      const std::array<std::int32_t, 4> anaglyph_parameters{
+          static_cast<std::int32_t>(stereo_parameters_.anaglyph_mode), 0, 0,
+          0};
+      updates->updateDynamicBuffer(anaglyph_uniform_buffer_.get(), 0U, 16U,
+                                   anaglyph_parameters.data());
+    } else if (adjacent_active) {
+      const auto &pair = stereo_pair.value();
+      const auto &left_camera =
+          pair.presentation_order[0] == scene::StereoEye::left
+              ? pair.left.camera
+              : pair.right.camera;
+      const auto &right_camera =
+          pair.presentation_order[1] == scene::StereoEye::left
+              ? pair.left.camera
+              : pair.right.camera;
+      update_uniform(uniform_buffer_.get(),
+                     view_projection(left_camera, left_size), left_size);
+      update_uniform(stereo_uniform_buffer_.get(),
+                     view_projection(right_camera, right_size), right_size);
+    } else {
+      if (!base_camera.has_value()) return;
+      update_uniform(uniform_buffer_.get(),
+                     view_projection(base_camera.value(), size), size);
+    }
+    const auto background = QColor::fromRgbF(0.018F, 0.025F, 0.04F);
+    if (anaglyph_active) {
+      command_buffer->beginPass(left_eye_target_.target.get(), background,
+                                {1.0F, 0U}, updates);
+      command_buffer->setViewport(
+          QRhiViewport{0.0F, 0.0F, static_cast<float>(size.width()),
+                       static_cast<float>(size.height())});
+      draw_scene(command_buffer, bindings_.get());
+      command_buffer->endPass();
+
+      command_buffer->beginPass(right_eye_target_.target.get(), background,
+                                {1.0F, 0U});
+      command_buffer->setViewport(
+          QRhiViewport{0.0F, 0.0F, static_cast<float>(size.width()),
+                       static_cast<float>(size.height())});
+      draw_scene(command_buffer, stereo_bindings_.get());
+      command_buffer->endPass();
+
+      command_buffer->beginPass(renderTarget(), background, {1.0F, 0U});
+      command_buffer->setGraphicsPipeline(anaglyph_pipeline_.get());
+      command_buffer->setShaderResources(anaglyph_bindings_.get());
+      command_buffer->setViewport(
+          QRhiViewport{0.0F, 0.0F, static_cast<float>(size.width()),
+                       static_cast<float>(size.height())});
+      command_buffer->draw(3U);
+      command_buffer->endPass();
+    } else {
+      command_buffer->beginPass(renderTarget(), background, {1.0F, 0U},
+                                updates);
+    }
+    if (adjacent_active) {
+      command_buffer->setViewport(
+          QRhiViewport{0.0F, 0.0F, static_cast<float>(left_size.width()),
+                       static_cast<float>(left_size.height())});
+      draw_scene(command_buffer, bindings_.get());
+      command_buffer->setViewport(
+          QRhiViewport{static_cast<float>(left_size.width()), 0.0F,
+                       static_cast<float>(right_size.width()),
+                       static_cast<float>(right_size.height())});
+      draw_scene(command_buffer, stereo_bindings_.get());
+    } else if (!anaglyph_active) {
+      command_buffer->setViewport(
+          QRhiViewport{0.0F, 0.0F, static_cast<float>(size.width()),
+                       static_cast<float>(size.height())});
+      draw_scene(command_buffer, bindings_.get());
+    }
+    if (!anaglyph_active) command_buffer->endPass();
+    if (pick_pending_ && stereo_active && base_camera.has_value()) {
+      auto *pick_updates = rhi_->nextResourceUpdateBatch();
+      const auto pick_mvp = view_projection(base_camera.value(), size) * model;
+      const std::array<float, 4> viewport{
+          static_cast<float>(size.width()), static_cast<float>(size.height()),
+          0.0F, 0.0F};
+      pick_updates->updateDynamicBuffer(uniform_buffer_.get(), 0U, 64U,
+                                        pick_mvp.constData());
+      pick_updates->updateDynamicBuffer(uniform_buffer_.get(), 64U, 64U,
+                                        model.constData());
+      pick_updates->updateDynamicBuffer(uniform_buffer_.get(), 128U, 16U,
+                                        viewport.data());
+      command_buffer->resourceUpdate(pick_updates);
+    }
     if (pick_pending_)
       render_pick(command_buffer);
     if (!primitive_logged_ && !mesh_indices_.empty() &&
@@ -638,28 +760,29 @@ public:
   }
 
 private:
-  void update_view_projection() {
-    const QSize output_size = renderTarget()->pixelSize();
+  QMatrix4x4 view_projection(const scene::Camera &camera,
+                             const QSize &output_size) const {
+    const auto &parameters = camera.parameters();
     QMatrix4x4 projection = rhi_->clipSpaceCorrMatrix();
     const auto aspect = output_size.height() == 0
                             ? 1.0F
                             : static_cast<float>(output_size.width()) /
                                   static_cast<float>(output_size.height());
-    if (camera_parameters_.projection == scene::ProjectionMode::perspective) {
+    if (parameters.projection == scene::ProjectionMode::perspective) {
       projection.perspective(
-          static_cast<float>(camera_parameters_.vertical_field_of_view_radians *
+          static_cast<float>(parameters.vertical_field_of_view_radians *
                              180.0 / std::numbers::pi),
-          aspect, static_cast<float>(camera_parameters_.near_clip),
-          static_cast<float>(camera_parameters_.far_clip));
+          aspect, static_cast<float>(parameters.near_clip),
+          static_cast<float>(parameters.far_clip));
     } else {
       const auto half_height =
-          static_cast<float>(camera_parameters_.orthographic_height * 0.5);
+          static_cast<float>(parameters.orthographic_height * 0.5);
       const auto half_width = half_height * aspect;
       projection.ortho(-half_width, half_width, -half_height, half_height,
-                       static_cast<float>(camera_parameters_.near_clip),
-                       static_cast<float>(camera_parameters_.far_clip));
+                       static_cast<float>(parameters.near_clip),
+                       static_cast<float>(parameters.far_clip));
     }
-    view_projection_ = projection * camera_view_;
+    return projection * qt_matrix(camera.view_matrix());
   }
 
   void reset_pipelines() {
@@ -667,6 +790,7 @@ private:
     sphere_pipeline_.reset();
     cylinder_pipeline_.reset();
     line_pipeline_.reset();
+    anaglyph_pipeline_.reset();
     reset_pick_pipelines();
   }
 
@@ -693,6 +817,9 @@ private:
     pick_mesh_vertex_buffer_.reset();
     uniform_buffer_.reset();
     bindings_.reset();
+    stereo_uniform_buffer_.reset();
+    stereo_bindings_.reset();
+    reset_anaglyph_resources();
     pick_render_target_.reset();
     pick_render_pass_.reset();
     pick_depth_buffer_.reset();
@@ -744,6 +871,115 @@ private:
     pick_target_size_ = size;
   }
 
+  struct EyeRenderTarget {
+    std::unique_ptr<QRhiTexture> color;
+    std::unique_ptr<QRhiTexture> resolve;
+    std::unique_ptr<QRhiRenderBuffer> depth;
+    std::unique_ptr<QRhiRenderPassDescriptor> render_pass;
+    std::unique_ptr<QRhiTextureRenderTarget> target;
+
+    [[nodiscard]] QRhiTexture *sampled_texture() const noexcept {
+      return resolve ? resolve.get() : color.get();
+    }
+  };
+
+  void reset_eye_target(EyeRenderTarget &eye) {
+    eye.target.reset();
+    eye.render_pass.reset();
+    eye.depth.reset();
+    eye.resolve.reset();
+    eye.color.reset();
+  }
+
+  void reset_anaglyph_resources() {
+    anaglyph_pipeline_.reset();
+    anaglyph_bindings_.reset();
+    anaglyph_sampler_.reset();
+    anaglyph_uniform_buffer_.reset();
+    reset_eye_target(left_eye_target_);
+    reset_eye_target(right_eye_target_);
+    anaglyph_target_size_ = {};
+    anaglyph_target_format_ = QRhiTexture::UnknownFormat;
+    anaglyph_sample_count_ = 0;
+  }
+
+  bool create_eye_target(EyeRenderTarget &eye, const QSize &size,
+                         QRhiTexture::Format format) {
+    eye.color.reset(rhi_->newTexture(format, size, sample_count_,
+                                     QRhiTexture::RenderTarget));
+    eye.depth.reset(rhi_->newRenderBuffer(QRhiRenderBuffer::DepthStencil, size,
+                                          sample_count_));
+    if (!eye.color->create() || !eye.depth->create()) {
+      reset_eye_target(eye);
+      return false;
+    }
+    QRhiColorAttachment attachment{eye.color.get()};
+    if (sample_count_ > 1) {
+      eye.resolve.reset(rhi_->newTexture(format, size));
+      if (!eye.resolve->create()) {
+        reset_eye_target(eye);
+        return false;
+      }
+      attachment.setResolveTexture(eye.resolve.get());
+    }
+    eye.target.reset(rhi_->newTextureRenderTarget(
+        QRhiTextureRenderTargetDescription{attachment, eye.depth.get()}));
+    eye.render_pass.reset(eye.target->newCompatibleRenderPassDescriptor());
+    eye.target->setRenderPassDescriptor(eye.render_pass.get());
+    if (!eye.target->create()) {
+      reset_eye_target(eye);
+      return false;
+    }
+    return true;
+  }
+
+  void ensure_anaglyph_resources(const QSize &size,
+                                  QRhiTexture::Format format) {
+    if (size.isEmpty()) return;
+    if (anaglyph_target_size_ == size && anaglyph_target_format_ == format &&
+        anaglyph_sample_count_ == sample_count_ &&
+        left_eye_target_.target && right_eye_target_.target &&
+        anaglyph_bindings_)
+      return;
+    reset_anaglyph_resources();
+    if (!create_eye_target(left_eye_target_, size, format) ||
+        !create_eye_target(right_eye_target_, size, format))
+      return;
+    if (!left_eye_target_.render_pass->isCompatible(
+            renderTarget()->renderPassDescriptor())) {
+      qWarning("MolShredder anaglyph target is not render-pass compatible");
+      reset_anaglyph_resources();
+      return;
+    }
+    anaglyph_uniform_buffer_.reset(
+        rhi_->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, 16U));
+    anaglyph_sampler_.reset(rhi_->newSampler(
+        QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
+        QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
+    if (!anaglyph_uniform_buffer_->create() || !anaglyph_sampler_->create()) {
+      reset_anaglyph_resources();
+      return;
+    }
+    anaglyph_bindings_.reset(rhi_->newShaderResourceBindings());
+    anaglyph_bindings_->setBindings(
+        {QRhiShaderResourceBinding::uniformBuffer(
+             0, QRhiShaderResourceBinding::FragmentStage,
+             anaglyph_uniform_buffer_.get()),
+         QRhiShaderResourceBinding::sampledTexture(
+             1, QRhiShaderResourceBinding::FragmentStage,
+             left_eye_target_.sampled_texture(), anaglyph_sampler_.get()),
+         QRhiShaderResourceBinding::sampledTexture(
+             2, QRhiShaderResourceBinding::FragmentStage,
+             right_eye_target_.sampled_texture(), anaglyph_sampler_.get())});
+    if (!anaglyph_bindings_->create()) {
+      reset_anaglyph_resources();
+      return;
+    }
+    anaglyph_target_size_ = size;
+    anaglyph_target_format_ = format;
+    anaglyph_sample_count_ = sample_count_;
+  }
+
   void create_uniform_resources() {
     uniform_buffer_.reset(
         rhi_->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, 144U));
@@ -756,6 +992,18 @@ private:
         0, QRhiShaderResourceBinding::VertexStage, uniform_buffer_.get())});
     if (!bindings_->create())
       bindings_.reset();
+    stereo_uniform_buffer_.reset(
+        rhi_->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, 144U));
+    if (!stereo_uniform_buffer_->create()) {
+      stereo_uniform_buffer_.reset();
+      return;
+    }
+    stereo_bindings_.reset(rhi_->newShaderResourceBindings());
+    stereo_bindings_->setBindings({QRhiShaderResourceBinding::uniformBuffer(
+        0, QRhiShaderResourceBinding::VertexStage,
+        stereo_uniform_buffer_.get())});
+    if (!stereo_bindings_->create())
+      stereo_bindings_.reset();
   }
 
   void configure_pipeline(QRhiGraphicsPipeline &pipeline) {
@@ -897,6 +1145,26 @@ private:
       line_pipeline_->setDepthOp(QRhiGraphicsPipeline::LessOrEqual);
       if (!line_pipeline_->create())
         line_pipeline_.reset();
+    }
+    if (!anaglyph_pipeline_ && anaglyph_bindings_) {
+      anaglyph_pipeline_.reset(rhi_->newGraphicsPipeline());
+      anaglyph_pipeline_->setShaderStages(
+          {{QRhiShaderStage::Vertex,
+            shader(QLatin1String(
+                ":/molshredder/desktop/shaders/anaglyph.vert.qsb"))},
+           {QRhiShaderStage::Fragment,
+            shader(QLatin1String(
+                ":/molshredder/desktop/shaders/anaglyph.frag.qsb"))}});
+      anaglyph_pipeline_->setTopology(QRhiGraphicsPipeline::Triangles);
+      anaglyph_pipeline_->setSampleCount(sample_count_);
+      anaglyph_pipeline_->setDepthTest(false);
+      anaglyph_pipeline_->setDepthWrite(false);
+      anaglyph_pipeline_->setCullMode(QRhiGraphicsPipeline::None);
+      anaglyph_pipeline_->setShaderResourceBindings(anaglyph_bindings_.get());
+      anaglyph_pipeline_->setRenderPassDescriptor(
+          renderTarget()->renderPassDescriptor());
+      if (!anaglyph_pipeline_->create())
+        anaglyph_pipeline_.reset();
     }
     if (!pick_render_pass_)
       return;
@@ -1080,26 +1348,28 @@ private:
     command_buffer->resourceUpdate(updates);
   }
 
-  void draw_mesh(QRhiCommandBuffer *command_buffer) {
+  void draw_mesh(QRhiCommandBuffer *command_buffer,
+                 QRhiShaderResourceBindings *bindings) {
     if (!mesh_pipeline_ || !mesh_vertex_buffer_ || !mesh_index_buffer_ ||
         mesh_indices_.empty()) {
       return;
     }
     command_buffer->setGraphicsPipeline(mesh_pipeline_.get());
-    command_buffer->setShaderResources();
+    command_buffer->setShaderResources(bindings);
     const QRhiCommandBuffer::VertexInput input{mesh_vertex_buffer_.get(), 0U};
     command_buffer->setVertexInput(0, 1, &input, mesh_index_buffer_.get(), 0U,
                                    QRhiCommandBuffer::IndexUInt32);
     command_buffer->drawIndexed(static_cast<quint32>(mesh_indices_.size()));
   }
 
-  void draw_spheres(QRhiCommandBuffer *command_buffer) {
+  void draw_spheres(QRhiCommandBuffer *command_buffer,
+                    QRhiShaderResourceBindings *bindings) {
     if (!sphere_pipeline_ || !sphere_vertex_buffer_ || !sphere_index_buffer_ ||
         !sphere_instance_buffer_ || sphere_instances_.empty()) {
       return;
     }
     command_buffer->setGraphicsPipeline(sphere_pipeline_.get());
-    command_buffer->setShaderResources();
+    command_buffer->setShaderResources(bindings);
     const std::array<QRhiCommandBuffer::VertexInput, 2> inputs{
         QRhiCommandBuffer::VertexInput{sphere_vertex_buffer_.get(), 0U},
         QRhiCommandBuffer::VertexInput{sphere_instance_buffer_.get(), 0U}};
@@ -1110,14 +1380,15 @@ private:
                                 static_cast<quint32>(sphere_instances_.size()));
   }
 
-  void draw_cylinders(QRhiCommandBuffer *command_buffer) {
+  void draw_cylinders(QRhiCommandBuffer *command_buffer,
+                      QRhiShaderResourceBindings *bindings) {
     if (!cylinder_pipeline_ || !cylinder_vertex_buffer_ ||
         !cylinder_index_buffer_ || !cylinder_instance_buffer_ ||
         cylinder_instances_.empty()) {
       return;
     }
     command_buffer->setGraphicsPipeline(cylinder_pipeline_.get());
-    command_buffer->setShaderResources();
+    command_buffer->setShaderResources(bindings);
     const std::array<QRhiCommandBuffer::VertexInput, 2> inputs{
         QRhiCommandBuffer::VertexInput{cylinder_vertex_buffer_.get(), 0U},
         QRhiCommandBuffer::VertexInput{cylinder_instance_buffer_.get(), 0U}};
@@ -1129,13 +1400,14 @@ private:
         static_cast<quint32>(cylinder_instances_.size()));
   }
 
-  void draw_lines(QRhiCommandBuffer *command_buffer) {
+  void draw_lines(QRhiCommandBuffer *command_buffer,
+                  QRhiShaderResourceBindings *bindings) {
     if (!line_pipeline_ || !line_vertex_buffer_ || !line_index_buffer_ ||
         !line_instance_buffer_ || line_instances_.empty()) {
       return;
     }
     command_buffer->setGraphicsPipeline(line_pipeline_.get());
-    command_buffer->setShaderResources();
+    command_buffer->setShaderResources(bindings);
     const std::array<QRhiCommandBuffer::VertexInput, 2> inputs{
         QRhiCommandBuffer::VertexInput{line_vertex_buffer_.get(), 0U},
         QRhiCommandBuffer::VertexInput{line_instance_buffer_.get(), 0U}};
@@ -1144,6 +1416,14 @@ private:
                                    QRhiCommandBuffer::IndexUInt32);
     command_buffer->drawIndexed(static_cast<quint32>(line_indices_.size()),
                                 static_cast<quint32>(line_instances_.size()));
+  }
+
+  void draw_scene(QRhiCommandBuffer *command_buffer,
+                  QRhiShaderResourceBindings *bindings) {
+    draw_mesh(command_buffer, bindings);
+    draw_cylinders(command_buffer, bindings);
+    draw_spheres(command_buffer, bindings);
+    draw_lines(command_buffer, bindings);
   }
 
   void draw_pick_mesh(QRhiCommandBuffer *command_buffer) {
@@ -1282,6 +1562,17 @@ private:
   QRhiTexture::Format texture_format_{QRhiTexture::RGBA8};
   std::unique_ptr<QRhiBuffer> uniform_buffer_;
   std::unique_ptr<QRhiShaderResourceBindings> bindings_;
+  std::unique_ptr<QRhiBuffer> stereo_uniform_buffer_;
+  std::unique_ptr<QRhiShaderResourceBindings> stereo_bindings_;
+  EyeRenderTarget left_eye_target_;
+  EyeRenderTarget right_eye_target_;
+  std::unique_ptr<QRhiBuffer> anaglyph_uniform_buffer_;
+  std::unique_ptr<QRhiSampler> anaglyph_sampler_;
+  std::unique_ptr<QRhiShaderResourceBindings> anaglyph_bindings_;
+  std::unique_ptr<QRhiGraphicsPipeline> anaglyph_pipeline_;
+  QSize anaglyph_target_size_;
+  QRhiTexture::Format anaglyph_target_format_{QRhiTexture::UnknownFormat};
+  int anaglyph_sample_count_{};
   std::unique_ptr<QRhiGraphicsPipeline> mesh_pipeline_;
   std::unique_ptr<QRhiGraphicsPipeline> sphere_pipeline_;
   std::unique_ptr<QRhiGraphicsPipeline> cylinder_pipeline_;
@@ -1319,12 +1610,12 @@ private:
   std::vector<LineCornerGpu> line_corners_;
   std::vector<std::uint32_t> line_indices_;
   std::vector<LineInstanceGpu> line_instances_;
-  QMatrix4x4 view_projection_;
-  QMatrix4x4 camera_view_;
   scene::CameraParameters camera_parameters_;
+  scene::StereoParameters stereo_parameters_;
   model::Vec3d center_{};
   std::uint64_t revision_{};
   std::uint64_t camera_revision_{};
+  std::uint64_t stereo_revision_{};
   QPointer<MolecularViewport> viewport_item_;
   QPointF pick_position_;
   QSizeF pick_item_size_;
@@ -1343,14 +1634,325 @@ private:
 MolecularViewport::MolecularViewport(QQuickItem *parent)
     : QQuickRhiItem{parent},
       workspace_{std::make_shared<application::Workspace>()},
-      registry_{application::make_default_registry(workspace_)},
+      diagnostics_{std::make_shared<application::RuntimeDiagnostics>()},
+      registry_{application::make_default_registry(workspace_, diagnostics_)},
       dispatcher_{registry_}, actions_{dispatcher_}, packet_{demo_packet()} {
+  application::GraphicsRuntimeInfo pending;
+  pending.status = application::RuntimeStatus::not_initialized;
+  pending.failure_reason = "Qt Quick scene graph is not initialized";
+  diagnostics_->set_graphics(std::move(pending));
+  if (automation::register_python_script_command(registry_).has_value()) {
+    std::terminate();
+  }
   setSampleCount(4);
   playback_timer_.setInterval(16);
   playback_timer_.setTimerType(Qt::PreciseTimer);
   connect(&playback_timer_, &QTimer::timeout, this,
           &MolecularViewport::onPlaybackTick);
+  camera_animation_timer_.setInterval(16);
+  camera_animation_timer_.setTimerType(Qt::PreciseTimer);
+  connect(&camera_animation_timer_, &QTimer::timeout, this,
+          &MolecularViewport::onCameraAnimationTick);
   resetView();
+}
+
+MolecularViewport::~MolecularViewport() {
+  script_cancellation_.request_cancel();
+  if (script_worker_.joinable())
+    script_worker_.join();
+}
+
+bool MolecularViewport::runPythonScript(const QUrl &url) {
+  if (script_running_) {
+    setStatus(QStringLiteral("A Python script is already running"), atom_count_,
+              primitive_count_);
+    return false;
+  }
+  if (!url.isLocalFile()) {
+    setStatus(QStringLiteral("Only local Python scripts can be executed"),
+              atom_count_, primitive_count_);
+    return false;
+  }
+
+  if (trajectory_playing_ && !setTrajectoryPlaying(false))
+    return false;
+  if (script_worker_.joinable())
+    script_worker_.join();
+
+  script_cancellation_ = operation::CancellationToken{};
+  const auto cancellation = script_cancellation_;
+  const auto path = url.toLocalFile().toStdString();
+  script_running_ = true;
+  script_output_ = QStringLiteral("Running trusted Python script…");
+  emit scriptRunningChanged();
+  emit scriptOutputChanged();
+  setStatus(QStringLiteral("Python script running"), atom_count_,
+            primitive_count_);
+
+  QPointer<MolecularViewport> guard{this};
+  script_worker_ = std::thread([this, guard, cancellation, path] {
+    operation::TaskContext context{cancellation, {}};
+    auto outcome = actions_.trigger(
+        gui::Action{"script run", {{"path", path}, {"trust", "true"}}},
+        context);
+    if (guard.isNull())
+      return;
+    QMetaObject::invokeMethod(
+        guard.data(),
+        [guard, outcome = std::move(outcome)]() mutable {
+          if (!guard.isNull())
+            guard->finishPythonScript(std::move(outcome));
+        },
+        Qt::QueuedConnection);
+  });
+  return true;
+}
+
+void MolecularViewport::cancelPythonScript() {
+  if (!script_running_)
+    return;
+  script_cancellation_.request_cancel();
+  script_output_ = QStringLiteral(
+      "Cancellation requested. Waiting for Python code to return…");
+  emit scriptOutputChanged();
+  setStatus(QStringLiteral("Python script cancellation requested"), atom_count_,
+            primitive_count_);
+}
+
+void MolecularViewport::finishPythonScript(
+    application::DispatchOutcome outcome) {
+  if (script_worker_.joinable())
+    script_worker_.join();
+
+  QString output;
+  if (outcome.succeeded()) {
+    const auto &response = std::get<command::Response>(outcome.envelope.payload);
+    const auto append_field = [&response, &output](std::string_view name,
+                                                   const QString &label) {
+      const auto found = response.fields.find(name);
+      if (found == response.fields.end())
+        return;
+      const auto *value = std::get_if<std::string>(&found->second.data);
+      if (value == nullptr || value->empty())
+        return;
+      if (!output.isEmpty())
+        output += QStringLiteral("\n");
+      output += label + QString::fromStdString(*value);
+    };
+    append_field("stdout", QStringLiteral("stdout:\n"));
+    append_field("stderr", QStringLiteral("stderr:\n"));
+    script_output_ = output.isEmpty()
+                         ? QStringLiteral("Script completed without output")
+                         : std::move(output);
+    syncCameraState();
+    emit viewsChanged();
+    static_cast<void>(rebuildScenePacket());
+    syncTrajectoryState();
+    emit objectsChanged();
+    emit volumeChanged();
+    emit scriptOutputChanged();
+    script_running_ = false;
+    emit scriptRunningChanged();
+    setStatus(QStringLiteral("Python script completed"), atom_count_,
+              primitive_count_);
+    emit scriptFinished(true);
+    return;
+  }
+
+  const auto &failure = std::get<operation::Error>(outcome.envelope.payload);
+  const auto append_detail = [&failure, &output](std::string_view name,
+                                                 const QString &label) {
+    const auto found = failure.details.find(name);
+    if (found == failure.details.end() || found->second.empty())
+      return;
+    if (!output.isEmpty())
+      output += QStringLiteral("\n");
+    output += label + QString::fromStdString(found->second);
+  };
+  append_detail("stdout", QStringLiteral("stdout:\n"));
+  append_detail("stderr", QStringLiteral("stderr:\n"));
+  script_output_ = output.isEmpty()
+                       ? QString::fromStdString(failure.message)
+                       : std::move(output);
+  syncCameraState();
+  emit viewsChanged();
+  static_cast<void>(rebuildScenePacket());
+  syncTrajectoryState();
+  emit objectsChanged();
+  emit volumeChanged();
+  emit scriptOutputChanged();
+  script_running_ = false;
+  emit scriptRunningChanged();
+  setStatus(QStringLiteral("Python script failed: ") +
+                QString::fromStdString(failure.message),
+            atom_count_, primitive_count_);
+  emit scriptFinished(false);
+}
+
+void MolecularViewport::clearScriptOutput() {
+  if (script_output_.isEmpty())
+    return;
+  script_output_.clear();
+  emit scriptOutputChanged();
+}
+
+QString MolecularViewport::systemInfoJson() const {
+  operation::TaskContext context;
+  const auto outcome = actions_.trigger(gui::Action{"system info", {}}, context);
+  const auto rendered = command::render(
+      outcome.envelope, operation::OutputFormat::json);
+  return rendered.has_value() ? QString::fromStdString(rendered.value())
+                              : QString{};
+}
+
+QVariantList MolecularViewport::viewItems() const {
+  QVariantList items;
+  const auto views = workspace_->list_named_views();
+  items.reserve(static_cast<qsizetype>(views.size()));
+  for (const auto &view : views) {
+    QVariantMap item;
+    item.insert(QStringLiteral("name"), QString::fromStdString(view.name));
+    item.insert(QStringLiteral("projection"),
+                view.camera.projection == scene::ProjectionMode::orthographic
+                    ? QStringLiteral("orthographic")
+                    : QStringLiteral("perspective"));
+    item.insert(QStringLiteral("distance"), view.camera.distance);
+    items.push_back(std::move(item));
+  }
+  return items;
+}
+
+bool MolecularViewport::storeNamedView(const QString &name) {
+  const auto trimmed = name.trimmed();
+  operation::TaskContext context;
+  const auto outcome = actions_.trigger(
+      gui::Action{"view store", {{"name", trimmed.toStdString()}}}, context);
+  if (!outcome.succeeded()) {
+    setStatus(QStringLiteral("Store view failed: ") + outcome_error(outcome),
+              atom_count_, primitive_count_);
+    return false;
+  }
+  emit viewsChanged();
+  setStatus(QStringLiteral("Stored view · ") + trimmed, atom_count_,
+            primitive_count_);
+  return true;
+}
+
+bool MolecularViewport::recallNamedView(const QString &name) {
+  return recallNamedViewAnimated(name, 0.0, 1);
+}
+
+bool MolecularViewport::recallNamedViewAnimated(const QString &name,
+                                                double duration_seconds,
+                                                int hand) {
+  const auto start = camera_;
+  operation::TaskContext context;
+  const auto outcome = actions_.trigger(
+      gui::Action{"view recall",
+                  {{"duration", number_text(duration_seconds)},
+                   {"hand", std::to_string(hand)},
+                   {"name", name.toStdString()}}},
+      context);
+  if (!outcome.succeeded()) {
+    setStatus(QStringLiteral("Recall view failed: ") + outcome_error(outcome),
+              atom_count_, primitive_count_);
+    return false;
+  }
+  if (start.has_value() && duration_seconds > 0.0) {
+    startCameraAnimation(start.value(), workspace_->camera(), duration_seconds,
+                         hand);
+    setStatus(QStringLiteral("Animating to view · ") + name, atom_count_,
+              primitive_count_);
+  } else {
+    syncCameraState();
+    setStatus(QStringLiteral("Recalled view · ") + name, atom_count_,
+              primitive_count_);
+  }
+  return true;
+}
+
+bool MolecularViewport::deleteNamedView(const QString &name) {
+  operation::TaskContext context;
+  const auto outcome = actions_.trigger(
+      gui::Action{"view delete", {{"name", name.toStdString()}}}, context);
+  if (!outcome.succeeded()) {
+    setStatus(QStringLiteral("Delete view failed: ") + outcome_error(outcome),
+              atom_count_, primitive_count_);
+    return false;
+  }
+  emit viewsChanged();
+  setStatus(QStringLiteral("Deleted view · ") + name, atom_count_,
+            primitive_count_);
+  return true;
+}
+
+bool MolecularViewport::clearNamedViews() {
+  operation::TaskContext context;
+  const auto outcome =
+      actions_.trigger(gui::Action{"view clear", {}}, context);
+  if (!outcome.succeeded()) {
+    setStatus(QStringLiteral("Clear views failed: ") + outcome_error(outcome),
+              atom_count_, primitive_count_);
+    return false;
+  }
+  emit viewsChanged();
+  setStatus(QStringLiteral("Cleared named views"), atom_count_,
+            primitive_count_);
+  return true;
+}
+
+QString MolecularViewport::pymolViewText() const {
+  operation::TaskContext context;
+  const auto outcome =
+      actions_.trigger(gui::Action{"view export-pymol", {}}, context);
+  if (!outcome.succeeded())
+    return {};
+  const auto &response = std::get<command::Response>(outcome.envelope.payload);
+  const auto found = response.fields.find("text");
+  if (found == response.fields.end())
+    return {};
+  const auto *text = std::get_if<std::string>(&found->second.data);
+  return text == nullptr ? QString{} : QString::fromStdString(*text);
+}
+
+bool MolecularViewport::importPymolView(const QString &values) {
+  return importPymolViewAnimated(values, 0.0, 1);
+}
+
+bool MolecularViewport::importPymolViewAnimated(const QString &values,
+                                                double duration_seconds,
+                                                int hand) {
+  const auto start = camera_;
+  operation::TaskContext context;
+  const auto outcome = actions_.trigger(
+      gui::Action{"view import-pymol",
+                  {{"duration", number_text(duration_seconds)},
+                   {"hand", std::to_string(hand)},
+                   {"values", values.toStdString()}}},
+      context);
+  if (!outcome.succeeded()) {
+    setStatus(QStringLiteral("PyMOL view import failed: ") +
+                  outcome_error(outcome),
+              atom_count_, primitive_count_);
+    return false;
+  }
+  if (start.has_value() && duration_seconds > 0.0) {
+    startCameraAnimation(start.value(), workspace_->camera(), duration_seconds,
+                         hand);
+    setStatus(QStringLiteral("Animating imported PyMOL view"), atom_count_,
+              primitive_count_);
+  } else {
+    syncCameraState();
+    setStatus(QStringLiteral("Imported PyMOL 18-value view"), atom_count_,
+              primitive_count_);
+  }
+  return true;
+}
+
+void MolecularViewport::setGraphicsRuntimeInfo(
+    application::GraphicsRuntimeInfo info) {
+  diagnostics_->set_graphics(std::move(info));
+  emit graphicsDiagnosticsChanged();
 }
 
 QQuickRhiItemRenderer *MolecularViewport::createRenderer() {
@@ -1785,15 +2387,139 @@ bool MolecularViewport::setObjectVisible(qulonglong object_id, bool visible) {
   return rebuildScenePacket();
 }
 
+bool MolecularViewport::setCameraThroughAction(const scene::Camera &camera) {
+  cancelCameraAnimation();
+  const auto &parameters = camera.parameters();
+  command::Arguments arguments{
+      {"aspect-ratio", number_text(parameters.aspect_ratio)},
+      {"distance", number_text(parameters.distance)},
+      {"far-clip", number_text(parameters.far_clip)},
+      {"field-of-view",
+       number_text(parameters.vertical_field_of_view_radians)},
+      {"near-clip", number_text(parameters.near_clip)},
+      {"model-origin-x", number_text(parameters.model_origin.x)},
+      {"model-origin-y", number_text(parameters.model_origin.y)},
+      {"model-origin-z", number_text(parameters.model_origin.z)},
+      {"orientation-w", number_text(parameters.orientation.w)},
+      {"orientation-x", number_text(parameters.orientation.x)},
+      {"orientation-y", number_text(parameters.orientation.y)},
+      {"orientation-z", number_text(parameters.orientation.z)},
+      {"orthographic-height", number_text(parameters.orthographic_height)},
+      {"projection",
+       parameters.projection == scene::ProjectionMode::orthographic
+           ? "orthographic"
+           : "perspective"},
+      {"target-x", number_text(parameters.target.x)},
+      {"target-y", number_text(parameters.target.y)},
+      {"target-z", number_text(parameters.target.z)}};
+  operation::TaskContext context;
+  const auto outcome = actions_.trigger(
+      gui::Action{"view set", std::move(arguments)}, context);
+  if (!outcome.succeeded()) {
+    setStatus(QStringLiteral("Camera update failed: ") +
+                  outcome_error(outcome),
+              atom_count_, primitive_count_);
+    return false;
+  }
+  syncCameraState();
+  return true;
+}
+
+bool MolecularViewport::invokeCameraAction(
+    std::string command_name,
+    std::map<std::string, std::string, std::less<>> parameters,
+    double duration_seconds, int hand, QString success_status,
+    QString failure_prefix) {
+  const auto start = camera_;
+  parameters.emplace("duration", number_text(duration_seconds));
+  parameters.emplace("hand", std::to_string(hand));
+  operation::TaskContext context;
+  const auto outcome = actions_.trigger(
+      gui::Action{std::move(command_name), std::move(parameters)}, context);
+  if (!outcome.succeeded()) {
+    setStatus(std::move(failure_prefix) + QStringLiteral(": ") +
+                  outcome_error(outcome),
+              atom_count_, primitive_count_);
+    return false;
+  }
+  if (start.has_value() && duration_seconds > 0.0) {
+    startCameraAnimation(start.value(), workspace_->camera(), duration_seconds,
+                         hand);
+  } else {
+    syncCameraState();
+  }
+  setStatus(std::move(success_status), atom_count_, primitive_count_);
+  return true;
+}
+
+void MolecularViewport::syncCameraState() {
+  cancelCameraAnimation();
+  camera_ = workspace_->camera();
+  ++camera_revision_;
+  update();
+}
+
+void MolecularViewport::cancelCameraAnimation() {
+  camera_animation_timer_.stop();
+  camera_animation_start_.reset();
+  camera_animation_end_.reset();
+  camera_animation_duration_seconds_ = 0.0;
+}
+
+void MolecularViewport::startCameraAnimation(const scene::Camera &start,
+                                             const scene::Camera &end,
+                                             double duration_seconds,
+                                             int hand) {
+  cancelCameraAnimation();
+  camera_animation_start_ = start;
+  camera_animation_end_ = end;
+  camera_animation_duration_seconds_ = duration_seconds;
+  camera_animation_hand_ = hand;
+  camera_ = start;
+  ++camera_revision_;
+  update();
+  camera_animation_elapsed_.start();
+  camera_animation_timer_.start();
+}
+
+void MolecularViewport::onCameraAnimationTick() {
+  if (!camera_animation_start_.has_value() ||
+      !camera_animation_end_.has_value() ||
+      !(camera_animation_duration_seconds_ > 0.0)) {
+    syncCameraState();
+    return;
+  }
+  const auto elapsed_seconds =
+      static_cast<double>(camera_animation_elapsed_.elapsed()) / 1000.0;
+  const auto fraction =
+      std::clamp(elapsed_seconds / camera_animation_duration_seconds_, 0.0,
+                 1.0);
+  if (fraction >= 1.0) {
+    syncCameraState();
+    return;
+  }
+  const auto interpolated = scene::interpolate_pymol_camera(
+      camera_animation_start_.value(), camera_animation_end_.value(),
+      fraction, camera_animation_hand_);
+  if (!interpolated.has_value()) {
+    syncCameraState();
+    setStatus(QStringLiteral("Camera animation failed: ") +
+                  QString::fromStdString(interpolated.error().message),
+              atom_count_, primitive_count_);
+    return;
+  }
+  camera_ = interpolated.value();
+  ++camera_revision_;
+  update();
+}
+
 void MolecularViewport::orbit(double delta_x, double delta_y) {
   if (!camera_.has_value())
     return;
   const auto updated = camera_->orbit_pixels(delta_x, delta_y);
   if (!updated.has_value())
     return;
-  camera_ = updated.value();
-  ++camera_revision_;
-  update();
+  static_cast<void>(setCameraThroughAction(updated.value()));
 }
 
 void MolecularViewport::pan(double delta_x, double delta_y) {
@@ -1802,9 +2528,7 @@ void MolecularViewport::pan(double delta_x, double delta_y) {
   const auto updated = camera_->pan_pixels(delta_x, delta_y, height());
   if (!updated.has_value())
     return;
-  camera_ = updated.value();
-  ++camera_revision_;
-  update();
+  static_cast<void>(setCameraThroughAction(updated.value()));
 }
 
 void MolecularViewport::dolly(double delta) {
@@ -1813,48 +2537,347 @@ void MolecularViewport::dolly(double delta) {
   const auto updated = camera_->dolly(delta);
   if (!updated.has_value())
     return;
-  camera_ = updated.value();
-  ++camera_revision_;
-  update();
+  static_cast<void>(setCameraThroughAction(updated.value()));
 }
 
 void MolecularViewport::resetView() {
-  scene::CameraParameters parameters;
-  model::Vec3d center{};
-  double radius = 1.0;
-  if (!packet_.bounds.empty) {
-    center = {(packet_.bounds.minimum.x + packet_.bounds.maximum.x) * 0.5,
-              (packet_.bounds.minimum.y + packet_.bounds.maximum.y) * 0.5,
-              (packet_.bounds.minimum.z + packet_.bounds.maximum.z) * 0.5};
-    const auto extent_x = packet_.bounds.maximum.x - packet_.bounds.minimum.x;
-    const auto extent_y = packet_.bounds.maximum.y - packet_.bounds.minimum.y;
-    const auto extent_z = packet_.bounds.maximum.z - packet_.bounds.minimum.z;
-    radius = std::max(std::sqrt(extent_x * extent_x + extent_y * extent_y +
-                                extent_z * extent_z) *
-                          0.5,
-                      1.0e-3);
+  static_cast<void>(resetViewAnimated(0.0, 1));
+}
+
+bool MolecularViewport::resetViewAnimated(double duration_seconds, int hand) {
+  return invokeCameraAction("view reset", {}, duration_seconds, hand,
+                            QStringLiteral("Reset camera to visible scene"),
+                            QStringLiteral("Reset view failed"));
+}
+
+bool MolecularViewport::centerSelection(const QString &selection,
+                                        bool move_origin,
+                                        const QString &state,
+                                        double duration_seconds, int hand) {
+  const auto expression = selection.trimmed().isEmpty()
+                              ? QStringLiteral("all")
+                              : selection.trimmed();
+  const auto state_scope =
+      state.trimmed().isEmpty() ? QStringLiteral("current") : state.trimmed();
+  return invokeCameraAction(
+      "view center",
+      {{"move-origin", move_origin ? "true" : "false"},
+       {"selection", expression.toStdString()},
+       {"state", state_scope.toStdString()}},
+      duration_seconds, hand,
+      QStringLiteral("Centered camera · ") + expression,
+      QStringLiteral("Center selection failed"));
+}
+
+bool MolecularViewport::zoomSelection(const QString &selection, double buffer,
+                                      bool complete,
+                                      const QString &state,
+                                      double duration_seconds, int hand) {
+  const auto expression = selection.trimmed().isEmpty()
+                              ? QStringLiteral("all")
+                              : selection.trimmed();
+  const auto state_scope =
+      state.trimmed().isEmpty() ? QStringLiteral("current") : state.trimmed();
+  return invokeCameraAction(
+      "view zoom",
+      {{"buffer", number_text(buffer)},
+       {"complete", complete ? "true" : "false"},
+       {"selection", expression.toStdString()},
+       {"state", state_scope.toStdString()}},
+      duration_seconds, hand,
+      QStringLiteral("Fit selection · ") + expression,
+      QStringLiteral("Fit selection failed"));
+}
+
+bool MolecularViewport::orientSelection(const QString &selection,
+                                        const QString &state,
+                                        double duration_seconds, int hand) {
+  const auto expression = selection.trimmed().isEmpty()
+                              ? QStringLiteral("all")
+                              : selection.trimmed();
+  const auto state_scope =
+      state.trimmed().isEmpty() ? QStringLiteral("current") : state.trimmed();
+  return invokeCameraAction(
+      "view orient",
+      {{"selection", expression.toStdString()},
+       {"state", state_scope.toStdString()}},
+      duration_seconds, hand,
+      QStringLiteral("Oriented principal axes · ") + expression,
+      QStringLiteral("Orient selection failed"));
+}
+
+bool MolecularViewport::setOriginSelection(const QString &selection,
+                                            const QString &state) {
+  const auto expression = selection.trimmed().isEmpty()
+                              ? QStringLiteral("all")
+                              : selection.trimmed();
+  const auto state_scope =
+      state.trimmed().isEmpty() ? QStringLiteral("current") : state.trimmed();
+  operation::TaskContext context;
+  const auto outcome = actions_.trigger(
+      gui::Action{"view origin",
+                  {{"selection", expression.toStdString()},
+                   {"state", state_scope.toStdString()}}},
+      context);
+  if (!outcome.succeeded()) {
+    setStatus(QStringLiteral("Set pivot failed: ") + outcome_error(outcome),
+              atom_count_, primitive_count_);
+    return false;
   }
-  parameters.distance = std::max(radius * 3.0, 1.0e-3);
-  parameters.near_clip = std::max(radius * 1.0e-4, 1.0e-6);
-  parameters.far_clip = std::max(radius * 100.0, parameters.near_clip * 10.0);
-  auto camera = scene::Camera::create(parameters);
-  if (!camera.has_value())
-    return;
-  if (width() > 0.0 && height() > 0.0) {
-    auto with_viewport = camera.value().with_viewport(width(), height());
-    if (with_viewport.has_value())
-      camera = std::move(with_viewport);
+  syncCameraState();
+  setStatus(QStringLiteral("Set rotation pivot · ") + expression, atom_count_,
+            primitive_count_);
+  return true;
+}
+
+bool MolecularViewport::setOriginPosition(double x, double y, double z,
+                                          const QString &object_reference) {
+  command::Arguments arguments{{"position", number_text(x) + "," +
+                                                number_text(y) + "," +
+                                                number_text(z)}};
+  const auto object = object_reference.trimmed();
+  if (!object.isEmpty())
+    arguments.emplace("object", object.toStdString());
+  operation::TaskContext context;
+  const auto outcome =
+      actions_.trigger(gui::Action{"view origin", std::move(arguments)}, context);
+  if (!outcome.succeeded()) {
+    setStatus(QStringLiteral("Set coordinate pivot failed: ") +
+                  outcome_error(outcome),
+              atom_count_, primitive_count_);
+    return false;
   }
-  auto framed = camera.value().frame_sphere(center, radius, 1.35);
-  if (!framed.has_value())
-    return;
-  camera_ = std::move(framed.value());
-  qInfo("MolShredder camera framed: center=(%.3f,%.3f,%.3f) radius=%.3f "
-        "distance=%.3f aspect=%.3f",
-        center.x, center.y, center.z, radius, camera_->parameters().distance,
-        camera_->parameters().aspect_ratio);
-  ++camera_revision_;
+  syncCameraState();
+  setStatus(object.isEmpty() ? QStringLiteral("Set camera coordinate pivot")
+                             : QStringLiteral("Set object coordinate pivot · ") +
+                                   object,
+            atom_count_, primitive_count_);
+  return true;
+}
+
+bool MolecularViewport::setObjectOriginSelection(
+    const QString &object_reference, const QString &selection,
+    const QString &state) {
+  const auto object = object_reference.trimmed().isEmpty()
+                          ? QStringLiteral("current")
+                          : object_reference.trimmed();
+  const auto expression = selection.trimmed().isEmpty()
+                              ? QStringLiteral("all")
+                              : selection.trimmed();
+  const auto state_scope =
+      state.trimmed().isEmpty() ? QStringLiteral("current") : state.trimmed();
+  operation::TaskContext context;
+  const auto outcome = actions_.trigger(
+      gui::Action{"view origin",
+                  {{"object", object.toStdString()},
+                   {"selection", expression.toStdString()},
+                   {"state", state_scope.toStdString()}}},
+      context);
+  if (!outcome.succeeded()) {
+    setStatus(QStringLiteral("Set object pivot failed: ") +
+                  outcome_error(outcome),
+              atom_count_, primitive_count_);
+    return false;
+  }
+  setStatus(QStringLiteral("Set object pivot · ") + object, atom_count_,
+            primitive_count_);
+  return true;
+}
+
+bool MolecularViewport::resetObjectTransform(
+    const QString &object_reference) {
+  const auto object = object_reference.trimmed().isEmpty()
+                          ? QStringLiteral("current")
+                          : object_reference.trimmed();
+  operation::TaskContext context;
+  const auto outcome = actions_.trigger(
+      gui::Action{"view reset", {{"object", object.toStdString()}}}, context);
+  if (!outcome.succeeded()) {
+    setStatus(QStringLiteral("Reset object transform failed: ") +
+                  outcome_error(outcome),
+              atom_count_, primitive_count_);
+    return false;
+  }
+  setStatus(QStringLiteral("Reset object transform · ") + object, atom_count_,
+            primitive_count_);
+  return true;
+}
+
+bool MolecularViewport::clipCamera(const QString &mode, double distance,
+                                   const QString &selection,
+                                   const QString &state) {
+  const auto normalized_mode = mode.trimmed().toLower();
+  command::Arguments arguments{{"distance", number_text(distance)},
+                               {"mode", normalized_mode.toStdString()}};
+  const auto expression = selection.trimmed();
+  if (!expression.isEmpty())
+    arguments.emplace("selection", expression.toStdString());
+  const auto state_scope =
+      state.trimmed().isEmpty() ? QStringLiteral("current") : state.trimmed();
+  arguments.emplace("state", state_scope.toStdString());
+  operation::TaskContext context;
+  const auto outcome = actions_.trigger(
+      gui::Action{"view clip", std::move(arguments)}, context);
+  if (!outcome.succeeded()) {
+    setStatus(QStringLiteral("Clipping failed: ") + outcome_error(outcome),
+              atom_count_, primitive_count_);
+    return false;
+  }
+  syncCameraState();
+  setStatus(QStringLiteral("Updated clipping · ") + normalized_mode,
+            atom_count_, primitive_count_);
+  return true;
+}
+
+QString MolecularViewport::clipRangeText() const {
+  operation::TaskContext context;
+  const auto outcome =
+      actions_.trigger(gui::Action{"view get-clip", {}}, context);
+  if (!outcome.succeeded())
+    return QStringLiteral("unavailable");
+  const auto &response = std::get<command::Response>(outcome.envelope.payload);
+  const auto near_found = response.fields.find("near_clip");
+  const auto far_found = response.fields.find("far_clip");
+  if (near_found == response.fields.end() || far_found == response.fields.end())
+    return QStringLiteral("unavailable");
+  const auto *near_value = std::get_if<double>(&near_found->second.data);
+  const auto *far_value = std::get_if<double>(&far_found->second.data);
+  if (near_value == nullptr || far_value == nullptr)
+    return QStringLiteral("unavailable");
+  return QStringLiteral("near %1 Å · far %2 Å")
+      .arg(*near_value, 0, 'g', 6)
+      .arg(*far_value, 0, 'g', 6);
+}
+
+bool MolecularViewport::moveCamera(const QString &axis, double distance) {
+  const auto normalized_axis = axis.trimmed().toLower();
+  operation::TaskContext context;
+  const auto outcome = actions_.trigger(
+      gui::Action{"view move",
+                  {{"axis", normalized_axis.toStdString()},
+                   {"distance", number_text(distance)}}},
+      context);
+  if (!outcome.succeeded()) {
+    setStatus(QStringLiteral("Camera move failed: ") + outcome_error(outcome),
+              atom_count_, primitive_count_);
+    return false;
+  }
+  syncCameraState();
+  setStatus(QStringLiteral("Moved camera on ") + normalized_axis,
+            atom_count_, primitive_count_);
+  return true;
+}
+
+bool MolecularViewport::turnCamera(const QString &axis,
+                                   double angle_degrees) {
+  const auto normalized_axis = axis.trimmed().toLower();
+  operation::TaskContext context;
+  const auto outcome = actions_.trigger(
+      gui::Action{"view turn",
+                  {{"angle", number_text(angle_degrees)},
+                   {"axis", normalized_axis.toStdString()}}},
+      context);
+  if (!outcome.succeeded()) {
+    setStatus(QStringLiteral("Camera turn failed: ") + outcome_error(outcome),
+              atom_count_, primitive_count_);
+    return false;
+  }
+  syncCameraState();
+  setStatus(QStringLiteral("Turned camera on ") + normalized_axis,
+            atom_count_, primitive_count_);
+  return true;
+}
+
+bool MolecularViewport::setProjection(const QString &mode,
+                                      double field_of_view_degrees,
+                                      bool preserve_scale) {
+  const auto normalized_mode = mode.trimmed().toLower();
+  operation::TaskContext context;
+  const auto outcome = actions_.trigger(
+      gui::Action{
+          "view projection",
+          {{"field-of-view-degrees", number_text(field_of_view_degrees)},
+           {"mode", normalized_mode.toStdString()},
+           {"preserve-scale", preserve_scale ? "true" : "false"}}},
+      context);
+  if (!outcome.succeeded()) {
+    setStatus(QStringLiteral("Projection failed: ") + outcome_error(outcome),
+              atom_count_, primitive_count_);
+    return false;
+  }
+  syncCameraState();
+  setStatus(QStringLiteral("Projection · ") + normalized_mode, atom_count_,
+            primitive_count_);
+  return true;
+}
+
+QString MolecularViewport::projectionModeText() const {
+  return camera_.has_value() &&
+                 camera_->parameters().projection ==
+                     scene::ProjectionMode::orthographic
+             ? QStringLiteral("orthographic")
+             : QStringLiteral("perspective");
+}
+
+double MolecularViewport::fieldOfViewDegrees() const {
+  return camera_.has_value()
+             ? camera_->parameters().vertical_field_of_view_radians * 180.0 /
+                   std::numbers::pi
+             : 45.0;
+}
+
+bool MolecularViewport::setStereo(bool enabled, const QString &mode,
+                                  bool swap_eyes, double shift_percent,
+                                  double angle_scale,
+                                  const QString &anaglyph_mode) {
+  operation::TaskContext context;
+  const auto outcome = actions_.trigger(
+      gui::Action{"stereo set",
+                  {{"angle-scale", number_text(angle_scale)},
+                   {"anaglyph-mode",
+                    anaglyph_mode.trimmed().toLower().toStdString()},
+                   {"enabled", enabled ? "true" : "false"},
+                   {"mode", mode.trimmed().toLower().toStdString()},
+                   {"shift-percent", number_text(shift_percent)},
+                   {"swap-eyes", swap_eyes ? "true" : "false"}}},
+      context);
+  if (!outcome.succeeded()) {
+    setStatus(QStringLiteral("Stereo failed: ") + outcome_error(outcome),
+              atom_count_, primitive_count_);
+    return false;
+  }
+  ++stereo_revision_;
   update();
+  setStatus(enabled ? QStringLiteral("Stereo · ") + mode
+                    : QStringLiteral("Stereo disabled"),
+            atom_count_, primitive_count_);
+  return true;
+}
+
+bool MolecularViewport::stereoEnabled() const noexcept {
+  return workspace_->stereo().enabled;
+}
+
+QString MolecularViewport::stereoModeText() const {
+  const auto mode = scene::to_string(workspace_->stereo().mode);
+  return QString::fromUtf8(mode.data(), static_cast<qsizetype>(mode.size()));
+}
+
+bool MolecularViewport::stereoSwapEyes() const noexcept {
+  return workspace_->stereo().swap_eyes;
+}
+
+double MolecularViewport::stereoShiftPercent() const noexcept {
+  return workspace_->stereo().shift_percent;
+}
+
+double MolecularViewport::stereoAngleScale() const noexcept {
+  return workspace_->stereo().angle_scale;
+}
+
+QString MolecularViewport::anaglyphModeText() const {
+  const auto mode = scene::to_string(workspace_->stereo().anaglyph_mode);
+  return QString::fromUtf8(mode.data(), static_cast<qsizetype>(mode.size()));
 }
 
 void MolecularViewport::pickAt(double x, double y) {

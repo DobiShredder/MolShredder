@@ -1,6 +1,7 @@
 #include "molshredder/application/default_registry.hpp"
 
 #include <algorithm>
+#include <array>
 #include <charconv>
 #include <chrono>
 #include <cmath>
@@ -8,6 +9,8 @@
 #include <iterator>
 #include <limits>
 #include <mutex>
+#include <optional>
+#include <sstream>
 #include <string>
 #include <utility>
 
@@ -16,7 +19,9 @@
 #include "molshredder/io/molfile_provider.hpp"
 #include "molshredder/operation/error.hpp"
 #include "molshredder/operation/result.hpp"
+#include "molshredder/scene/pymol_view.hpp"
 #include "molshredder/version.hpp"
+#include "molshredder_support_configuration.hpp"
 
 namespace molshredder::application {
 namespace {
@@ -124,6 +129,48 @@ size_argument(const command::Arguments &arguments, std::string_view name,
       static_cast<std::size_t>(parsed));
 }
 
+operation::Result<CameraStateScope>
+camera_state_scope(const command::Arguments &arguments) {
+  const auto found = arguments.find("state");
+  if (found == arguments.end()) {
+    return operation::Result<CameraStateScope>::failure(operation::Error{
+        operation::ErrorCode::internal,
+        "normalized camera command is missing --state", {}});
+  }
+  if (found->second == "current" || found->second == "-1") {
+    return operation::Result<CameraStateScope>::success(
+        CameraStateScope{CameraStateScopeKind::current, 0U});
+  }
+  if (found->second == "all" || found->second == "0") {
+    return operation::Result<CameraStateScope>::success(
+        CameraStateScope{CameraStateScopeKind::all, 0U});
+  }
+  unsigned long long parsed{};
+  const auto converted = std::from_chars(
+      found->second.data(), found->second.data() + found->second.size(), parsed);
+  if (converted.ec != std::errc{} ||
+      converted.ptr != found->second.data() + found->second.size() ||
+      parsed == 0U || parsed - 1U > std::numeric_limits<std::size_t>::max()) {
+    return operation::Result<CameraStateScope>::failure(operation::Error{
+        operation::ErrorCode::invalid_argument,
+        "invalid camera state scope: " + found->second,
+        "use current, all, -1, 0, or a positive one-based state"});
+  }
+  return operation::Result<CameraStateScope>::success(CameraStateScope{
+      CameraStateScopeKind::explicit_state,
+      static_cast<std::size_t>(parsed - 1U)});
+}
+
+command::Value camera_state_scope_value(CameraStateScope scope) {
+  switch (scope.kind) {
+  case CameraStateScopeKind::current: return std::string{"current"};
+  case CameraStateScopeKind::all: return std::string{"all"};
+  case CameraStateScopeKind::explicit_state:
+    return static_cast<std::uint64_t>(scope.frame_index + 1U);
+  }
+  return std::string{"current"};
+}
+
 operation::Result<double> number_argument(const command::Arguments &arguments,
                                           std::string_view name) {
   const auto found = arguments.find(name);
@@ -147,6 +194,30 @@ operation::Result<double> number_argument(const command::Arguments &arguments,
                          "provide a finite number"});
   }
   return operation::Result<double>::success(parsed);
+}
+
+operation::Result<model::Vec3d> vector_argument(
+    const command::Arguments &arguments, std::string_view name) {
+  const auto found = arguments.find(name);
+  if (found == arguments.end()) {
+    return operation::Result<model::Vec3d>::failure(operation::Error{
+        operation::ErrorCode::internal,
+        "normalized command is missing --" + std::string{name}, {}});
+  }
+  auto normalized = found->second;
+  std::replace(normalized.begin(), normalized.end(), ',', ' ');
+  std::istringstream stream{normalized};
+  model::Vec3d result;
+  std::string extra;
+  if (!(stream >> result.x >> result.y >> result.z) || (stream >> extra) ||
+      !scene::is_finite(result)) {
+    return operation::Result<model::Vec3d>::failure(operation::Error{
+        operation::ErrorCode::invalid_argument,
+        "invalid three-component finite vector for --" + std::string{name} +
+            ": " + found->second,
+        "provide x,y,z, for example --" + std::string{name} + " 1,2,3"});
+  }
+  return operation::Result<model::Vec3d>::success(result);
 }
 
 render::ColorRgba named_color(std::string_view name, float alpha) {
@@ -180,6 +251,29 @@ command::Value provider_value(const io::FormatProvider &provider) {
            ? command::Value{nullptr}
            : command::Value{provider.unavailable_reason}},
       {"version", provider.version}};
+}
+
+command::Value optional_text_value(const std::optional<std::string> &value) {
+  return value.has_value() ? command::Value{*value} : command::Value{nullptr};
+}
+
+command::Value optional_unsigned_value(
+    const std::optional<std::uint64_t> &value) {
+  return value.has_value() ? command::Value{*value} : command::Value{nullptr};
+}
+
+command::Value graphics_runtime_value(const GraphicsRuntimeInfo &graphics) {
+  return command::Value::Object{
+      {"api", graphics.api},
+      {"backend", graphics.backend},
+      {"device_id", optional_unsigned_value(graphics.device_id)},
+      {"device_name", optional_text_value(graphics.device_name)},
+      {"device_type", optional_text_value(graphics.device_type)},
+      {"driver_version", optional_text_value(graphics.driver_version)},
+      {"failure_reason", optional_text_value(graphics.failure_reason)},
+      {"rhi_based", graphics.rhi_based},
+      {"status", std::string{to_string(graphics.status)}},
+      {"vendor_id", optional_unsigned_value(graphics.vendor_id)}};
 }
 
 io::FormatProvider molfile_provider_value(
@@ -368,6 +462,251 @@ command::Value vector_value(model::Vec3d value) {
   return command::Value::Array{value.x, value.y, value.z};
 }
 
+command::Value transform_value(const scene::Transform &transform) {
+  return command::Value::Object{
+      {"pivot", vector_value(transform.pivot)},
+      {"rotation",
+       command::Value::Array{transform.rotation.w, transform.rotation.x,
+                             transform.rotation.y, transform.rotation.z}},
+      {"scale", vector_value(transform.scale)},
+      {"translation", vector_value(transform.translation)}};
+}
+
+std::string_view projection_name(scene::ProjectionMode projection) {
+  return projection == scene::ProjectionMode::orthographic ? "orthographic"
+                                                            : "perspective";
+}
+
+command::Value camera_value(const scene::CameraParameters &camera) {
+  return command::Value::Object{
+      {"aspect_ratio", camera.aspect_ratio},
+      {"distance", camera.distance},
+      {"far_clip", camera.far_clip},
+      {"field_of_view_radians", camera.vertical_field_of_view_radians},
+      {"near_clip", camera.near_clip},
+      {"model_origin", vector_value(camera.model_origin)},
+      {"orientation",
+       command::Value::Array{camera.orientation.w, camera.orientation.x,
+                             camera.orientation.y, camera.orientation.z}},
+      {"orthographic_height", camera.orthographic_height},
+      {"projection", std::string{projection_name(camera.projection)}},
+      {"target", vector_value(camera.target)}};
+}
+
+bool implemented_stereo_mode(scene::StereoMode mode) {
+  return mode == scene::StereoMode::side_by_side ||
+         mode == scene::StereoMode::crosseye ||
+         mode == scene::StereoMode::walleye ||
+         mode == scene::StereoMode::anaglyph;
+}
+
+command::Value stereo_value(const scene::StereoParameters &stereo) {
+  return command::Value::Object{
+      {"angle_scale", stereo.angle_scale},
+      {"anaglyph_mode", std::string{scene::to_string(stereo.anaglyph_mode)}},
+      {"enabled", stereo.enabled},
+      {"mode", std::string{scene::to_string(stereo.mode)}},
+      {"shift_percent", stereo.shift_percent},
+      {"swap_eyes", stereo.swap_eyes}};
+}
+
+command::Value stereo_modes_value(const GraphicsRuntimeInfo &graphics) {
+  command::Value::Array modes;
+  constexpr std::array all_modes{
+      scene::StereoMode::side_by_side, scene::StereoMode::crosseye,
+      scene::StereoMode::walleye, scene::StereoMode::anaglyph,
+      scene::StereoMode::quad_buffer, scene::StereoMode::row_interleaved,
+      scene::StereoMode::column_interleaved,
+      scene::StereoMode::checkerboard, scene::StereoMode::openvr};
+  for (const auto mode : all_modes) {
+    const auto implemented = implemented_stereo_mode(mode);
+    const auto runtime_available =
+        implemented && graphics.status == RuntimeStatus::ready &&
+        graphics.rhi_based;
+    std::string reason;
+    if (!implemented) {
+      reason = "presentation compositor is not implemented";
+    } else if (graphics.status != RuntimeStatus::ready) {
+      reason = "interactive graphics runtime is not ready";
+    } else if (!graphics.rhi_based) {
+      reason = "the active renderer is not QRhi-based";
+    }
+    modes.emplace_back(command::Value::Object{
+        {"implemented", implemented},
+        {"mode", std::string{scene::to_string(mode)}},
+        {"reason", reason.empty() ? command::Value{} : command::Value{reason}},
+        {"runtime_available", runtime_available}});
+  }
+  return modes;
+}
+
+command::Value extent_value(const SpatialExtent &extent) {
+  return command::Value::Object{
+      {"center", vector_value(extent.center)},
+      {"evaluated_frame_count",
+       static_cast<std::uint64_t>(extent.evaluated_frame_count)},
+      {"maximum", vector_value(extent.maximum)},
+      {"maximum_radius", extent.maximum_radius},
+      {"minimum", vector_value(extent.minimum)},
+      {"selected_atom_count",
+       static_cast<std::uint64_t>(extent.selected_atom_count)},
+      {"skipped_missing_atom_count",
+       static_cast<std::uint64_t>(extent.skipped_missing_atom_count)},
+      {"used_atom_count", static_cast<std::uint64_t>(extent.used_atom_count)}};
+}
+
+command::Value principal_axes_value(
+    const analysis::PrincipalAxesResult &principal) {
+  command::Value::Array axes;
+  axes.reserve(principal.axes.size());
+  for (const auto axis : principal.axes)
+    axes.emplace_back(vector_value(axis));
+  return command::Value::Object{
+      {"axes", std::move(axes)},
+      {"centroid", vector_value(principal.centroid)},
+      {"primary_secondary_degenerate",
+       principal.primary_secondary_degenerate},
+      {"sample_count",
+       static_cast<std::uint64_t>(principal.sample_count)},
+      {"secondary_tertiary_degenerate",
+       principal.secondary_tertiary_degenerate},
+      {"variances",
+       command::Value::Array{principal.variances[0], principal.variances[1],
+                             principal.variances[2]}}};
+}
+
+CameraClipMode clip_mode(std::string_view mode) {
+  if (mode == "far") return CameraClipMode::far_relative;
+  if (mode == "move") return CameraClipMode::move;
+  if (mode == "slab") return CameraClipMode::slab;
+  if (mode == "atoms") return CameraClipMode::atoms;
+  if (mode == "near-set") return CameraClipMode::near_absolute;
+  if (mode == "far-set") return CameraClipMode::far_absolute;
+  return CameraClipMode::near_relative;
+}
+
+std::string_view clip_mode_name(CameraClipMode mode) {
+  switch (mode) {
+  case CameraClipMode::near_relative: return "near";
+  case CameraClipMode::far_relative: return "far";
+  case CameraClipMode::move: return "move";
+  case CameraClipMode::slab: return "slab";
+  case CameraClipMode::atoms: return "atoms";
+  case CameraClipMode::near_absolute: return "near-set";
+  case CameraClipMode::far_absolute: return "far-set";
+  }
+  return "near";
+}
+
+scene::CameraAxis camera_axis(std::string_view axis) {
+  if (axis == "y") return scene::CameraAxis::y;
+  if (axis == "z") return scene::CameraAxis::z;
+  return scene::CameraAxis::x;
+}
+
+std::string_view camera_axis_name(scene::CameraAxis axis) {
+  switch (axis) {
+  case scene::CameraAxis::x: return "x";
+  case scene::CameraAxis::y: return "y";
+  case scene::CameraAxis::z: return "z";
+  }
+  return "x";
+}
+
+command::Value named_view_value(const NamedViewRecord &view) {
+  return command::Value::Object{{"camera", camera_value(view.camera)},
+                                {"name", view.name}};
+}
+
+operation::Result<double> animation_duration(
+    const command::Arguments &arguments) {
+  const auto duration = number_argument(arguments, "duration");
+  if (!duration.has_value())
+    return duration;
+  if (duration.value() < 0.0 || duration.value() > 3600.0) {
+    return operation::Result<double>::failure(operation::Error{
+        operation::ErrorCode::invalid_argument,
+        "camera animation duration must be between 0 and 3600 seconds",
+        "Use duration 0 for an immediate camera update."});
+  }
+  return duration;
+}
+
+int animation_hand(const command::Arguments &arguments) {
+  return arguments.at("hand") == "-1" ? -1
+         : arguments.at("hand") == "0" ? 0
+                                        : 1;
+}
+
+command::Value animation_value(double duration, int hand,
+                               const scene::CameraParameters &start,
+                               const scene::CameraParameters &end) {
+  const auto &effective_start = duration > 0.0 ? start : end;
+  return command::Value::Object{
+      {"active", duration > 0.0},
+      {"committed_endpoint", true},
+      {"duration_seconds", duration},
+      {"end", camera_value(end)},
+      {"hand", hand},
+      {"start", camera_value(effective_start)}};
+}
+
+operation::Result<scene::CameraParameters> camera_parameters(
+    const command::Arguments &arguments,
+    scene::CameraParameters parameters) {
+  const auto previous_target = parameters.target;
+  const auto assign = [&arguments](std::string_view name, double &target)
+      -> std::optional<operation::Error> {
+    if (!arguments.contains(name))
+      return std::nullopt;
+    const auto parsed = number_argument(arguments, name);
+    if (!parsed.has_value())
+      return parsed.error();
+    target = parsed.value();
+    return std::nullopt;
+  };
+  for (const auto &[name, target] :
+       std::initializer_list<std::pair<std::string_view, double *>>{
+           {"target-x", &parameters.target.x},
+           {"target-y", &parameters.target.y},
+           {"target-z", &parameters.target.z},
+           {"model-origin-x", &parameters.model_origin.x},
+           {"model-origin-y", &parameters.model_origin.y},
+           {"model-origin-z", &parameters.model_origin.z},
+           {"orientation-w", &parameters.orientation.w},
+           {"orientation-x", &parameters.orientation.x},
+           {"orientation-y", &parameters.orientation.y},
+           {"orientation-z", &parameters.orientation.z},
+           {"distance", &parameters.distance},
+           {"field-of-view", &parameters.vertical_field_of_view_radians},
+           {"orthographic-height", &parameters.orthographic_height},
+           {"aspect-ratio", &parameters.aspect_ratio},
+           {"near-clip", &parameters.near_clip},
+           {"far-clip", &parameters.far_clip}}) {
+    if (const auto error = assign(name, *target); error.has_value())
+      return operation::Result<scene::CameraParameters>::failure(*error);
+  }
+  if (arguments.contains("target-x") &&
+      !arguments.contains("model-origin-x")) {
+    parameters.model_origin.x += parameters.target.x - previous_target.x;
+  }
+  if (arguments.contains("target-y") &&
+      !arguments.contains("model-origin-y")) {
+    parameters.model_origin.y += parameters.target.y - previous_target.y;
+  }
+  if (arguments.contains("target-z") &&
+      !arguments.contains("model-origin-z")) {
+    parameters.model_origin.z += parameters.target.z - previous_target.z;
+  }
+  if (const auto found = arguments.find("projection");
+      found != arguments.end()) {
+    parameters.projection = found->second == "orthographic"
+                                ? scene::ProjectionMode::orthographic
+                                : scene::ProjectionMode::perspective;
+  }
+  return operation::Result<scene::CameraParameters>::success(parameters);
+}
+
 command::Value shape_value(model::VolumeShape shape) {
   return command::Value::Array{shape.x, shape.y, shape.z};
 }
@@ -450,15 +789,26 @@ trajectory_frame_response(std::string summary,
 } // namespace
 
 command::Registry make_default_registry() {
-  return make_default_registry(std::make_shared<Workspace>());
+  return make_default_registry(std::make_shared<Workspace>(),
+                               std::make_shared<RuntimeDiagnostics>());
 }
 
 command::Registry make_default_registry(std::shared_ptr<Workspace> workspace) {
+  return make_default_registry(std::move(workspace),
+                               std::make_shared<RuntimeDiagnostics>());
+}
+
+command::Registry make_default_registry(
+    std::shared_ptr<Workspace> workspace,
+    std::shared_ptr<RuntimeDiagnostics> diagnostics) {
   using command::Arguments;
   using command::Descriptor;
   using command::Response;
   using operation::Result;
   using operation::TaskContext;
+
+  if (!diagnostics)
+    diagnostics = std::make_shared<RuntimeDiagnostics>();
 
   command::Registry registry;
   auto molfile_registry = std::make_shared<io::MolfileProviderRegistry>();
@@ -480,14 +830,62 @@ command::Registry make_default_registry(std::shared_ptr<Workspace> workspace) {
   if (version_alias_error.has_value()) {
     std::terminate();
   }
+  const auto info_error = registry.add(
+      Descriptor{"system info",
+                 "Report the compiled support configuration",
+                 {},
+                 command::UndoPolicy::not_applicable},
+      [diagnostics](const Arguments &, TaskContext &) {
+        return Result<Response>::success(
+            {"MolShredder support configuration",
+             {{"build_configuration",
+               std::string{build_support::build_configuration()}},
+              {"configuration_schema_version", build_support::schema_version},
+              {"dependencies",
+               command::Value::Object{
+                   {"hdf5", std::string{build_support::hdf5_version}},
+                   {"netcdf", std::string{build_support::netcdf_version}},
+                   {"python", std::string{build_support::python_version}}}},
+              {"features",
+               command::Value::Object{
+                   {"desktop", build_support::desktop},
+                   {"embedded_python", build_support::embedded_python},
+                   {"hdf5", build_support::hdf5},
+                   {"netcdf", build_support::netcdf},
+                   {"thread_sanitizer", build_support::thread_sanitizer}}},
+              {"platform",
+               command::Value::Object{
+                   {"architecture", std::string{build_support::architecture}},
+                   {"operating_system",
+                    std::string{build_support::operating_system}}}},
+              {"project_version",
+               std::string{build_support::project_version}},
+              {"runtime",
+               command::Value::Object{
+                   {"graphics",
+                    graphics_runtime_value(diagnostics->graphics())}}},
+              {"toolchain",
+               command::Value::Object{
+                   {"compiler_id", std::string{build_support::compiler_id}},
+                   {"compiler_version",
+                    std::string{build_support::compiler_version}},
+                   {"cxx_standard", 20U}}}}});
+      });
+  if (info_error.has_value()) {
+    std::terminate();
+  }
 
   auto descriptors = command::foundation_command_descriptors();
   auto object_descriptors = command::object_command_descriptors();
+  auto view_descriptors = command::view_command_descriptors();
   auto file_descriptors = command::file_command_descriptors();
   auto trajectory_descriptors = command::trajectory_command_descriptors();
   descriptors.insert(descriptors.end(),
                      std::make_move_iterator(object_descriptors.begin()),
                      std::make_move_iterator(object_descriptors.end()));
+  descriptors.insert(descriptors.end(),
+                     std::make_move_iterator(view_descriptors.begin()),
+                     std::make_move_iterator(view_descriptors.end()));
   descriptors.insert(descriptors.end(),
                      std::make_move_iterator(file_descriptors.begin()),
                      std::make_move_iterator(file_descriptors.end()));
@@ -497,7 +895,518 @@ command::Registry make_default_registry(std::shared_ptr<Workspace> workspace) {
   for (auto descriptor : std::move(descriptors)) {
     const auto canonical_name = descriptor.canonical_name;
     command::Handler handler;
-    if (canonical_name == "format list") {
+    if (canonical_name == "view get") {
+      handler = [workspace](const Arguments &, TaskContext &) {
+        return Result<Response>::success(
+            {"Current camera view",
+             {{"camera", camera_value(workspace->camera().parameters())}}});
+      };
+    } else if (canonical_name == "stereo get") {
+      handler = [workspace](const Arguments &, TaskContext &) {
+        return Result<Response>::success(
+            {"Current stereo configuration",
+             {{"stereo", stereo_value(workspace->stereo())}}});
+      };
+    } else if (canonical_name == "stereo modes") {
+      handler = [diagnostics](const Arguments &, TaskContext &) {
+        const auto graphics = diagnostics->graphics();
+        return Result<Response>::success(
+            {"Stereo renderer capabilities",
+             {{"graphics_status", std::string{to_string(graphics.status)}},
+              {"modes", stereo_modes_value(graphics)}}});
+      };
+    } else if (canonical_name == "stereo set") {
+      handler = [workspace, diagnostics](const Arguments &arguments,
+                                         TaskContext &) {
+        const auto mode = scene::stereo_mode_from_string(arguments.at("mode"));
+        if (!mode.has_value()) return Result<Response>::failure(mode.error());
+        if (!implemented_stereo_mode(mode.value())) {
+          return Result<Response>::failure(operation::Error{
+              operation::ErrorCode::unsupported,
+              "stereo mode is not implemented by the current renderer: " +
+                  std::string{scene::to_string(mode.value())},
+              "Use stereo modes to inspect implemented presentation modes."});
+        }
+        const auto shift = number_argument(arguments, "shift-percent");
+        if (!shift.has_value()) return Result<Response>::failure(shift.error());
+        const auto angle = number_argument(arguments, "angle-scale");
+        if (!angle.has_value()) return Result<Response>::failure(angle.error());
+        const auto anaglyph_mode = scene::anaglyph_mode_from_string(
+            arguments.at("anaglyph-mode"));
+        if (!anaglyph_mode.has_value())
+          return Result<Response>::failure(anaglyph_mode.error());
+        scene::StereoParameters parameters{
+            arguments.at("enabled") == "true", mode.value(),
+            arguments.at("swap-eyes") == "true", shift.value(), angle.value(),
+            anaglyph_mode.value()};
+        const auto configured = workspace->set_stereo(parameters);
+        if (!configured.has_value())
+          return Result<Response>::failure(configured.error());
+        const auto graphics = diagnostics->graphics();
+        const auto active = parameters.enabled &&
+                            graphics.status == RuntimeStatus::ready &&
+                            graphics.rhi_based;
+        return Result<Response>::success(
+            {"Stereo configuration updated",
+             {{"previous", stereo_value(configured.value().previous)},
+              {"render_active", active},
+              {"stereo", stereo_value(configured.value().current)}}});
+      };
+    } else if (canonical_name == "view center") {
+      handler = [workspace](const Arguments &arguments, TaskContext &context) {
+        const auto duration = animation_duration(arguments);
+        if (!duration.has_value())
+          return Result<Response>::failure(duration.error());
+        const auto state_scope = camera_state_scope(arguments);
+        if (!state_scope.has_value())
+          return Result<Response>::failure(state_scope.error());
+        const auto hand = animation_hand(arguments);
+        const auto start = workspace->camera().parameters();
+        const auto centered = workspace->center_camera(
+            arguments.at("selection"), arguments.at("move-origin") == "true",
+            state_scope.value(), &context);
+        if (!centered.has_value())
+          return Result<Response>::failure(centered.error());
+        return Result<Response>::success(
+            {"Camera centered on selection",
+             {{"animation",
+               animation_value(duration.value(), hand, start,
+                               centered.value().camera.parameters())},
+              {"camera", camera_value(centered.value().camera.parameters())},
+              {"extent", extent_value(centered.value().extent)},
+              {"object_id", centered.value().object_id},
+              {"selection", centered.value().selection_expression},
+              {"state", camera_state_scope_value(centered.value().state_scope)}}});
+      };
+    } else if (canonical_name == "view zoom") {
+      handler = [workspace](const Arguments &arguments, TaskContext &context) {
+        const auto duration = animation_duration(arguments);
+        if (!duration.has_value())
+          return Result<Response>::failure(duration.error());
+        const auto state_scope = camera_state_scope(arguments);
+        if (!state_scope.has_value())
+          return Result<Response>::failure(state_scope.error());
+        const auto buffer = number_argument(arguments, "buffer");
+        if (!buffer.has_value())
+          return Result<Response>::failure(buffer.error());
+        const auto hand = animation_hand(arguments);
+        const auto start = workspace->camera().parameters();
+        const auto zoomed = workspace->zoom_camera(
+            arguments.at("selection"), buffer.value(),
+            arguments.at("complete") == "true", state_scope.value(),
+            &context);
+        if (!zoomed.has_value())
+          return Result<Response>::failure(zoomed.error());
+        return Result<Response>::success(
+            {"Camera framed selection",
+             {{"animation",
+               animation_value(duration.value(), hand, start,
+                               zoomed.value().camera.parameters())},
+              {"buffer", buffer.value()},
+              {"camera", camera_value(zoomed.value().camera.parameters())},
+              {"complete", arguments.at("complete") == "true"},
+              {"extent", extent_value(zoomed.value().extent)},
+              {"object_id", zoomed.value().object_id},
+              {"selection", zoomed.value().selection_expression},
+              {"state", camera_state_scope_value(zoomed.value().state_scope)}}});
+      };
+    } else if (canonical_name == "view orient") {
+      handler = [workspace](const Arguments &arguments, TaskContext &context) {
+        const auto duration = animation_duration(arguments);
+        if (!duration.has_value())
+          return Result<Response>::failure(duration.error());
+        const auto state_scope = camera_state_scope(arguments);
+        if (!state_scope.has_value())
+          return Result<Response>::failure(state_scope.error());
+        const auto hand = animation_hand(arguments);
+        const auto start = workspace->camera().parameters();
+        const auto oriented = workspace->orient_camera(
+            arguments.at("selection"), state_scope.value(), &context);
+        if (!oriented.has_value())
+          return Result<Response>::failure(oriented.error());
+        return Result<Response>::success(
+            {"Camera aligned to selection principal axes",
+             {{"animation",
+               animation_value(duration.value(), hand, start,
+                               oriented.value().camera.parameters())},
+              {"camera", camera_value(oriented.value().camera.parameters())},
+              {"extent", extent_value(oriented.value().extent)},
+              {"object_id", oriented.value().object_id},
+              {"oriented_center",
+               vector_value(oriented.value().oriented_center)},
+              {"oriented_half_extents",
+               vector_value(oriented.value().oriented_half_extents)},
+              {"principal_axes",
+               principal_axes_value(oriented.value().principal_axes)},
+              {"selection", oriented.value().selection_expression},
+              {"state",
+               camera_state_scope_value(oriented.value().state_scope)}}});
+      };
+    } else if (canonical_name == "view origin") {
+      handler = [workspace](const Arguments &arguments, TaskContext &context) {
+        const auto object = arguments.find("object");
+        const auto position = arguments.find("position");
+        if (object != arguments.end()) {
+          operation::Result<ObjectOriginResult> updated =
+              operation::Result<ObjectOriginResult>::failure(
+                  operation::Error{operation::ErrorCode::internal,
+                                   "object origin dispatch failed", {}});
+          std::string source;
+          if (position != arguments.end()) {
+            const auto parsed = vector_argument(arguments, "position");
+            if (!parsed.has_value())
+              return Result<Response>::failure(parsed.error());
+            updated = workspace->set_object_origin(object->second,
+                                                   parsed.value());
+            source = "position";
+          } else {
+            const auto state_scope = camera_state_scope(arguments);
+            if (!state_scope.has_value())
+              return Result<Response>::failure(state_scope.error());
+            updated = workspace->set_object_origin_from_selection(
+                object->second, arguments.at("selection"),
+                state_scope.value(), &context);
+            source = "selection";
+          }
+          if (!updated.has_value())
+            return Result<Response>::failure(updated.error());
+          command::Value::Object fields{
+              {"camera", camera_value(workspace->camera().parameters())},
+              {"object_id", updated.value().object_id},
+              {"object_name", updated.value().object_name},
+              {"position", vector_value(updated.value().position)},
+              {"scene_version", updated.value().scene_version},
+              {"source", source},
+              {"target", "object"},
+              {"transform", transform_value(updated.value().transform)}};
+          if (updated.value().extent.has_value())
+            fields.emplace("extent", extent_value(*updated.value().extent));
+          if (updated.value().selection_expression.has_value()) {
+            fields.emplace("selection",
+                           *updated.value().selection_expression);
+          }
+          if (updated.value().state_scope.has_value()) {
+            fields.emplace(
+                "state",
+                camera_state_scope_value(*updated.value().state_scope));
+          }
+          return Result<Response>::success(
+              {"Object transform origin updated", std::move(fields)});
+        }
+
+        if (position != arguments.end()) {
+          const auto parsed = vector_argument(arguments, "position");
+          if (!parsed.has_value())
+            return Result<Response>::failure(parsed.error());
+          const auto updated = workspace->set_camera_origin(parsed.value());
+          if (!updated.has_value())
+            return Result<Response>::failure(updated.error());
+          return Result<Response>::success(
+              {"Camera model origin set from coordinates",
+               {{"camera", camera_value(updated.value().parameters())},
+                {"position", vector_value(parsed.value())},
+                {"source", "position"},
+                {"target", "camera"}}});
+        }
+
+        const auto state_scope = camera_state_scope(arguments);
+        if (!state_scope.has_value())
+          return Result<Response>::failure(state_scope.error());
+        const auto updated = workspace->set_camera_origin(
+            arguments.at("selection"), state_scope.value(), &context);
+        if (!updated.has_value())
+          return Result<Response>::failure(updated.error());
+        return Result<Response>::success(
+            {"Camera model origin set from selection",
+             {{"camera", camera_value(updated.value().camera.parameters())},
+              {"extent", extent_value(updated.value().extent)},
+              {"object_id", updated.value().object_id},
+              {"position", vector_value(updated.value().extent.center)},
+              {"selection", updated.value().selection_expression},
+              {"source", "selection"},
+              {"state", camera_state_scope_value(updated.value().state_scope)},
+              {"target", "camera"}}});
+      };
+    } else if (canonical_name == "view reset") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        if (const auto object = arguments.find("object");
+            object != arguments.end()) {
+          const auto reset = workspace->reset_object_transforms(object->second);
+          if (!reset.has_value())
+            return Result<Response>::failure(reset.error());
+          command::Value::Array object_ids;
+          object_ids.reserve(reset.value().object_ids.size());
+          for (const auto object_id : reset.value().object_ids)
+            object_ids.emplace_back(object_id);
+          return Result<Response>::success(
+              {"Object transforms reset",
+               {{"camera", camera_value(workspace->camera().parameters())},
+                {"object_count", static_cast<std::uint64_t>(
+                                     reset.value().object_ids.size())},
+                {"object_ids", std::move(object_ids)},
+                {"object_reference", reset.value().object_reference},
+                {"scene_version", reset.value().scene_version},
+                {"target", "object"}}});
+        }
+        const auto duration = animation_duration(arguments);
+        if (!duration.has_value())
+          return Result<Response>::failure(duration.error());
+        const auto hand = animation_hand(arguments);
+        const auto start = workspace->camera().parameters();
+        const auto reset = workspace->reset_camera();
+        if (!reset.has_value())
+          return Result<Response>::failure(reset.error());
+        command::Value::Object fields{
+            {"animation",
+             animation_value(duration.value(), hand, start,
+                             reset.value().camera.parameters())},
+            {"camera", camera_value(reset.value().camera.parameters())},
+            {"molecular_object_count",
+             static_cast<std::uint64_t>(reset.value().molecular_object_count)},
+            {"volume_object_count",
+             static_cast<std::uint64_t>(reset.value().volume_object_count)},
+            {"target", "camera"}};
+        if (reset.value().extent.has_value())
+          fields.emplace("extent", extent_value(*reset.value().extent));
+        return Result<Response>::success(
+            {"Camera reset to visible scene", std::move(fields)});
+      };
+    } else if (canonical_name == "view clip") {
+      handler = [workspace](const Arguments &arguments, TaskContext &context) {
+        const auto distance = number_argument(arguments, "distance");
+        if (!distance.has_value())
+          return Result<Response>::failure(distance.error());
+        const auto state_scope = camera_state_scope(arguments);
+        if (!state_scope.has_value())
+          return Result<Response>::failure(state_scope.error());
+        std::optional<std::string> selection;
+        if (const auto found = arguments.find("selection");
+            found != arguments.end()) {
+          selection = found->second;
+        }
+        const auto clipped = workspace->clip_camera(
+            clip_mode(arguments.at("mode")), distance.value(),
+            std::move(selection), state_scope.value(), &context);
+        if (!clipped.has_value())
+          return Result<Response>::failure(clipped.error());
+        const auto &parameters = clipped.value().camera.parameters();
+        command::Value::Object fields{
+            {"camera", camera_value(parameters)},
+            {"distance", distance.value()},
+            {"far_clip", parameters.far_clip},
+            {"mode", std::string{clip_mode_name(clipped.value().mode)}},
+            {"near_clip", parameters.near_clip},
+            {"state", camera_state_scope_value(clipped.value().state_scope)}};
+        if (clipped.value().selection_expression.has_value()) {
+          fields.emplace("selection",
+                         *clipped.value().selection_expression);
+        }
+        if (clipped.value().extent.has_value()) {
+          fields.emplace(
+              "depth_range",
+              command::Value::Array{
+                  clipped.value().extent->minimum_depth,
+                  clipped.value().extent->maximum_depth});
+          fields.emplace("extent",
+                         extent_value(clipped.value().extent->spatial));
+        }
+        return Result<Response>::success(
+            {"Camera clipping planes updated", std::move(fields)});
+      };
+    } else if (canonical_name == "view get-clip") {
+      handler = [workspace](const Arguments &, TaskContext &) {
+        const auto &parameters = workspace->camera().parameters();
+        return Result<Response>::success(
+            {"Current camera clipping planes",
+             {{"camera", camera_value(parameters)},
+              {"far_clip", parameters.far_clip},
+              {"near_clip", parameters.near_clip},
+              {"thickness", parameters.far_clip - parameters.near_clip}}});
+      };
+    } else if (canonical_name == "view move") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const auto distance = number_argument(arguments, "distance");
+        if (!distance.has_value())
+          return Result<Response>::failure(distance.error());
+        const auto moved = workspace->move_camera(
+            camera_axis(arguments.at("axis")), distance.value());
+        if (!moved.has_value())
+          return Result<Response>::failure(moved.error());
+        return Result<Response>::success(
+            {"Camera translated on local axis",
+             {{"axis", std::string{camera_axis_name(moved.value().axis)}},
+              {"camera", camera_value(moved.value().camera.parameters())},
+              {"distance", moved.value().amount}}});
+      };
+    } else if (canonical_name == "view turn") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const auto angle = number_argument(arguments, "angle");
+        if (!angle.has_value())
+          return Result<Response>::failure(angle.error());
+        const auto turned = workspace->turn_camera(
+            camera_axis(arguments.at("axis")), angle.value());
+        if (!turned.has_value())
+          return Result<Response>::failure(turned.error());
+        return Result<Response>::success(
+            {"Camera rotated around model origin",
+             {{"angle_degrees", turned.value().amount},
+              {"axis", std::string{camera_axis_name(turned.value().axis)}},
+              {"camera", camera_value(turned.value().camera.parameters())}}});
+      };
+    } else if (canonical_name == "view projection") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        std::optional<double> field_of_view_degrees;
+        if (arguments.contains("field-of-view-degrees")) {
+          const auto parsed =
+              number_argument(arguments, "field-of-view-degrees");
+          if (!parsed.has_value())
+            return Result<Response>::failure(parsed.error());
+          field_of_view_degrees = parsed.value();
+        }
+        const auto mode = arguments.at("mode") == "orthographic"
+                              ? scene::ProjectionMode::orthographic
+                              : scene::ProjectionMode::perspective;
+        const auto projected = workspace->set_camera_projection(
+            mode, field_of_view_degrees,
+            arguments.at("preserve-scale") == "true");
+        if (!projected.has_value())
+          return Result<Response>::failure(projected.error());
+        return Result<Response>::success(
+            {"Camera projection updated",
+             {{"camera", camera_value(projected.value().camera.parameters())},
+              {"field_of_view_degrees",
+               projected.value().field_of_view_degrees},
+              {"mode", std::string{projection_name(projected.value().mode)}},
+              {"preserve_scale", projected.value().preserve_scale},
+              {"previous_mode",
+               std::string{projection_name(projected.value().previous_mode)}},
+              {"previous_vertical_span",
+               projected.value().previous_vertical_span},
+              {"vertical_span", projected.value().vertical_span}}});
+      };
+    } else if (canonical_name == "view set") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const auto parameters = camera_parameters(
+            arguments, workspace->camera().parameters());
+        if (!parameters.has_value())
+          return Result<Response>::failure(parameters.error());
+        const auto updated = workspace->set_camera(parameters.value());
+        if (!updated.has_value())
+          return Result<Response>::failure(updated.error());
+        return Result<Response>::success(
+            {"Camera view updated",
+             {{"camera", camera_value(updated.value().parameters())}}});
+      };
+    } else if (canonical_name == "view export-pymol") {
+      handler = [workspace](const Arguments &, TaskContext &) {
+        const auto exported = scene::to_pymol_view(workspace->camera());
+        if (!exported.has_value())
+          return Result<Response>::failure(exported.error());
+        command::Value::Array values;
+        values.reserve(exported.value().values.size());
+        for (const auto value : exported.value().values)
+          values.emplace_back(value);
+        return Result<Response>::success(
+            {"PyMOL 18-value view exported",
+             {{"camera", camera_value(workspace->camera().parameters())},
+              {"layout", "pymol-get-view-18"},
+              {"text", scene::format_pymol_view(exported.value())},
+              {"values", std::move(values)}}});
+      };
+    } else if (canonical_name == "view import-pymol") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const auto duration = animation_duration(arguments);
+        if (!duration.has_value())
+          return Result<Response>::failure(duration.error());
+        const auto hand = animation_hand(arguments);
+        const auto start = workspace->camera().parameters();
+        const auto parsed = scene::parse_pymol_view(arguments.at("values"));
+        if (!parsed.has_value())
+          return Result<Response>::failure(parsed.error());
+        const auto converted = scene::from_pymol_view(
+            parsed.value(), workspace->camera().parameters());
+        if (!converted.has_value())
+          return Result<Response>::failure(converted.error());
+        const auto updated = workspace->set_camera(converted.value().parameters());
+        if (!updated.has_value())
+          return Result<Response>::failure(updated.error());
+        command::Value::Array values;
+        values.reserve(parsed.value().values.size());
+        for (const auto value : parsed.value().values)
+          values.emplace_back(value);
+        return Result<Response>::success(
+            {"PyMOL 18-value view imported",
+             {{"camera", camera_value(updated.value().parameters())},
+              {"animation",
+               animation_value(duration.value(), hand, start,
+                               updated.value().parameters())},
+              {"layout", "pymol-get-view-18"},
+              {"text", scene::format_pymol_view(parsed.value())},
+              {"values", std::move(values)}}});
+      };
+    } else if (canonical_name == "view list") {
+      handler = [workspace](const Arguments &, TaskContext &) {
+        command::Value::Array views;
+        const auto stored = workspace->list_named_views();
+        views.reserve(stored.size());
+        for (const auto &view : stored)
+          views.emplace_back(named_view_value(view));
+        return Result<Response>::success(
+            {"Stored camera views",
+             {{"count", static_cast<std::uint64_t>(stored.size())},
+              {"current", camera_value(workspace->camera().parameters())},
+              {"views", std::move(views)}}});
+      };
+    } else if (canonical_name == "view store") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const auto stored = workspace->store_named_view(arguments.at("name"));
+        if (!stored.has_value())
+          return Result<Response>::failure(stored.error());
+        return Result<Response>::success(
+            {stored.value().replaced ? "Named view replaced"
+                                     : "Named view stored",
+             {{"count", static_cast<std::uint64_t>(stored.value().view_count)},
+              {"replaced", stored.value().replaced},
+              {"view", named_view_value(stored.value().view)}}});
+      };
+    } else if (canonical_name == "view recall") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const auto duration = animation_duration(arguments);
+        if (!duration.has_value())
+          return Result<Response>::failure(duration.error());
+        const auto hand = animation_hand(arguments);
+        const auto start = workspace->camera().parameters();
+        const auto recalled =
+            workspace->recall_named_view(arguments.at("name"));
+        if (!recalled.has_value())
+          return Result<Response>::failure(recalled.error());
+        return Result<Response>::success(
+            {"Named view recalled",
+             {{"animation",
+               animation_value(duration.value(), hand, start,
+                               recalled.value().camera)},
+              {"view", named_view_value(recalled.value())}}});
+      };
+    } else if (canonical_name == "view delete") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const auto deleted =
+            workspace->delete_named_view(arguments.at("name"));
+        if (!deleted.has_value())
+          return Result<Response>::failure(deleted.error());
+        return Result<Response>::success(
+            {"Named view deleted",
+             {{"count", static_cast<std::uint64_t>(deleted.value().view_count)},
+              {"name", deleted.value().name}}});
+      };
+    } else if (canonical_name == "view clear") {
+      handler = [workspace](const Arguments &, TaskContext &) {
+        const auto cleared = workspace->clear_named_views();
+        return Result<Response>::success(
+            {"Named views cleared",
+             {{"cleared_all", cleared.cleared_all},
+              {"count", static_cast<std::uint64_t>(cleared.view_count)}}});
+      };
+    } else if (canonical_name == "format list") {
       handler = [](const Arguments &arguments, TaskContext &) {
         const auto requested_direction = arguments.at("direction") == "write"
                                              ? io::FormatDirection::write
@@ -1972,6 +2881,12 @@ command::Registry make_default_registry(std::shared_ptr<Workspace> workspace) {
     }
   }
   for (auto alias : command::foundation_command_aliases()) {
+    const auto registration_error = registry.add_alias(std::move(alias));
+    if (registration_error.has_value()) {
+      std::terminate();
+    }
+  }
+  for (auto alias : command::view_command_aliases()) {
     const auto registration_error = registry.add_alias(std::move(alias));
     if (registration_error.has_value()) {
       std::terminate();

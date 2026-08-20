@@ -74,13 +74,26 @@ jobs:
         run: |
           conda run --no-capture-output -n molshredder ./build/stage/bin/molshredder --version
           conda run --no-capture-output -n molshredder ./build/stage/bin/molshredder system version --format json
+          conda run --no-capture-output -n molshredder ./build/stage/bin/molshredder system info --format json
+          test -f build/stage/share/molshredder/molshredder-support.json
+          script_path="$GITHUB_WORKSPACE/tests/automation/fixtures/success.py"
+          structure_path="$GITHUB_WORKSPACE/tests/io/fixtures/synthetic_multimodel.pdb"
+          script_arguments="$(conda run --no-capture-output -n molshredder python -c 'import json,sys; print(json.dumps(sys.argv[1:]))' "$structure_path" ci-installed-cli)"
+          conda run --no-capture-output -n molshredder \
+            ./build/stage/bin/molshredder script run \
+            --path "$script_path" --arguments-json "$script_arguments" \
+            --trust true --format json
 
       - name: Smoke installed Python module (Unix)
         if: runner.os != 'Windows'
-        run: >-
-          PYTHONPATH=build/stage/lib/molshredder/python
-          conda run --no-capture-output -n molshredder
-          python -c "import molshredder; assert molshredder.invoke('version')['status'] == 'ok'"
+        run: |
+          export PYTHONPATH=build/stage/lib/molshredder/python
+          export MOLSHREDDER_SCRIPT="$GITHUB_WORKSPACE/tests/automation/fixtures/success.py"
+          export MOLSHREDDER_STRUCTURE="$GITHUB_WORKSPACE/tests/io/fixtures/synthetic_multimodel.pdb"
+          conda run --no-capture-output -n molshredder python -c \
+            "import json, pathlib, molshredder; info=molshredder.invoke('system info'); manifest=json.loads(pathlib.Path('build/stage/share/molshredder/molshredder-support.json').read_text()); assert info['status'] == 'ok' and info['data']['features'] == manifest['features']"
+          conda run --no-capture-output -n molshredder python -c \
+            "import os, molshredder; result=molshredder.run_script(os.environ['MOLSHREDDER_SCRIPT'], [os.environ['MOLSHREDDER_STRUCTURE'], 'ci-installed-python'], trusted=True); assert result['status'] == 'ok' and result['data']['stdout'] == 'script-argument=ci-installed-python\\n'"
 
       - name: Smoke installed executable (Windows)
         if: runner.os == 'Windows'
@@ -88,10 +101,19 @@ jobs:
         run: |
           conda run --no-capture-output -n molshredder .\build\stage\bin\molshredder.exe --version
           conda run --no-capture-output -n molshredder .\build\stage\bin\molshredder.exe system version --format json
+          conda run --no-capture-output -n molshredder .\build\stage\bin\molshredder.exe system info --format json
+          if (-not (Test-Path .\build\stage\share\molshredder\molshredder-support.json)) { throw "support manifest missing" }
+          $scriptPath = (Resolve-Path .\tests\automation\fixtures\success.py).Path
+          $structurePath = (Resolve-Path .\tests\io\fixtures\synthetic_multimodel.pdb).Path
+          $scriptArguments = @($structurePath, "ci-installed-cli") | ConvertTo-Json -Compress
+          conda run --no-capture-output -n molshredder .\build\stage\bin\molshredder.exe script run --path $scriptPath --arguments-json $scriptArguments --trust true --format json
 
       - name: Smoke installed Python module (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $env:PYTHONPATH = "build/stage/lib/molshredder/python"
-          conda run --no-capture-output -n molshredder python -c "import molshredder; assert molshredder.invoke('version')['status'] == 'ok'"
+          $env:MOLSHREDDER_SCRIPT = (Resolve-Path .\tests\automation\fixtures\success.py).Path
+          $env:MOLSHREDDER_STRUCTURE = (Resolve-Path .\tests\io\fixtures\synthetic_multimodel.pdb).Path
+          conda run --no-capture-output -n molshredder python -c "import json, pathlib, molshredder; info=molshredder.invoke('system info'); manifest=json.loads(pathlib.Path('build/stage/share/molshredder/molshredder-support.json').read_text()); assert info['status'] == 'ok' and info['data']['features'] == manifest['features']"
+          conda run --no-capture-output -n molshredder python -c "import os, molshredder; result=molshredder.run_script(os.environ['MOLSHREDDER_SCRIPT'], [os.environ['MOLSHREDDER_STRUCTURE'], 'ci-installed-python'], trusted=True); assert result['status'] == 'ok' and result['data']['stdout'] == 'script-argument=ci-installed-python\n'"

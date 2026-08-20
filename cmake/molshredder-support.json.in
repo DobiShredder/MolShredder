@@ -1,0 +1,26 @@
+{
+  "configuration_schema_version": @MOLSHREDDER_SUPPORT_SCHEMA_VERSION@,
+  "project_version": "@PROJECT_VERSION@",
+  "build_configuration": "@MOLSHREDDER_SUPPORT_BUILD_CONFIGURATION@",
+  "platform": {
+    "operating_system": "@CMAKE_SYSTEM_NAME@",
+    "architecture": "@CMAKE_SYSTEM_PROCESSOR@"
+  },
+  "toolchain": {
+    "compiler_id": "@CMAKE_CXX_COMPILER_ID@",
+    "compiler_version": "@CMAKE_CXX_COMPILER_VERSION@",
+    "cxx_standard": 20
+  },
+  "features": {
+    "desktop": @MOLSHREDDER_SUPPORT_DESKTOP@,
+    "embedded_python": true,
+    "hdf5": true,
+    "netcdf": true,
+    "thread_sanitizer": @MOLSHREDDER_SUPPORT_THREAD_SANITIZER@
+  },
+  "dependencies": {
+    "hdf5": "@HDF5_VERSION@",
+    "netcdf": "@netCDF_VERSION@",
+    "python": "@Python3_VERSION@"
+  }
+}

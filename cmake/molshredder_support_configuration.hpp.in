@@ -1,0 +1,38 @@
+#pragma once
+
+#include <string_view>
+
+namespace molshredder::build_support {
+
+inline constexpr unsigned int schema_version =
+    @MOLSHREDDER_SUPPORT_SCHEMA_VERSION@U;
+inline constexpr std::string_view project_version{"@PROJECT_VERSION@"};
+inline constexpr std::string_view operating_system{"@CMAKE_SYSTEM_NAME@"};
+inline constexpr std::string_view architecture{"@CMAKE_SYSTEM_PROCESSOR@"};
+inline constexpr std::string_view compiler_id{"@CMAKE_CXX_COMPILER_ID@"};
+inline constexpr std::string_view compiler_version{
+    "@CMAKE_CXX_COMPILER_VERSION@"};
+inline constexpr std::string_view configured_build_type{
+    "@MOLSHREDDER_SUPPORT_BUILD_CONFIGURATION@"};
+inline constexpr std::string_view hdf5_version{"@HDF5_VERSION@"};
+inline constexpr std::string_view netcdf_version{"@netCDF_VERSION@"};
+inline constexpr std::string_view python_version{"@Python3_VERSION@"};
+inline constexpr bool desktop = @MOLSHREDDER_SUPPORT_DESKTOP@;
+inline constexpr bool embedded_python = true;
+inline constexpr bool hdf5 = true;
+inline constexpr bool netcdf = true;
+inline constexpr bool thread_sanitizer =
+    @MOLSHREDDER_SUPPORT_THREAD_SANITIZER@;
+
+inline constexpr std::string_view build_configuration() noexcept {
+  if constexpr (configured_build_type != "multi-config") {
+    return configured_build_type;
+  }
+#ifdef NDEBUG
+  return "release";
+#else
+  return "debug";
+#endif
+}
+
+}  // namespace molshredder::build_support

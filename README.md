@@ -55,6 +55,7 @@ ctest --preset desktop --output-on-failure
 ./build/dev/molshredder --help
 ./build/dev/molshredder console
 ./build/dev/molshredder system version --format json
+./build/dev/molshredder system info --format json
 ```
 
 Python에서는 같은 command dispatcher를 호출한다.
@@ -74,6 +75,32 @@ PYTHONPATH=build/dev python -c \
 molshredder.run_script("analysis.py", ["trajectory.dcd"], trusted=True)
 ```
 
+Desktop에서는 상단 `Run Script`에서 file을 선택하고 권한 경고를 확인한 뒤 실행한다.
+실행 중에도 UI는 응답하며 viewer 편집은 잠시 잠긴다. Cancel은 cooperative request이므로 실행 중인 Python code가
+반환된 뒤 취소가 확정된다.
+상단 `System`은 같은 `system info` operation의 build, dependency와 실제 graphics runtime 결과를 읽기 쉬운 panel로
+표시한다. 값이 runtime에서 제공되지 않으면 추정하지 않고 `Not reported`로 표시한다.
+상단 `Views`에서는 현재 camera를 이름으로 저장·복원·삭제할 수 있다. 같은 기능은
+`view store/recall/list/delete/clear` command와 Python `invoke()`에서도 제공된다. 같은 panel과
+`view export-pymol/import-pymol`에서 PyMOL `get_view/set_view` 18-value camera를 복사하거나 붙여넣을 수 있다.
+Recall과 import는 PyMOL 호환 easing으로 부드럽게 이동하며 command의 `--duration`과 `--hand`로 제어한다.
+Selection 입력과 Center, Fit, Orient, Set pivot, Reset all도 제공하며 각각 공용
+`view center/zoom/orient/origin/reset` operation을 호출한다. Orient는 선택 좌표의 principal axes를 화면 축에
+정렬하고 회전된 bounds를 다시 frame한다.
+Object reference와 XYZ 입력은 selection/coordinate 기반 object pivot, object-only reset과 명시 camera pivot을
+같은 `view origin/reset` operation으로 제공한다.
+State control에서 current, all 또는 1-based explicit coordinate state를 선택할 수 있고,
+selection-based clipping도 같은 scope를 사용한다.
+같은 panel의 Axis navigation에서 camera-local X/Y/Z 이동과 model-origin pivot 회전을 수행하며,
+CLI·Python은 `view move/turn`으로 동일한 typed operation을 호출한다.
+Projection mode와 degree FOV는 기본적으로 target-plane scale을 유지하는 `view projection`으로 전환하며,
+고급 사용자는 raw switch를 선택할 수 있다. 긴 Views workflow는 scroll할 수 있다.
+Portable stereo는 같은 panel 또는 `stereo set`에서 side-by-side/cross-eye/wall-eye/anaglyph, eye swap,
+separation과 angle scale을 제어하며 CLI·GUI·Python이 같은 operation을 사용한다. Anaglyph는 true/gray/color/
+half-color/optimized 합성을 제공하고, 나머지 미구현 compositor는 명시적으로 보고한다.
+같은 panel에서 7개 clipping mode와 현재 near/far range를 조절·조회할 수 있으며
+`view clip/get-clip`과 Python `invoke()`도 동일한 기능을 제공한다.
+
 명령과 desktop 실행 방법은 아래 문서를 참조한다.
 
 - [Command reference](docs/COMMANDS.md)
@@ -91,6 +118,7 @@ molshredder.run_script("analysis.py", ["trajectory.dcd"], trusted=True)
 - [Rendering](docs/RENDERING.md)
 - [Data model](docs/DATA_MODEL.md)
 - [Dependency](docs/DEPENDENCIES.md)
+- [Build support configuration](docs/SUPPORT_CONFIGURATION.md)
 
 ## 라이선스
 

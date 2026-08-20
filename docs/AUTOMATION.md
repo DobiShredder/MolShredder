@@ -40,6 +40,17 @@ loaded = molshredder.invoke("load", {"path": "structure.pdb"})
 center = molshredder.invoke("com", {"selection": "protein"})
 ```
 
+## Desktop GUI
+
+상단 `Run Script`를 선택하면 `.py` file picker와 trust confirmation이 차례로 열린다. 확인 문구는 script가
+MolShredder와 같은 filesystem/network/process 권한을 갖고 실패 전 변경이 남을 수 있음을 명시한다. 승인한 script는
+CLI/Python과 같은 `script run` operation을 사용한다. 완료 또는 실패 후 stdout/stderr는 좌측 output panel에
+표시되며 닫기 버튼으로 지울 수 있다. Script가 structure, representation 또는 trajectory state를 변경하면 object
+panel과 scene packet을 같은 Workspace에서 다시 동기화한다. 실행은 GUI event loop 밖의 전용 worker에서 진행된다.
+동시에 Workspace를 편집하지 않도록 실행 중 trajectory playback을 정지하고 viewer 입력을 overlay로 차단한다.
+`Request cancellation`은 shared cancellation token을 설정하며 Python code가 반환된 직후의 checkpoint에서 취소
+결과를 확정한다.
+
 ## 결과와 실패
 
 성공 결과에는 source path/SHA-256, Python runtime, duration, working directory, stdout/stderr, canonical nested
@@ -54,6 +65,8 @@ invocation과 committed mutation count가 포함된다. Syntax/runtime error는 
 - Source는 canonical regular `.py` file이어야 하고 기본 크기 상한은 8 MiB다.
 - Python 실행은 process-global cwd/stdout/stderr를 임시 변경하므로 현재 service가 한 번에 하나씩 직렬화한다.
 - Script가 실행 중인 동안 다른 script를 재귀 실행하는 것은 거부한다. 일반 `invoke()` 중첩은 지원한다.
-- Arbitrary Python bytecode를 안전하게 강제 중단할 수 없어 hard timeout/cancellation은 제공하지 않는다. 시작 전과
-  반환 직후 cancellation만 확인한다.
-- `.pml`, explicit text, environment allowlist, GUI `Run Script`와 worker-process isolation은 후속 capability다.
+- Arbitrary Python bytecode를 안전하게 강제 중단할 수 없어 hard timeout은 제공하지 않는다. Desktop cancel은
+  cooperative request이며 시작 전 또는 Python 반환 직후 checkpoint에서 반영된다. 무한 loop나 block된 native call을
+  즉시 종료하지는 못한다.
+- Desktop worker가 실행되는 동안 같은 mutable Workspace를 만지는 viewer editing과 trajectory timer는 일시 정지한다.
+- `.pml`, explicit text, argument editor, environment allowlist와 worker-process isolation은 후속 capability다.

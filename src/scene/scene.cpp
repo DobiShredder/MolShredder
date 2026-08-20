@@ -151,8 +151,8 @@ SceneBuilder::add_node(NodeId parent, NodeKind kind, std::string name,
   }
   if (!is_valid(transform)) {
     return operation::Result<NodeId>::failure(invalid(
-        "scene transform must contain finite translation, normalized rotation, "
-        "and positive finite scale"));
+        "scene transform must contain finite translation and pivot, normalized "
+        "rotation, and positive finite scale"));
   }
   if (next_id_ == std::numeric_limits<std::uint64_t>::max()) {
     return operation::Result<NodeId>::failure(
