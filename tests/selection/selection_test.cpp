@@ -1,3 +1,4 @@
+#include <array>
 #include <cstdint>
 #include <iostream>
 #include <memory>
@@ -140,6 +141,22 @@ int main() {
   passed &= expect(named.evaluate("oxygen", *other_topology).has_value() &&
                        !named.evaluate("first", *other_topology).has_value(),
                    "dynamic selection may re-evaluate but static mask is snapshot-bound");
+  auto target_builder = model::TopologyBuilder::from(*topology);
+  const std::array retained{model::AtomId{4U}, model::AtomId{1U}};
+  passed &= expect(!target_builder.retain_atoms(retained).has_value(),
+                   "selection remap target must build");
+  const auto target_topology = target_builder.build();
+  const auto selection_remap = model::remap_topology(*topology,
+                                                      *target_topology.value());
+  const auto remapped_named = named.remap(*topology, *target_topology.value(),
+                                         selection_remap);
+  passed &= expect(
+      remapped_named.has_value() &&
+          remapped_named.value().evaluate("first", *target_topology.value())
+                  .value() == selection::Mask({0U, 1U}) &&
+          remapped_named.value().evaluate("oxygen", *target_topology.value())
+                  .value() == selection::Mask({1U, 0U}),
+      "static selections must follow stable identity and dynamic selections must re-evaluate on the target snapshot");
   passed &= expect(named.set(
                        "oxygen",
                        selection::Expression::parse("@protein_oxygen").value(),

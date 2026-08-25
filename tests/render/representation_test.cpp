@@ -94,7 +94,7 @@ molshredder::render::RepresentationRequest request_for(
     const Fixture& fixture) {
   return molshredder::render::RepresentationRequest{
       fixture.topology.get(), fixture.frame.get(), 7U, 42U,
-      fixture.visuals, {}, {}, {}};
+      fixture.visuals, {}, {}, {}, nullptr, 0U, {}};
 }
 
 }  // namespace
@@ -102,6 +102,17 @@ molshredder::render::RepresentationRequest request_for(
 int main() {
   using namespace molshredder;
   bool passed = true;
+  const auto maximum_gpu_index = render::checked_gpu_mesh_index(
+      std::numeric_limits<std::uint32_t>::max());
+  const auto overflowing_gpu_index = render::checked_gpu_mesh_index(
+      static_cast<std::uint64_t>(std::numeric_limits<std::uint32_t>::max()) +
+      1U);
+  passed &= expect(
+      maximum_gpu_index.has_value() &&
+          maximum_gpu_index.value() ==
+              std::numeric_limits<std::uint32_t>::max() &&
+          !overflowing_gpu_index.has_value(),
+      "GPU mesh index conversion must accept uint32 max and reject uint32 overflow");
   const auto fixture = make_fixture();
 
   auto request = request_for(fixture);

@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <span>
+#include <string>
 #include <vector>
 
 #include "molshredder/model/coordinates.hpp"
@@ -9,6 +10,7 @@
 #include "molshredder/analysis/secondary_structure.hpp"
 #include "molshredder/operation/result.hpp"
 #include "molshredder/render/packet.hpp"
+#include "molshredder/render/setting_store.hpp"
 
 namespace molshredder::render {
 
@@ -33,6 +35,24 @@ struct RepresentationStyle {
   double cartoon_chain_break_distance{4.50};
 };
 
+struct SphereBackendCapabilities {
+  bool analytic_impostors{true};
+  bool triangle_spheres{};
+  bool point_sprites{};
+  bool low_polyhedra{};
+};
+
+struct SphereModeResolution {
+  std::int64_t requested{};
+  std::int64_t effective{};
+  bool fallback{};
+  std::string reason;
+};
+
+[[nodiscard]] SphereModeResolution resolve_sphere_mode(
+    std::int64_t requested, bool shader_enabled,
+    SphereBackendCapabilities capabilities = {});
+
 struct RepresentationRequest {
   const model::Topology* topology{};
   const model::CoordinateFrame* frame{};
@@ -42,9 +62,16 @@ struct RepresentationRequest {
   std::span<const std::uint8_t> selected;
   RepresentationStyle style;
   std::span<const analysis::SecondaryStructureState> secondary_structure;
+  const RenderSettingStore* settings{};
+  std::uint64_t object_id{};
+  SphereBackendCapabilities sphere_backend;
 };
 
 [[nodiscard]] operation::Result<RenderPacket> build_representation(
     const RepresentationRequest& request);
+
+// Validates the explicit host-uint64 to GPU-uint32 mesh index boundary.
+[[nodiscard]] operation::Result<std::uint32_t> checked_gpu_mesh_index(
+    std::uint64_t index);
 
 }  // namespace molshredder::render

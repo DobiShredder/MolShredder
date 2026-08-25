@@ -28,14 +28,16 @@ def main() -> int:
     load_args = {"path": str(topology), "file-format": "pdb",
                  "name": "binpos"}
     attach_args = {"path": str(trajectory), "file-format": "binpos",
-                   "cache-mib": "1", "prefetch-frames": "0"}
+                   "cache-mib": "1", "prefetch-frames": "0",
+                   "mapping": "index"}
     frame_args = {"frame": "1"}
     center_args = {"selection": "all", "mode": "centroid",
                    "precision": "6", "unit": "angstrom"}
     save_args = {"path": str(output), "file-format": "binpos",
                  "overwrite": "true"}
     roundtrip_args = {"path": str(output), "file-format": "binpos",
-                      "cache-mib": "1", "prefetch-frames": "0"}
+                      "cache-mib": "1", "prefetch-frames": "0",
+                      "mapping": "index"}
     python_results = [
         molshredder.invoke("load", load_args),
         molshredder.invoke("traj load", attach_args),
@@ -64,14 +66,14 @@ def main() -> int:
         f'invoke "load" --file-format "pdb" --name "binpos" '
         f'--path "{topology}"\n'
         f'invoke "traj load" --cache-mib "1" --file-format "binpos" '
-        f'--path "{trajectory}" --prefetch-frames "0"\n'
+        f'--path "{trajectory}" --prefetch-frames "0" --mapping "index"\n'
         'invoke "traj frame" --frame "1"\n'
         'invoke "analyze center" --mode "centroid" --precision "6" '
         '--selection "all" --unit "angstrom"\n'
         f'invoke "traj save" --file-format "binpos" --overwrite "true" '
         f'--path "{output}"\n'
         f'invoke "traj load" --cache-mib "1" --file-format "binpos" '
-        f'--path "{output}" --prefetch-frames "0"\n'
+        f'--path "{output}" --prefetch-frames "0" --mapping "index"\n'
         "exit\n"
     )
     completed = subprocess.run([str(cli_path), "console"],

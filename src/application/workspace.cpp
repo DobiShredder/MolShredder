@@ -11,6 +11,7 @@
 #include <memory>
 #include <numbers>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -21,6 +22,8 @@
 
 namespace molshredder::application {
 namespace {
+
+static_assert(std::is_nothrow_move_constructible_v<WorkspaceObject>);
 
 using scene::operator+;
 using scene::operator-;
@@ -35,6 +38,34 @@ operation::Error missing_active() {
   return operation::Error{operation::ErrorCode::not_found,
                           "workspace has no active molecular object",
                           "load a structure first"};
+}
+
+std::optional<operation::Error> validate_render_setting_target(
+    std::span<const WorkspaceObject> objects,
+    const render::RenderSettingScope &scope) {
+  if (scope.level == render::RenderSettingScopeLevel::global)
+    return std::nullopt;
+  const auto found = std::find_if(
+      objects.begin(), objects.end(), [&scope](const auto &object) {
+        return object.id == scope.object_id;
+      });
+  if (found == objects.end())
+    return invalid("render setting target object does not exist");
+  const auto frame_count = found->trajectory.has_value()
+                               ? found->trajectory->cache->frame_count()
+                               : found->system->coordinates()->frame_count();
+  if (scope.level != render::RenderSettingScopeLevel::object &&
+      (!frame_count.has_value() || scope.state_index >= *frame_count))
+    return invalid("render setting target state does not exist");
+  if (scope.level == render::RenderSettingScopeLevel::atom &&
+      !found->system->topology()->atom_index(model::AtomId{scope.atom_id})
+           .has_value())
+    return invalid("render setting target atom does not exist");
+  if (scope.level == render::RenderSettingScopeLevel::bond &&
+      !found->system->topology()->bond_index(model::BondId{scope.bond_id})
+           .has_value())
+    return invalid("render setting target bond does not exist");
+  return std::nullopt;
 }
 
 model::Vec3d coordinate_at(const model::CoordinateFrame &frame,
@@ -150,29 +181,33 @@ atom_visuals(const model::Topology &topology) {
 operation::Result<std::vector<RepresentationRecord>> rebuild_representations(
     const WorkspaceObject &object,
     const std::shared_ptr<const model::MolecularSystem> &system,
-    const model::CoordinateFrame &frame, std::size_t frame_index) {
+    const model::CoordinateFrame &frame, std::size_t frame_index,
+    const render::RenderSettingStore &settings,
+    const RepresentationVisibilityState *visibility_override = nullptr) {
   const auto visuals = atom_visuals(*system->topology());
   if (!visuals.has_value()) {
     return operation::Result<std::vector<RepresentationRecord>>::failure(
         visuals.error());
   }
   std::vector<RepresentationRecord> rebuilt;
-  rebuilt.reserve(object.representations.size());
-  for (const auto &representation : object.representations) {
-    const auto parsed =
-        selection::Expression::parse(representation.selection_expression);
-    if (!parsed.has_value()) {
-      return operation::Result<std::vector<RepresentationRecord>>::failure(
-          parsed.error());
-    }
-    const auto mask = selection::evaluate(
-        parsed.value(), *system->topology(), [&](std::string_view name) {
-          return object.selections.evaluate(name, *system->topology());
-        });
+  constexpr std::array kinds{render::RepresentationKind::lines,
+                             render::RepresentationKind::sticks,
+                             render::RepresentationKind::spheres,
+                             render::RepresentationKind::ribbon,
+                             render::RepresentationKind::cartoon};
+  rebuilt.reserve(kinds.size());
+  const auto &visibility = visibility_override == nullptr
+                               ? object.representation_visibility
+                               : *visibility_override;
+  for (const auto kind : kinds) {
+    const auto mask = visibility.selection_mask(kind);
     if (!mask.has_value()) {
       return operation::Result<std::vector<RepresentationRecord>>::failure(
           mask.error());
     }
+    if (std::none_of(mask.value().begin(), mask.value().end(),
+                     [](std::uint8_t value) { return value != 0U; }))
+      continue;
     render::RepresentationRequest request{system->topology().get(),
                                           &frame,
                                           frame_index,
@@ -180,16 +215,18 @@ operation::Result<std::vector<RepresentationRecord>> rebuild_representations(
                                           visuals.value(),
                                           mask.value(),
                                           {},
+                                          {},
+                                          &settings,
+                                          object.id,
                                           {}};
-    request.style.kind = representation.kind;
+    request.style.kind = kind;
     const auto packet = render::build_representation(request);
     if (!packet.has_value()) {
       return operation::Result<std::vector<RepresentationRecord>>::failure(
           packet.error());
     }
-    rebuilt.push_back(RepresentationRecord{representation.kind,
-                                           representation.selection_expression,
-                                           packet.value()});
+    rebuilt.push_back(
+        RepresentationRecord{kind, "<visibility-state>", packet.value()});
   }
   return operation::Result<std::vector<RepresentationRecord>>::success(
       std::move(rebuilt));
@@ -435,6 +472,10 @@ Workspace::Workspace() {
   if (!camera.has_value())
     std::terminate();
   camera_ = std::move(camera.value());
+  auto settings = render::RenderSettingStore::create();
+  if (!settings.has_value())
+    std::terminate();
+  render_settings_ = std::move(settings.value());
 }
 
 operation::Result<scene::Camera>
@@ -659,12 +700,435 @@ Workspace::set_object_visibility(std::uint64_t object_id, bool visible) {
   return operation::Result<WorkspaceObjectInfo>::success(list_objects()[index]);
 }
 
+operation::Result<ObjectLifecycleResult>
+Workspace::rename_object(std::string_view object_reference, std::string name) {
+  const auto index_result = object_index_by_reference(object_reference);
+  if (!index_result.has_value())
+    return operation::Result<ObjectLifecycleResult>::failure(
+        index_result.error());
+  if (name.empty() ||
+      std::all_of(name.begin(), name.end(), [](unsigned char value) {
+        return std::isspace(value) != 0;
+      }) ||
+      std::any_of(name.begin(), name.end(), [](unsigned char value) {
+        return value < 0x20U || value == 0x7fU;
+      })) {
+    return operation::Result<ObjectLifecycleResult>::failure(invalid(
+        "workspace object name must contain visible characters and no controls",
+        "provide a non-empty unique object name"));
+  }
+  const auto index = index_result.value();
+  const auto &current = objects_[index];
+  const auto duplicate_molecule = std::any_of(
+      objects_.begin(), objects_.end(), [&](const auto &candidate) {
+        return candidate.id != current.id && candidate.system->name() == name;
+      });
+  const auto duplicate_volume =
+      std::any_of(volumes_.begin(), volumes_.end(), [&](const auto &volume) {
+        return volume.name == name;
+      });
+  if (duplicate_molecule || duplicate_volume) {
+    return operation::Result<ObjectLifecycleResult>::failure(invalid(
+        "workspace object name already exists: " + name,
+        "choose a unique object name"));
+  }
+
+  const auto replacement = model::MolecularSystem::create(
+      current.system->id(), name, current.system->topology(),
+      current.system->coordinates());
+  if (!replacement.has_value())
+    return operation::Result<ObjectLifecycleResult>::failure(
+        replacement.error());
+  auto builder = scene::SceneBuilder::from(*scene_);
+  if (const auto error = builder.rename(current.scene_node, name);
+      error.has_value())
+    return operation::Result<ObjectLifecycleResult>::failure(*error);
+  if (const auto error =
+          builder.replace_system(current.scene_node, replacement.value());
+      error.has_value())
+    return operation::Result<ObjectLifecycleResult>::failure(*error);
+  const auto next_scene = builder.build();
+  if (!next_scene.has_value())
+    return operation::Result<ObjectLifecycleResult>::failure(
+        next_scene.error());
+
+  objects_[index].system = replacement.value();
+  scene_ = next_scene.value();
+  std::vector<std::uint64_t> order;
+  order.reserve(objects_.size());
+  for (const auto &object : objects_)
+    order.push_back(object.id);
+  return operation::Result<ObjectLifecycleResult>::success(
+      ObjectLifecycleResult{current.id,
+                            current.scene_node.value,
+                            std::move(name),
+                            index,
+                            index,
+                            objects_.size(),
+                            false,
+                            active_object() == nullptr
+                                ? std::optional<std::uint64_t>{}
+                                : active_object()->id,
+                            std::move(order),
+                            0U,
+                            0U});
+}
+
+operation::Result<ObjectLifecycleResult>
+Workspace::delete_object(std::string_view object_reference) {
+  const auto index_result = object_index_by_reference(object_reference);
+  if (!index_result.has_value())
+    return operation::Result<ObjectLifecycleResult>::failure(
+        index_result.error());
+  const auto index = index_result.value();
+  const auto deleted_id = objects_[index].id;
+  const auto deleted_scene_node = objects_[index].scene_node;
+  const auto deleted_name = objects_[index].system->name();
+
+  auto builder = scene::SceneBuilder::from(*scene_);
+  if (const auto error = builder.remove_subtree(deleted_scene_node);
+      error.has_value())
+    return operation::Result<ObjectLifecycleResult>::failure(*error);
+  std::optional<std::size_t> next_active_index = active_index_;
+  if (active_index_.has_value()) {
+    if (*active_index_ == index) {
+      if (objects_.size() == 1U)
+        next_active_index.reset();
+      else
+        next_active_index = std::min(index, objects_.size() - 2U);
+    } else if (*active_index_ > index) {
+      next_active_index = *active_index_ - 1U;
+    }
+  }
+  if (next_active_index.has_value()) {
+    const auto source_index = *next_active_index >= index
+                                  ? *next_active_index + 1U
+                                  : *next_active_index;
+    if (const auto error =
+            builder.set_selection({objects_[source_index].scene_node});
+        error.has_value())
+      return operation::Result<ObjectLifecycleResult>::failure(*error);
+  } else if (const auto error = builder.set_selection({}); error.has_value()) {
+    return operation::Result<ObjectLifecycleResult>::failure(*error);
+  }
+  const auto next_scene = builder.build();
+  if (!next_scene.has_value())
+    return operation::Result<ObjectLifecycleResult>::failure(
+        next_scene.error());
+
+  auto setting_snapshot = render_settings_.snapshot();
+  const auto old_setting_count = setting_snapshot.overrides.size();
+  std::erase_if(setting_snapshot.overrides, [deleted_id](const auto &entry) {
+    return entry.scope.level != render::RenderSettingScopeLevel::global &&
+           entry.scope.object_id == deleted_id;
+  });
+  const auto settings = render::RenderSettingStore::restore(setting_snapshot);
+  if (!settings.has_value())
+    return operation::Result<ObjectLifecycleResult>::failure(settings.error());
+  const auto old_measurement_count = measurements_.size();
+  auto next_measurements = measurements_;
+  std::erase_if(next_measurements, [deleted_id](const auto &measurement) {
+    return measurement.object_id == deleted_id;
+  });
+
+  objects_.erase(objects_.begin() + static_cast<std::ptrdiff_t>(index));
+  active_index_ = next_active_index;
+  measurements_ = std::move(next_measurements);
+  render_settings_ = settings.value();
+  scene_ = next_scene.value();
+  std::vector<std::uint64_t> order;
+  order.reserve(objects_.size());
+  for (const auto &object : objects_)
+    order.push_back(object.id);
+  return operation::Result<ObjectLifecycleResult>::success(
+      ObjectLifecycleResult{deleted_id,
+                            deleted_scene_node.value,
+                            deleted_name,
+                            index,
+                            index,
+                            objects_.size(),
+                            true,
+                            active_object() == nullptr
+                                ? std::optional<std::uint64_t>{}
+                                : active_object()->id,
+                            std::move(order),
+                            old_measurement_count - measurements_.size(),
+                            old_setting_count -
+                                setting_snapshot.overrides.size()});
+}
+
+operation::Result<ObjectLifecycleResult>
+Workspace::reorder_object(std::string_view object_reference,
+                          std::size_t new_position) {
+  const auto index_result = object_index_by_reference(object_reference);
+  if (!index_result.has_value())
+    return operation::Result<ObjectLifecycleResult>::failure(
+        index_result.error());
+  if (new_position >= objects_.size()) {
+    return operation::Result<ObjectLifecycleResult>::failure(invalid(
+        "object position is out of range",
+        "provide a 1-based position no greater than the object count"));
+  }
+  const auto old_position = index_result.value();
+  const auto moved_id = objects_[old_position].id;
+  const auto moved_node = objects_[old_position].scene_node;
+  const auto moved_name = objects_[old_position].system->name();
+  const auto active_id = active_object() == nullptr
+                             ? std::optional<std::uint64_t>{}
+                             : std::optional<std::uint64_t>{active_object()->id};
+
+  auto builder = scene::SceneBuilder::from(*scene_);
+  const auto *root = scene_->find(scene_->root());
+  if (root == nullptr)
+    return operation::Result<ObjectLifecycleResult>::failure(
+        operation::Error{operation::ErrorCode::internal,
+                         "workspace scene root is missing", {}});
+  const auto target_node = objects_[new_position].scene_node;
+  const auto target_child = std::find(root->children().begin(),
+                                      root->children().end(), target_node);
+  if (target_child == root->children().end())
+    return operation::Result<ObjectLifecycleResult>::failure(
+        operation::Error{operation::ErrorCode::internal,
+                         "workspace object is not a root scene child", {}});
+  auto insertion = static_cast<std::size_t>(target_child -
+                                            root->children().begin());
+  if (const auto error =
+          builder.reparent(moved_node, scene_->root(), insertion);
+      error.has_value())
+    return operation::Result<ObjectLifecycleResult>::failure(*error);
+  const auto next_scene = builder.build();
+  if (!next_scene.has_value())
+    return operation::Result<ObjectLifecycleResult>::failure(
+        next_scene.error());
+
+  if (old_position < new_position) {
+    std::rotate(objects_.begin() + static_cast<std::ptrdiff_t>(old_position),
+                objects_.begin() + static_cast<std::ptrdiff_t>(old_position + 1U),
+                objects_.begin() + static_cast<std::ptrdiff_t>(new_position + 1U));
+  } else if (new_position < old_position) {
+    std::rotate(objects_.begin() + static_cast<std::ptrdiff_t>(new_position),
+                objects_.begin() + static_cast<std::ptrdiff_t>(old_position),
+                objects_.begin() + static_cast<std::ptrdiff_t>(old_position + 1U));
+  }
+  if (active_id.has_value()) {
+    const auto found = std::find_if(objects_.begin(), objects_.end(),
+                                    [&](const auto &object) {
+                                      return object.id == *active_id;
+                                    });
+    active_index_ = static_cast<std::size_t>(found - objects_.begin());
+  }
+  scene_ = next_scene.value();
+  std::vector<std::uint64_t> order;
+  order.reserve(objects_.size());
+  for (const auto &object : objects_)
+    order.push_back(object.id);
+  return operation::Result<ObjectLifecycleResult>::success(
+      ObjectLifecycleResult{moved_id,
+                            moved_node.value,
+                            moved_name,
+                            old_position,
+                            new_position,
+                            objects_.size(),
+                            false,
+                            active_id,
+                            std::move(order),
+                            0U,
+                            0U});
+}
+
 operation::Result<std::shared_ptr<const model::CoordinateFrame>>
 Workspace::active_frame(const WorkspaceObject &object) const {
   const auto index = object.trajectory.has_value()
                          ? object.trajectory->timeline.snapshot().frame
                          : 0U;
   return object.system->coordinates()->read_frame(index);
+}
+
+operation::Result<TopologyMutationResult> Workspace::retain_active_atoms(
+    std::span<const model::AtomId> ordered_atom_ids,
+    std::uint64_t expected_topology_version) {
+  auto *object = mutable_active_object();
+  if (object == nullptr)
+    return operation::Result<TopologyMutationResult>::failure(missing_active());
+  const auto source_topology = object->system->topology();
+  const model::TopologySnapshotReference snapshot{
+      model::kTopologyReferenceSchemaVersion, object->id,
+      expected_topology_version};
+  if (const auto error = model::validate_topology_snapshot(
+          snapshot, object->id, *source_topology);
+      error.has_value()) {
+    return operation::Result<TopologyMutationResult>::failure(*error);
+  }
+
+  auto builder = model::TopologyBuilder::from(*source_topology);
+  if (const auto error = builder.retain_atoms(ordered_atom_ids);
+      error.has_value())
+    return operation::Result<TopologyMutationResult>::failure(*error);
+  const auto target_topology = builder.build();
+  if (!target_topology.has_value())
+    return operation::Result<TopologyMutationResult>::failure(
+        target_topology.error());
+  const auto remap =
+      model::remap_topology(*source_topology, *target_topology.value());
+  std::vector<std::optional<std::size_t>> coordinate_mapping;
+  coordinate_mapping.reserve(remap.target_atoms.size());
+  for (const auto source : remap.target_atoms)
+    coordinate_mapping.push_back(source.has_value()
+                                     ? std::optional<std::size_t>{source->value}
+                                     : std::nullopt);
+  const auto remapped_source = model::RemappedCoordinateSource::create(
+      object->system->coordinates(), std::move(coordinate_mapping));
+  if (!remapped_source.has_value())
+    return operation::Result<TopologyMutationResult>::failure(
+        remapped_source.error());
+
+  std::shared_ptr<const model::CoordinateSource> coordinates =
+      remapped_source.value();
+  std::optional<TrajectoryState> next_trajectory;
+  if (object->trajectory.has_value()) {
+    const auto budget = object->trajectory->cache->stats().payload_budget_bytes;
+    const auto cache = trajectory::FrameCache::create(coordinates, budget);
+    if (!cache.has_value())
+      return operation::Result<TopologyMutationResult>::failure(cache.error());
+    const auto prefetch = trajectory::PrefetchScheduler::create(cache.value());
+    if (!prefetch.has_value())
+      return operation::Result<TopologyMutationResult>::failure(
+          prefetch.error());
+    coordinates = cache.value();
+    auto mapping = object->trajectory->mapping;
+    mapping.topology_version = target_topology.value()->version();
+    mapping.identity_strength += "+topology-stable-id-remap";
+    mapping.target_to_source.resize(target_topology.value()->atom_count());
+    for (std::size_t index = 0; index < mapping.target_to_source.size();
+         ++index)
+      mapping.target_to_source[index] = index;
+    next_trajectory = TrajectoryState{
+        object->trajectory->path,
+        object->trajectory->format,
+        cache.value(),
+        object->trajectory->timeline,
+        object->trajectory->clock,
+        prefetch.value(),
+        object->trajectory->prefetch_frame_count,
+        std::move(mapping),
+        object->trajectory->semantics};
+  }
+  const auto target_system = model::MolecularSystem::create(
+      object->id, object->system->name(), target_topology.value(), coordinates);
+  if (!target_system.has_value())
+    return operation::Result<TopologyMutationResult>::failure(
+        target_system.error());
+  const auto visibility = object->representation_visibility.remap(remap);
+  if (!visibility.has_value())
+    return operation::Result<TopologyMutationResult>::failure(
+        visibility.error());
+  const auto selections = object->selections.remap(
+      *source_topology, *target_topology.value(), remap);
+  if (!selections.has_value())
+    return operation::Result<TopologyMutationResult>::failure(
+        selections.error());
+
+  auto setting_snapshot = render_settings_.snapshot();
+  const auto before_setting_count = setting_snapshot.overrides.size();
+  std::erase_if(setting_snapshot.overrides, [&](const auto &override) {
+    if (override.scope.object_id != object->id)
+      return false;
+    if (override.scope.level == render::RenderSettingScopeLevel::atom)
+      return !target_topology.value()
+                  ->atom_index(model::AtomId{override.scope.atom_id})
+                  .has_value();
+    if (override.scope.level == render::RenderSettingScopeLevel::bond)
+      return !target_topology.value()
+                  ->bond_index(model::BondId{override.scope.bond_id})
+                  .has_value();
+    return false;
+  });
+  const auto settings = render::RenderSettingStore::restore(setting_snapshot);
+  if (!settings.has_value())
+    return operation::Result<TopologyMutationResult>::failure(settings.error());
+  const auto frame_index = next_trajectory.has_value()
+                               ? next_trajectory->timeline.snapshot().frame
+                               : 0U;
+  const auto frame = coordinates->read_frame(frame_index);
+  if (!frame.has_value())
+    return operation::Result<TopologyMutationResult>::failure(frame.error());
+  WorkspaceObject candidate = *object;
+  candidate.system = target_system.value();
+  candidate.selections = std::move(selections.value());
+  candidate.representation_visibility = std::move(visibility.value());
+  candidate.trajectory = std::move(next_trajectory);
+  const auto rebuilt = rebuild_representations(
+      candidate, target_system.value(), *frame.value(), frame_index,
+      settings.value());
+  if (!rebuilt.has_value())
+    return operation::Result<TopologyMutationResult>::failure(rebuilt.error());
+  candidate.representations = rebuilt.value();
+
+  auto scene_builder = scene::SceneBuilder::from(*scene_);
+  if (const auto error = scene_builder.replace_system(candidate.scene_node,
+                                                       candidate.system);
+      error.has_value())
+    return operation::Result<TopologyMutationResult>::failure(*error);
+  const auto next_scene = scene_builder.build();
+  if (!next_scene.has_value())
+    return operation::Result<TopologyMutationResult>::failure(
+        next_scene.error());
+  const auto previous_bond_count = source_topology->bonds().size();
+  const auto invalidated = static_cast<std::size_t>(std::count_if(
+      measurements_.begin(), measurements_.end(),
+      [id = object->id](const auto &measurement) {
+        return measurement.object_id == id;
+      }));
+  auto next_measurements = measurements_;
+  std::erase_if(next_measurements, [id = object->id](const auto &measurement) {
+    return measurement.object_id == id;
+  });
+  *object = std::move(candidate);
+  render_settings_ = std::move(settings.value());
+  measurements_.swap(next_measurements);
+  scene_ = next_scene.value();
+  if (object->trajectory.has_value())
+    static_cast<void>(schedule_prefetch(*object->trajectory));
+
+  std::vector<std::uint64_t> ids;
+  ids.reserve(target_topology.value()->atom_ids().size());
+  for (const auto id : target_topology.value()->atom_ids())
+    ids.push_back(id.value);
+  return operation::Result<TopologyMutationResult>::success(
+      {object->id,
+       source_topology->version(),
+       target_topology.value()->version(),
+       source_topology->atom_count(),
+       target_topology.value()->atom_count(),
+       source_topology->atom_count() - target_topology.value()->atom_count(),
+       previous_bond_count - target_topology.value()->bonds().size(),
+       invalidated,
+       before_setting_count - setting_snapshot.overrides.size(),
+       std::move(ids)});
+}
+
+std::optional<operation::Error>
+Workspace::commit_render_settings(render::RenderSettingStore candidate) {
+  std::vector<std::vector<RepresentationRecord>> rebuilt;
+  rebuilt.reserve(objects_.size());
+  for (const auto &object : objects_) {
+    const auto frame = active_frame(object);
+    if (!frame.has_value())
+      return frame.error();
+    const auto frame_index = object.trajectory.has_value()
+                                 ? object.trajectory->timeline.snapshot().frame
+                                 : 0U;
+    auto records = rebuild_representations(object, object.system,
+                                           *frame.value(), frame_index,
+                                           candidate);
+    if (!records.has_value())
+      return records.error();
+    rebuilt.push_back(std::move(records.value()));
+  }
+  render_settings_ = std::move(candidate);
+  for (std::size_t index = 0; index < objects_.size(); ++index)
+    objects_[index].representations = std::move(rebuilt[index]);
+  return std::nullopt;
 }
 
 operation::Result<LoadResult>
@@ -682,58 +1146,152 @@ Workspace::load_structure(const std::filesystem::path &path,
 operation::Result<LoadResult> Workspace::load_structure_document(
     io::StructureDocument document, const std::filesystem::path &source_path,
     std::optional<std::string> name) {
-  if (document.structures.empty()) {
-    return operation::Result<LoadResult>::failure(
-        invalid("structure document contains no data blocks"));
+  const auto format = document.format;
+  operation::TaskContext context;
+  auto loaded = load_structure_documents(
+      {{std::move(document), source_path, std::move(name)}}, context);
+  if (!loaded.has_value())
+    return operation::Result<LoadResult>::failure(loaded.error());
+  return operation::Result<LoadResult>::success(
+      {loaded.value().object_id, loaded.value().object_name,
+       loaded.value().atom_count, loaded.value().frame_count, format,
+       std::move(loaded.value().objects)});
+}
+
+operation::Result<BatchLoadResult> Workspace::load_structure_batch(
+    std::span<const StructureLoadRequest> requests,
+    operation::TaskContext &context) {
+  if (requests.empty()) {
+    return operation::Result<BatchLoadResult>::failure(
+        invalid("structure batch requires at least one input"));
   }
-  if (name.has_value() && name->empty()) {
-    return operation::Result<LoadResult>::failure(
-        invalid("explicit workspace object name must not be empty",
-                "omit --name to use names from the file"));
+  std::vector<StructureDocumentLoadRequest> documents;
+  try {
+    documents.reserve(requests.size());
+    for (std::size_t index = 0; index < requests.size(); ++index) {
+      if (context.cancellation.is_cancelled()) {
+        return operation::Result<BatchLoadResult>::failure(operation::Error{
+            operation::ErrorCode::cancelled,
+            "structure batch cancelled before input " +
+                std::to_string(index + 1U),
+            {}});
+      }
+      auto document =
+          io::read_structure_file(requests[index].path, requests[index].format);
+      if (!document.has_value()) {
+        auto error = document.error();
+        error.message = "structure batch input " +
+                        std::to_string(index + 1U) + " failed: " +
+                        error.message;
+        error.details["input_index"] = std::to_string(index);
+        error.details["path"] = requests[index].path.string();
+        return operation::Result<BatchLoadResult>::failure(std::move(error));
+      }
+      documents.push_back({std::move(document.value()), requests[index].path,
+                           requests[index].name});
+      if (context.report_progress) {
+        context.report_progress(
+            {0.8 * static_cast<double>(index + 1U) /
+                 static_cast<double>(requests.size()),
+             "structure-batch-parse"});
+      }
+    }
+    return load_structure_documents(std::move(documents), context);
+  } catch (const std::bad_alloc &) {
+    return operation::Result<BatchLoadResult>::failure(operation::Error{
+        operation::ErrorCode::resource_exhausted,
+        "structure batch allocation failed before commit",
+        "reduce the batch size or available structure data"});
   }
-  const auto structure_count = document.structures.size();
+}
+
+operation::Result<BatchLoadResult> Workspace::load_structure_documents(
+    std::vector<StructureDocumentLoadRequest> requests,
+    operation::TaskContext &context) {
+  if (requests.empty()) {
+    return operation::Result<BatchLoadResult>::failure(
+        invalid("structure batch requires at least one document"));
+  }
+  std::size_t structure_count{};
+  std::vector<io::StructureFormat> formats;
+  formats.reserve(requests.size());
+  for (const auto &request : requests) {
+    if (request.document.structures.empty()) {
+      return operation::Result<BatchLoadResult>::failure(
+          invalid("structure document contains no data blocks"));
+    }
+    if (request.name.has_value() && request.name->empty()) {
+      return operation::Result<BatchLoadResult>::failure(
+          invalid("explicit workspace object name must not be empty",
+                  "omit the name to use names from the file"));
+    }
+    if (request.document.structures.size() >
+        std::numeric_limits<std::size_t>::max() - structure_count) {
+      return operation::Result<BatchLoadResult>::failure(operation::Error{
+          operation::ErrorCode::resource_exhausted,
+          "structure batch size exceeds host index range", {}});
+    }
+    structure_count += request.document.structures.size();
+    formats.push_back(request.document.format);
+  }
   if (structure_count >
       std::numeric_limits<std::uint64_t>::max() - next_object_id_) {
-    return operation::Result<LoadResult>::failure(
+    return operation::Result<BatchLoadResult>::failure(
         invalid("structure import would overflow the object identifier space"));
   }
 
+  struct CandidateRecord {
+    std::size_t input_index{};
+    std::size_t record_index{};
+    std::string name;
+  };
+
+  std::vector<CandidateRecord> candidates;
   std::vector<std::string> object_names;
+  candidates.reserve(structure_count);
   object_names.reserve(structure_count);
-  for (std::size_t index = 0; index < structure_count; ++index) {
-    auto object_name = name.has_value()
-                           ? name.value()
-                           : document.structures[index].name;
-    if (name.has_value() && structure_count > 1U) {
-      object_name += "_" + std::to_string(index + 1U);
-    }
-    if (object_name.empty()) {
-      object_name = source_path.stem().string();
-      if (structure_count > 1U) {
-        object_name += "_" + std::to_string(index + 1U);
+  for (std::size_t input_index = 0; input_index < requests.size();
+       ++input_index) {
+    const auto &request = requests[input_index];
+    for (std::size_t record_index = 0;
+         record_index < request.document.structures.size(); ++record_index) {
+      auto object_name = request.name.has_value()
+                             ? request.name.value()
+                             : request.document.structures[record_index].name;
+      if (request.name.has_value() &&
+          request.document.structures.size() > 1U) {
+        object_name += "_" + std::to_string(record_index + 1U);
       }
+      if (object_name.empty()) {
+        object_name = request.source_path.stem().string();
+        if (request.document.structures.size() > 1U) {
+          object_name += "_" + std::to_string(record_index + 1U);
+        }
+      }
+      if (object_name.empty()) {
+        return operation::Result<BatchLoadResult>::failure(
+            invalid("loaded object requires a non-empty name"));
+      }
+      const auto existing =
+          std::any_of(objects_.begin(), objects_.end(),
+                      [&](const auto &object) {
+                        return object.system->name() == object_name;
+                      }) ||
+          std::any_of(volumes_.begin(), volumes_.end(), [&](const auto &volume) {
+            return volume.name == object_name;
+          });
+      const auto duplicate_in_batch =
+          std::find(object_names.begin(), object_names.end(), object_name) !=
+          object_names.end();
+      if (existing || duplicate_in_batch) {
+        return operation::Result<BatchLoadResult>::failure(
+            invalid("workspace object name already exists: " + object_name,
+                    "choose a unique name"));
+      }
+      object_names.push_back(object_name);
+      candidates.push_back(
+          {input_index, record_index, std::move(object_name)});
     }
-    if (object_name.empty()) {
-      return operation::Result<LoadResult>::failure(
-          invalid("loaded object requires a non-empty name"));
-    }
-    const auto existing =
-        std::any_of(objects_.begin(), objects_.end(),
-                    [&](const auto &object) {
-                      return object.system->name() == object_name;
-                    }) ||
-        std::any_of(volumes_.begin(), volumes_.end(), [&](const auto &volume) {
-          return volume.name == object_name;
-        });
-    const auto duplicate_in_batch =
-        std::find(object_names.begin(), object_names.end(), object_name) !=
-        object_names.end();
-    if (existing || duplicate_in_batch) {
-      return operation::Result<LoadResult>::failure(
-          invalid("workspace object name already exists: " + object_name,
-                  "choose a unique --name"));
-    }
-    object_names.push_back(std::move(object_name));
   }
 
   auto scene_builder = scene::SceneBuilder::from(*scene_);
@@ -741,9 +1299,16 @@ operation::Result<LoadResult> Workspace::load_structure_document(
   std::vector<LoadedObjectResult> loaded_objects;
   pending_objects.reserve(structure_count);
   loaded_objects.reserve(structure_count);
-  for (std::size_t index = 0; index < structure_count; ++index) {
+  for (std::size_t index = 0; index < candidates.size(); ++index) {
+    if (context.cancellation.is_cancelled()) {
+      return operation::Result<BatchLoadResult>::failure(operation::Error{
+          operation::ErrorCode::cancelled,
+          "structure batch cancelled while building candidates", {}});
+    }
     const auto object_id = next_object_id_ + index;
-    const auto &data = document.structures[index];
+    const auto &candidate = candidates[index];
+    const auto &request = requests[candidate.input_index];
+    const auto &data = request.document.structures[candidate.record_index];
     auto coordinate_source = data.coordinates;
     std::optional<TrajectoryState> embedded_trajectory;
     const auto frame_count = data.coordinates->frame_count().value_or(0U);
@@ -752,68 +1317,92 @@ operation::Result<LoadResult> Workspace::load_structure_document(
       const auto cache = trajectory::FrameCache::create(
           data.coordinates, kEmbeddedCacheBudgetBytes);
       if (!cache.has_value()) {
-        return operation::Result<LoadResult>::failure(cache.error());
+        return operation::Result<BatchLoadResult>::failure(cache.error());
       }
       auto timeline = trajectory::PlaybackTimeline::create(frame_count);
       if (!timeline.has_value()) {
-        return operation::Result<LoadResult>::failure(timeline.error());
+        return operation::Result<BatchLoadResult>::failure(timeline.error());
       }
       auto clock = trajectory::PlaybackClock::create();
       if (!clock.has_value()) {
-        return operation::Result<LoadResult>::failure(clock.error());
+        return operation::Result<BatchLoadResult>::failure(clock.error());
       }
       auto prefetch = trajectory::PrefetchScheduler::create(cache.value());
       if (!prefetch.has_value()) {
-        return operation::Result<LoadResult>::failure(prefetch.error());
+        return operation::Result<BatchLoadResult>::failure(prefetch.error());
       }
       coordinate_source = cache.value();
-      embedded_trajectory = TrajectoryState{source_path,
+      embedded_trajectory = TrajectoryState{request.source_path,
                                             io::TrajectoryFormat::auto_detect,
                                             cache.value(),
                                             std::move(timeline.value()),
                                             std::move(clock.value()),
                                             prefetch.value(),
-                                            4U};
+                                            4U,
+                                            trajectory::AtomMappingReport{
+                                                trajectory::AtomMappingPolicy::
+                                                    index_order,
+                                                "embedded-structure-order",
+                                                {},
+                                                {"structure-record-order"},
+                                                data.topology->version()},
+                                            {}};
     }
     const auto system = model::MolecularSystem::create(
-        object_id, object_names[index], data.topology, coordinate_source);
+        object_id, candidate.name, data.topology, coordinate_source);
     if (!system.has_value()) {
-      return operation::Result<LoadResult>::failure(system.error());
+      return operation::Result<BatchLoadResult>::failure(system.error());
     }
     const auto node = scene_builder.add_system(
-        scene_->root(), object_names[index], system.value());
+        scene_->root(), candidate.name, system.value());
     if (!node.has_value()) {
-      return operation::Result<LoadResult>::failure(node.error());
+      return operation::Result<BatchLoadResult>::failure(node.error());
     }
-    pending_objects.push_back(WorkspaceObject{object_id,
-                                              node.value(),
-                                              system.value(),
-                                              {},
-                                              {},
-                                              std::move(embedded_trajectory)});
+    pending_objects.push_back(WorkspaceObject{
+        object_id, node.value(), system.value(), {},
+        RepresentationVisibilityState::create(data.topology->atom_count())
+            .value(),
+        {}, std::move(embedded_trajectory)});
     loaded_objects.push_back(LoadedObjectResult{
-        object_id, object_names[index], data.topology->atom_count(),
-        data.coordinates->frame_count().value_or(0U), index});
+        object_id, candidate.name, data.topology->atom_count(),
+        data.coordinates->frame_count().value_or(0U), candidate.record_index});
+    if (context.report_progress) {
+      context.report_progress(
+          {0.8 + 0.19 * static_cast<double>(index + 1U) /
+                     static_cast<double>(candidates.size()),
+           "structure-batch-build"});
+    }
   }
   if (const auto error =
           scene_builder.set_selection({pending_objects.back().scene_node});
       error.has_value()) {
-    return operation::Result<LoadResult>::failure(*error);
+    return operation::Result<BatchLoadResult>::failure(*error);
   }
   const auto next_scene = scene_builder.build();
   if (!next_scene.has_value()) {
-    return operation::Result<LoadResult>::failure(next_scene.error());
+    return operation::Result<BatchLoadResult>::failure(next_scene.error());
   }
+  if (context.cancellation.is_cancelled()) {
+    return operation::Result<BatchLoadResult>::failure(operation::Error{
+        operation::ErrorCode::cancelled,
+        "structure batch cancelled before commit", {}});
+  }
+  // Reserve before publishing either the object vector or scene. Candidate
+  // creation and every potentially allocating validation step completed above.
+  objects_.reserve(objects_.size() + pending_objects.size());
   objects_.insert(objects_.end(),
                   std::make_move_iterator(pending_objects.begin()),
                   std::make_move_iterator(pending_objects.end()));
   next_object_id_ += structure_count;
   active_index_ = objects_.size() - 1U;
   scene_ = next_scene.value();
+  if (context.report_progress)
+    context.report_progress({1.0, "structure-batch-commit"});
   const auto &active = loaded_objects.back();
-  return operation::Result<LoadResult>::success(LoadResult{
+  return operation::Result<BatchLoadResult>::success(BatchLoadResult{
       active.object_id, active.object_name, active.atom_count,
-      active.frame_count, document.format, std::move(loaded_objects)});
+      active.frame_count, requests.size(), std::move(formats),
+      std::move(loaded_objects)});
 }
 
 operation::Result<VolumeLoadResult>
@@ -1007,60 +1596,327 @@ Workspace::set_named_selection(std::string name, std::string expression,
                                 *object->system->topology());
 }
 
+std::optional<operation::Error> Workspace::set_render_setting(
+    std::string_view name, const render::RenderSettingScope &scope,
+    render::RenderSettingValue value) {
+  if (const auto error = validate_render_setting_target(objects_, scope);
+      error.has_value())
+    return error;
+  auto candidate = render_settings_;
+  if (const auto error = candidate.set(name, scope, std::move(value));
+      error.has_value())
+    return error;
+  return commit_render_settings(std::move(candidate));
+}
+
+operation::Result<bool> Workspace::unset_render_setting(
+    std::string_view name, const render::RenderSettingScope &scope) {
+  if (const auto error = validate_render_setting_target(objects_, scope);
+      error.has_value())
+    return operation::Result<bool>::failure(*error);
+  auto candidate = render_settings_;
+  const auto removed = candidate.unset(name, scope);
+  if (!removed.has_value())
+    return removed;
+  if (const auto error = commit_render_settings(std::move(candidate));
+      error.has_value())
+    return operation::Result<bool>::failure(*error);
+  return operation::Result<bool>::success(removed.value());
+}
+
+operation::Result<std::size_t> Workspace::reset_render_setting_scope(
+    const render::RenderSettingScope &scope) {
+  if (const auto error = validate_render_setting_target(objects_, scope);
+      error.has_value())
+    return operation::Result<std::size_t>::failure(*error);
+  auto candidate = render_settings_;
+  const auto removed = candidate.reset_scope(scope);
+  if (!removed.has_value())
+    return removed;
+  if (const auto error = commit_render_settings(std::move(candidate));
+      error.has_value())
+    return operation::Result<std::size_t>::failure(*error);
+  return operation::Result<std::size_t>::success(removed.value());
+}
+
+operation::Result<render::ResolvedRenderSetting>
+Workspace::resolve_render_setting(
+    std::string_view name,
+    const render::RenderSettingContext &context) const {
+  render::RenderSettingScope scope;
+  if (context.bond_id != 0U)
+    scope = {render::RenderSettingScopeLevel::bond, context.object_id,
+             context.state_index, 0U, context.bond_id};
+  else if (context.atom_id != 0U)
+    scope = {render::RenderSettingScopeLevel::atom, context.object_id,
+             context.state_index, context.atom_id, 0U};
+  else if (context.object_id != 0U)
+    scope = {render::RenderSettingScopeLevel::object_state, context.object_id,
+             context.state_index, 0U, 0U};
+  if (scope.level != render::RenderSettingScopeLevel::global) {
+    if (const auto error = validate_render_setting_target(objects_, scope);
+        error.has_value())
+      return operation::Result<render::ResolvedRenderSetting>::failure(*error);
+  }
+  if (context.atom_id != 0U && context.bond_id != 0U) {
+    const render::RenderSettingScope atom_scope{
+        render::RenderSettingScopeLevel::atom, context.object_id,
+        context.state_index, context.atom_id, 0U};
+    if (const auto error = validate_render_setting_target(objects_, atom_scope);
+        error.has_value())
+      return operation::Result<render::ResolvedRenderSetting>::failure(*error);
+  }
+  return render_settings_.resolve(name, context);
+}
+
+render::RenderSettingSnapshot Workspace::render_setting_snapshot() const {
+  return render_settings_.snapshot();
+}
+
+std::optional<operation::Error> Workspace::restore_render_settings(
+    const render::RenderSettingSnapshot &snapshot) {
+  const auto restored = render::RenderSettingStore::restore(snapshot);
+  if (!restored.has_value())
+    return restored.error();
+  for (const auto &item : snapshot.overrides) {
+    if (const auto error = validate_render_setting_target(objects_, item.scope);
+        error.has_value())
+      return error;
+  }
+  return commit_render_settings(restored.value());
+}
+
 operation::Result<ShowResult> Workspace::show(render::RepresentationKind kind,
                                               std::string selection_expression,
                                               bool replace_existing) {
+  const auto mutated = mutate_representation_visibility(
+      kind, std::move(selection_expression),
+      replace_existing ? RepresentationVisibilityMutation::exclusive
+                       : RepresentationVisibilityMutation::show);
+  if (!mutated.has_value())
+    return operation::Result<ShowResult>::failure(mutated.error());
+  const auto *object = active_object();
+  const auto found = std::find_if(
+      object->representations.begin(), object->representations.end(),
+      [kind](const auto &representation) { return representation.kind == kind; });
+  const auto index = found == object->representations.end()
+                         ? object->representations.size()
+                         : static_cast<std::size_t>(
+                               found - object->representations.begin());
+  const auto primitive_count =
+      found == object->representations.end()
+          ? 0U
+          : found->packet.lines.size() + found->packet.cylinders.size() +
+                found->packet.spheres.size() +
+                found->packet.mesh_triangles.size();
+  return operation::Result<ShowResult>::success(ShowResult{
+      object->id, index, primitive_count, mutated.value().affected_atom_count});
+}
+
+operation::Result<RepresentationVisibilityResult>
+Workspace::mutate_representation_visibility(
+    render::RepresentationKind kind, std::string selection_expression,
+    RepresentationVisibilityMutation mutation) {
+  const std::array kinds{kind};
+  return mutate_representation_visibility(kinds, std::move(selection_expression),
+                                          mutation);
+}
+
+operation::Result<RepresentationVisibilityResult>
+Workspace::mutate_representation_visibility(
+    std::span<const render::RepresentationKind> kinds,
+    std::string selection_expression,
+    RepresentationVisibilityMutation mutation) {
   auto *object = mutable_active_object();
   if (object == nullptr) {
-    return operation::Result<ShowResult>::failure(missing_active());
+    return operation::Result<RepresentationVisibilityResult>::failure(
+        missing_active());
   }
   const auto parsed = selection::Expression::parse(selection_expression);
   if (!parsed.has_value()) {
-    return operation::Result<ShowResult>::failure(parsed.error());
+    return operation::Result<RepresentationVisibilityResult>::failure(
+        parsed.error());
   }
   const auto mask = selection::evaluate(
       parsed.value(), *object->system->topology(), [&](std::string_view name) {
         return object->selections.evaluate(name, *object->system->topology());
       });
   if (!mask.has_value()) {
-    return operation::Result<ShowResult>::failure(mask.error());
+    return operation::Result<RepresentationVisibilityResult>::failure(
+        mask.error());
+  }
+  if (kinds.empty()) {
+    return operation::Result<RepresentationVisibilityResult>::failure(
+        invalid("representation visibility mask must not be empty"));
   }
   const auto frame = active_frame(*object);
   if (!frame.has_value()) {
-    return operation::Result<ShowResult>::failure(frame.error());
-  }
-  const auto visuals = atom_visuals(*object->system->topology());
-  if (!visuals.has_value()) {
-    return operation::Result<ShowResult>::failure(visuals.error());
+    return operation::Result<RepresentationVisibilityResult>::failure(
+        frame.error());
   }
   const auto frame_index = object->trajectory.has_value()
                                ? object->trajectory->timeline.snapshot().frame
                                : 0U;
-  render::RepresentationRequest request{object->system->topology().get(),
-                                        frame.value().get(),
-                                        frame_index,
-                                        object->scene_node.value,
-                                        visuals.value(),
-                                        mask.value(),
-                                        {},
-                                        {}};
-  request.style.kind = kind;
-  const auto packet = render::build_representation(request);
-  if (!packet.has_value()) {
-    return operation::Result<ShowResult>::failure(packet.error());
+  auto candidate = object->representation_visibility;
+  auto effective_mutation = mutation;
+  if (mutation == RepresentationVisibilityMutation::toggle) {
+    bool any_visible = false;
+    for (const auto kind : kinds) {
+      const auto current = candidate.selection_mask(kind);
+      if (!current.has_value()) {
+        return operation::Result<RepresentationVisibilityResult>::failure(
+            current.error());
+      }
+      for (std::size_t atom = 0; atom < mask.value().size(); ++atom) {
+        if (mask.value()[atom] != 0U && current.value()[atom] != 0U) {
+          any_visible = true;
+          break;
+        }
+      }
+      if (any_visible)
+        break;
+    }
+    effective_mutation = any_visible ? RepresentationVisibilityMutation::hide
+                                     : RepresentationVisibilityMutation::show;
   }
-  const auto selected_count = static_cast<std::size_t>(
+  for (std::size_t index = 0; index < kinds.size(); ++index) {
+    const auto current_mutation =
+        mutation == RepresentationVisibilityMutation::exclusive
+            ? (index == 0U ? RepresentationVisibilityMutation::exclusive
+                           : RepresentationVisibilityMutation::show)
+            : effective_mutation;
+    if (const auto error =
+            candidate.apply(kinds[index], mask.value(), current_mutation);
+        error.has_value()) {
+      return operation::Result<RepresentationVisibilityResult>::failure(*error);
+    }
+  }
+  const auto rebuilt = rebuild_representations(
+      *object, object->system, *frame.value(), frame_index, render_settings_,
+      &candidate);
+  if (!rebuilt.has_value()) {
+    return operation::Result<RepresentationVisibilityResult>::failure(
+        rebuilt.error());
+  }
+  const auto affected = static_cast<std::size_t>(
       std::count(mask.value().begin(), mask.value().end(), std::uint8_t{1U}));
-  const auto primitive_count =
-      packet.value().lines.size() + packet.value().cylinders.size() +
-      packet.value().spheres.size() + packet.value().mesh_triangles.size();
-  if (replace_existing)
-    object->representations.clear();
-  const auto index = object->representations.size();
-  object->representations.push_back(RepresentationRecord{
-      kind, std::move(selection_expression), packet.value()});
-  return operation::Result<ShowResult>::success(
-      ShowResult{object->id, index, primitive_count, selected_count});
+  std::size_t visible{};
+  for (const auto kind : kinds) {
+    const auto count = candidate.visible_count(kind);
+    if (!count.has_value()) {
+      return operation::Result<RepresentationVisibilityResult>::failure(
+          count.error());
+    }
+    visible += count.value();
+  }
+  object->representation_visibility = std::move(candidate);
+  object->representations = std::move(rebuilt.value());
+  return operation::Result<RepresentationVisibilityResult>::success(
+      {object->id, kinds.front(), mutation, affected, visible,
+       object->representations.size(),
+       std::vector<render::RepresentationKind>{kinds.begin(), kinds.end()}});
+}
+
+operation::Result<RepresentationVisibilitySnapshot>
+Workspace::representation_visibility_snapshot() const {
+  const auto *object = active_object();
+  if (object == nullptr) {
+    return operation::Result<RepresentationVisibilitySnapshot>::failure(
+        missing_active());
+  }
+  return operation::Result<RepresentationVisibilitySnapshot>::success(
+      object->representation_visibility.snapshot());
+}
+
+operation::Result<RepresentationVisibilitySessionSnapshot>
+Workspace::representation_visibility_session_snapshot() const {
+  const auto *object = active_object();
+  if (object == nullptr) {
+    return operation::Result<RepresentationVisibilitySessionSnapshot>::failure(
+        missing_active());
+  }
+  return operation::Result<RepresentationVisibilitySessionSnapshot>::success(
+      {kRepresentationVisibilitySessionSchemaVersion, object->id,
+       object->system->topology()->version(),
+       [&object] {
+         std::vector<std::uint64_t> ids;
+         ids.reserve(object->system->topology()->atom_ids().size());
+         for (const auto id : object->system->topology()->atom_ids())
+           ids.push_back(id.value);
+         return ids;
+       }(),
+       object->representation_visibility.snapshot()});
+}
+
+operation::Result<RepresentationVisibilityResult>
+Workspace::restore_representation_visibility(
+    const RepresentationVisibilitySnapshot &snapshot) {
+  auto *object = mutable_active_object();
+  if (object == nullptr) {
+    return operation::Result<RepresentationVisibilityResult>::failure(
+        missing_active());
+  }
+  const auto restored = RepresentationVisibilityState::restore(snapshot);
+  if (!restored.has_value()) {
+    return operation::Result<RepresentationVisibilityResult>::failure(
+        restored.error());
+  }
+  if (restored.value().atom_count() != object->system->topology()->atom_count()) {
+    return operation::Result<RepresentationVisibilityResult>::failure(
+        invalid("representation visibility atom count does not match active object"));
+  }
+  const auto frame = active_frame(*object);
+  if (!frame.has_value()) {
+    return operation::Result<RepresentationVisibilityResult>::failure(
+        frame.error());
+  }
+  const auto frame_index = object->trajectory.has_value()
+                               ? object->trajectory->timeline.snapshot().frame
+                               : 0U;
+  const auto rebuilt = rebuild_representations(
+      *object, object->system, *frame.value(), frame_index, render_settings_,
+      &restored.value());
+  if (!rebuilt.has_value()) {
+    return operation::Result<RepresentationVisibilityResult>::failure(
+        rebuilt.error());
+  }
+  std::size_t visible{};
+  constexpr std::array kinds{render::RepresentationKind::lines,
+                             render::RepresentationKind::sticks,
+                             render::RepresentationKind::spheres,
+                             render::RepresentationKind::ribbon,
+                             render::RepresentationKind::cartoon};
+  for (const auto kind : kinds)
+    visible += restored.value().visible_count(kind).value();
+  object->representation_visibility = restored.value();
+  object->representations = std::move(rebuilt.value());
+  return operation::Result<RepresentationVisibilityResult>::success(
+      {object->id, render::RepresentationKind::lines,
+       RepresentationVisibilityMutation::show, 0U, visible,
+       object->representations.size(), {}});
+}
+
+operation::Result<RepresentationVisibilityResult>
+Workspace::restore_representation_visibility_session(
+    const RepresentationVisibilitySessionSnapshot &snapshot) {
+  auto *object = mutable_active_object();
+  if (object == nullptr) {
+    return operation::Result<RepresentationVisibilityResult>::failure(
+        missing_active());
+  }
+  std::vector<std::uint64_t> current_ids;
+  current_ids.reserve(object->system->topology()->atom_ids().size());
+  for (const auto id : object->system->topology()->atom_ids())
+    current_ids.push_back(id.value);
+  if (snapshot.schema_version !=
+          kRepresentationVisibilitySessionSchemaVersion ||
+      snapshot.object_id != object->id ||
+      snapshot.topology_version != object->system->topology()->version() ||
+      snapshot.atom_ids != current_ids) {
+    return operation::Result<RepresentationVisibilityResult>::failure(
+        invalid("representation visibility session object does not match active object"));
+  }
+  return restore_representation_visibility(snapshot.visibility);
 }
 
 operation::Result<CenterAnalysisResult>
@@ -1114,6 +1970,64 @@ Workspace::analyze_center(std::string selection_expression,
   }
   return operation::Result<CenterAnalysisResult>::success(CenterAnalysisResult{
       object->id, std::move(selection_expression), mode, center.value()});
+}
+
+operation::Result<PersistentAnalysisResult>
+Workspace::store_analysis_result(AnalysisResultDraft draft) {
+  const auto *object = active_object();
+  if (object == nullptr)
+    return operation::Result<PersistentAnalysisResult>::failure(
+        missing_active());
+  draft.provenance.source = {model::kTopologyReferenceSchemaVersion,
+                             object->id,
+                             object->system->topology()->version()};
+  draft.provenance.object_name = object->system->name();
+  return analysis_results_.add(std::move(draft));
+}
+
+std::optional<operation::Error> Workspace::validate_analysis_result_name(
+    const std::optional<std::string> &name) const {
+  return analysis_results_.validate_name(name);
+}
+
+operation::Result<PersistentAnalysisResult>
+Workspace::analysis_result(std::uint64_t result_id) const {
+  return analysis_results_.get(result_id);
+}
+
+AnalysisSourceStatus Workspace::analysis_source_status(
+    const PersistentAnalysisResult &record) const noexcept {
+  const auto found = std::find_if(objects_.begin(), objects_.end(),
+                                  [&](const auto &object) {
+                                    return object.id ==
+                                           record.provenance.source.object_id;
+                                  });
+  if (found == objects_.end())
+    return AnalysisSourceStatus::object_deleted;
+  return found->system->topology()->version() ==
+                 record.provenance.source.topology_version
+             ? AnalysisSourceStatus::current
+             : AnalysisSourceStatus::topology_changed;
+}
+
+operation::Result<PersistentAnalysisResult>
+Workspace::delete_analysis_result(std::uint64_t result_id) {
+  return analysis_results_.erase(result_id);
+}
+
+operation::Result<PersistentAnalysisResult>
+Workspace::set_analysis_overlay_visible(std::uint64_t result_id,
+                                        bool visible) {
+  return analysis_results_.set_overlay_visible(result_id, visible);
+}
+
+AnalysisResultStoreSnapshot Workspace::analysis_result_snapshot() const {
+  return analysis_results_.snapshot();
+}
+
+std::optional<operation::Error> Workspace::restore_analysis_results(
+    const AnalysisResultStoreSnapshot &snapshot) {
+  return analysis_results_.restore(snapshot);
 }
 
 operation::Result<SpatialExtent>
@@ -1824,6 +2738,39 @@ Workspace::measure_distance(std::string from_expression,
       std::move(record));
 }
 
+operation::Result<DistanceAnalysisOverlay>
+Workspace::distance_analysis_overlay(const DistanceMeasurementRecord &record,
+                                     std::string label) const {
+  const auto found = std::find_if(objects_.begin(), objects_.end(),
+                                  [&](const auto &object) {
+                                    return object.id == record.object_id;
+                                  });
+  if (found == objects_.end())
+    return operation::Result<DistanceAnalysisOverlay>::failure(
+        {operation::ErrorCode::not_found,
+         "distance source object no longer exists", {}});
+  const auto frame = active_frame(*found);
+  if (!frame.has_value())
+    return operation::Result<DistanceAnalysisOverlay>::failure(frame.error());
+  const auto &topology = *found->system->topology();
+  const auto first_id = topology.atom_id(record.distance.first);
+  const auto second_id = topology.atom_id(record.distance.second);
+  if (!first_id.has_value() || !second_id.has_value())
+    return operation::Result<DistanceAnalysisOverlay>::failure(
+        {operation::ErrorCode::stale_result,
+         "distance endpoint is stale for the source topology", {}});
+  const model::TopologySnapshotReference snapshot{
+      model::kTopologyReferenceSchemaVersion, found->id, topology.version()};
+  return operation::Result<DistanceAnalysisOverlay>::success(
+      DistanceAnalysisOverlay{{snapshot, *first_id},
+                              {snapshot, *second_id},
+                              coordinate_at(*frame.value(),
+                                            record.distance.first.value),
+                              coordinate_at(*frame.value(),
+                                            record.distance.second.value),
+                              std::move(label)});
+}
+
 operation::Result<ContactAnalysisResult> Workspace::analyze_contacts(
     std::string first_expression, std::string second_expression, double cutoff,
     analysis::DistanceBoundary boundary, bool same_selection,
@@ -2206,11 +3153,76 @@ operation::Result<TrajectoryLoadResult> Workspace::load_trajectory(
     const std::filesystem::path &path, io::TrajectoryFormat format,
     std::size_t cache_budget_bytes, std::size_t prefetch_frame_count,
     std::optional<operation::LengthUnit> coordinate_unit,
-    std::optional<std::string> h5md_particle_group) {
-  auto *object = mutable_active_object();
+    std::optional<std::string> h5md_particle_group,
+    trajectory::AtomMappingPolicy mapping_policy,
+    std::span<const model::AtomId> source_to_target_atom_ids,
+    std::optional<std::uint64_t> expected_topology_version) {
+  auto plan = plan_trajectory_load(
+      path, format, cache_budget_bytes, prefetch_frame_count, coordinate_unit,
+      std::move(h5md_particle_group), mapping_policy,
+      source_to_target_atom_ids, expected_topology_version);
+  if (!plan.has_value())
+    return operation::Result<TrajectoryLoadResult>::failure(plan.error());
+  operation::TaskContext context;
+  auto candidate =
+      build_trajectory_load_candidate(std::move(plan.value()), context);
+  if (!candidate.has_value())
+    return operation::Result<TrajectoryLoadResult>::failure(
+        candidate.error());
+  return commit_trajectory_load(std::move(candidate.value()));
+}
+
+operation::Result<TrajectoryLoadPlan> Workspace::plan_trajectory_load(
+    const std::filesystem::path &path, io::TrajectoryFormat format,
+    std::size_t cache_budget_bytes, std::size_t prefetch_frame_count,
+    std::optional<operation::LengthUnit> coordinate_unit,
+    std::optional<std::string> h5md_particle_group,
+    trajectory::AtomMappingPolicy mapping_policy,
+    std::span<const model::AtomId> source_to_target_atom_ids,
+    std::optional<std::uint64_t> expected_topology_version) const {
+  const auto *object = active_object();
   if (object == nullptr) {
-    return operation::Result<TrajectoryLoadResult>::failure(missing_active());
+    return operation::Result<TrajectoryLoadPlan>::failure(missing_active());
   }
+  if (expected_topology_version.has_value() &&
+      *expected_topology_version != object->system->topology()->version()) {
+    return operation::Result<TrajectoryLoadPlan>::failure(operation::Error{
+        operation::ErrorCode::stale_result,
+        "trajectory atom map targets a stale topology version",
+        "refresh the topology identity and regenerate the atom map",
+        {{"current_topology_version",
+          std::to_string(object->system->topology()->version())},
+         {"expected_topology_version",
+          std::to_string(*expected_topology_version)}}});
+  }
+  return operation::Result<TrajectoryLoadPlan>::success(
+      {*object,
+       scene_,
+       render_settings_,
+       render_settings_.snapshot(),
+       path,
+       format,
+       cache_budget_bytes,
+       prefetch_frame_count,
+       coordinate_unit,
+       std::move(h5md_particle_group),
+       mapping_policy,
+       std::vector<model::AtomId>{source_to_target_atom_ids.begin(),
+                                  source_to_target_atom_ids.end()},
+       expected_topology_version});
+}
+
+operation::Result<TrajectoryLoadCandidate>
+Workspace::build_trajectory_load_candidate(TrajectoryLoadPlan plan,
+                                           operation::TaskContext &context) {
+  auto fail = [](const operation::Error &error) {
+    return operation::Result<TrajectoryLoadCandidate>::failure(error);
+  };
+  if (context.cancellation.is_cancelled())
+    return fail(operation::Error{operation::ErrorCode::cancelled,
+                                 "trajectory load was cancelled before open",
+                                 {}});
+  auto *object = &plan.object;
   std::optional<double> amber_box_angle;
   const auto &source_metadata = object->system->topology()->source_metadata();
   const auto angle = source_metadata.find("amber.box_angle_degrees");
@@ -2236,107 +3248,315 @@ operation::Result<TrajectoryLoadResult> Workspace::load_trajectory(
   }
   const io::TrajectoryOpenContext open_context{
       object->system->topology()->atom_count(), std::move(source_atom_ids),
-      amber_box_angle, coordinate_unit, std::move(h5md_particle_group)};
-  const auto opened = io::open_trajectory(path, format, open_context);
+      amber_box_angle, plan.coordinate_unit,
+      std::move(plan.h5md_particle_group)};
+  const auto opened =
+      io::open_trajectory(plan.path, plan.format, open_context);
   if (!opened.has_value()) {
-    return operation::Result<TrajectoryLoadResult>::failure(opened.error());
+    return fail(opened.error());
   }
+  if (context.report_progress)
+    context.report_progress({0.25, "trajectory-open-index"});
+  if (context.cancellation.is_cancelled())
+    return fail(operation::Error{operation::ErrorCode::cancelled,
+                                 "trajectory load was cancelled after open",
+                                 {}});
+  std::vector<trajectory::TrajectoryAtomIdentity> trajectory_identities;
+  trajectory_identities.reserve(opened.value().decoded_source_atom_ids.size());
+  for (const auto source_id : opened.value().decoded_source_atom_ids) {
+    trajectory::TrajectoryAtomIdentity identity;
+    identity.source_serial = source_id;
+    trajectory_identities.push_back(std::move(identity));
+  }
+  const auto mapping = trajectory::resolve_atom_mapping(
+      {plan.mapping_policy, object->system->topology().get(),
+       opened.value().source->atom_count(), trajectory_identities,
+       plan.source_to_target_atom_ids});
+  if (!mapping.has_value())
+    return fail(mapping.error());
+  std::shared_ptr<const model::CoordinateSource> mapped_source =
+      opened.value().source;
+  if (plan.mapping_policy == trajectory::AtomMappingPolicy::explicit_map) {
+    const auto remapped = model::RemappedCoordinateSource::create(
+        mapped_source, mapping.value().target_to_source);
+    if (!remapped.has_value())
+      return fail(remapped.error());
+    mapped_source = remapped.value();
+  }
+  const auto semantic =
+      trajectory::SemanticCoordinateSource::create(mapped_source);
+  if (!semantic.has_value())
+    return fail(semantic.error());
   const auto cache =
-      trajectory::FrameCache::create(opened.value().source, cache_budget_bytes);
+      trajectory::FrameCache::create(semantic.value(),
+                                     plan.cache_budget_bytes);
   if (!cache.has_value()) {
-    return operation::Result<TrajectoryLoadResult>::failure(cache.error());
+    return fail(cache.error());
   }
+  if (context.report_progress)
+    context.report_progress({0.55, "trajectory-map-semantics"});
+  if (context.cancellation.is_cancelled())
+    return fail(operation::Error{operation::ErrorCode::cancelled,
+                                 "trajectory load was cancelled after semantic "
+                                 "validation",
+                                 {}});
   const auto count = cache.value()->frame_count();
   if (!count.has_value() || count.value() == 0U) {
-    return operation::Result<TrajectoryLoadResult>::failure(
+    return fail(
         invalid("trajectory attachment requires a known non-zero frame count"));
   }
   auto timeline = trajectory::PlaybackTimeline::create(count.value());
   if (!timeline.has_value()) {
-    return operation::Result<TrajectoryLoadResult>::failure(timeline.error());
+    return fail(timeline.error());
   }
   const auto first_frame = cache.value()->read_frame(0U);
   if (!first_frame.has_value()) {
-    return operation::Result<TrajectoryLoadResult>::failure(
-        first_frame.error());
+    return fail(first_frame.error());
   }
   const auto system =
       model::MolecularSystem::create(object->id, object->system->name(),
                                      object->system->topology(), cache.value());
   if (!system.has_value()) {
-    return operation::Result<TrajectoryLoadResult>::failure(system.error());
+    return fail(system.error());
   }
   const auto rebuilt = rebuild_representations(*object, system.value(),
-                                               *first_frame.value(), 0U);
+                                               *first_frame.value(), 0U,
+                                               plan.render_settings);
   if (!rebuilt.has_value()) {
-    return operation::Result<TrajectoryLoadResult>::failure(rebuilt.error());
+    return fail(rebuilt.error());
   }
-  auto scene_builder = scene::SceneBuilder::from(*scene_);
+  if (context.report_progress)
+    context.report_progress({0.85, "trajectory-first-frame-rebuild"});
+  if (context.cancellation.is_cancelled())
+    return fail(operation::Error{operation::ErrorCode::cancelled,
+                                 "trajectory load was cancelled after first "
+                                 "frame rebuild",
+                                 {}});
+  auto scene_builder = scene::SceneBuilder::from(*plan.scene);
   if (const auto error =
           scene_builder.replace_system(object->scene_node, system.value());
       error.has_value()) {
-    return operation::Result<TrajectoryLoadResult>::failure(*error);
+    return fail(*error);
   }
   const auto next_scene = scene_builder.build();
   if (!next_scene.has_value()) {
-    return operation::Result<TrajectoryLoadResult>::failure(next_scene.error());
+    return fail(next_scene.error());
   }
   auto clock = trajectory::PlaybackClock::create();
   if (!clock.has_value()) {
-    return operation::Result<TrajectoryLoadResult>::failure(clock.error());
+    return fail(clock.error());
   }
   auto prefetch = trajectory::PrefetchScheduler::create(cache.value());
   if (!prefetch.has_value()) {
-    return operation::Result<TrajectoryLoadResult>::failure(prefetch.error());
+    return fail(prefetch.error());
   }
-  object->system = system.value();
-  object->representations = std::move(rebuilt.value());
-  object->trajectory = TrajectoryState{path,
-                                       opened.value().format,
-                                       cache.value(),
-                                       std::move(timeline.value()),
-                                       std::move(clock.value()),
-                                       prefetch.value(),
-                                       prefetch_frame_count};
-  scene_ = next_scene.value();
-  const auto prefetch_snapshot = schedule_prefetch(*object->trajectory);
+  TrajectoryState trajectory{plan.path,
+                             opened.value().format,
+                             cache.value(),
+                             std::move(timeline.value()),
+                             std::move(clock.value()),
+                             prefetch.value(),
+                             plan.prefetch_frame_count,
+                             mapping.value(),
+                             semantic.value()->report()};
+  TrajectoryLoadResult result{
+      object->id,
+      opened.value().format,
+      opened.value().source->atom_count(),
+      count.value(),
+      plan.cache_budget_bytes,
+      0U,
+      plan.prefetch_frame_count,
+      prefetch.value()->snapshot(),
+      mapping.value(),
+      semantic.value()->report()};
+  return operation::Result<TrajectoryLoadCandidate>::success(
+      {std::move(plan), system.value(), std::move(rebuilt.value()),
+       std::move(trajectory), next_scene.value(), std::move(result)});
+}
+
+operation::Result<TrajectoryLoadResult>
+Workspace::commit_trajectory_load(TrajectoryLoadCandidate candidate) {
+  auto *object = mutable_active_object();
+  const auto stale = [&](std::string message) {
+    return operation::Result<TrajectoryLoadResult>::failure(operation::Error{
+        operation::ErrorCode::stale_result, std::move(message),
+        "retry trajectory attachment against the current Workspace state",
+        {{"object_id", std::to_string(candidate.plan.object.id)}}});
+  };
+  if (object == nullptr || object->id != candidate.plan.object.id)
+    return stale("trajectory load candidate targets a stale active object");
+  if (object->system != candidate.plan.object.system ||
+      scene_ != candidate.plan.scene ||
+      render_settings_.snapshot() != candidate.plan.render_setting_snapshot ||
+      object->representation_visibility.snapshot() !=
+          candidate.plan.object.representation_visibility.snapshot())
+    return stale("trajectory load candidate uses stale molecular or visual state");
+  const auto current_selections = object->selections.list();
+  const auto planned_selections = candidate.plan.object.selections.list();
+  const auto same_selections =
+      current_selections.size() == planned_selections.size() &&
+      std::equal(current_selections.begin(), current_selections.end(),
+                 planned_selections.begin(),
+                 [](const auto &left, const auto &right) {
+                   return left.name == right.name &&
+                          left.expression == right.expression &&
+                          left.dynamic == right.dynamic;
+                 });
+  const auto same_representations =
+      object->representations.size() ==
+          candidate.plan.object.representations.size() &&
+      std::equal(object->representations.begin(), object->representations.end(),
+                 candidate.plan.object.representations.begin(),
+                 [](const auto &left, const auto &right) {
+                   return left.kind == right.kind &&
+                          left.selection_expression ==
+                              right.selection_expression;
+                 });
+  if (!same_selections || !same_representations)
+    return stale("trajectory load candidate uses stale representation inputs");
+  object->system = std::move(candidate.system);
+  object->representations = std::move(candidate.representations);
+  object->trajectory = std::move(candidate.trajectory);
+  scene_ = std::move(candidate.scene);
+  candidate.result.prefetch = schedule_prefetch(*object->trajectory);
   return operation::Result<TrajectoryLoadResult>::success(
-      {object->id, opened.value().format, opened.value().source->atom_count(),
-       count.value(), cache_budget_bytes, 0U, prefetch_frame_count,
-       prefetch_snapshot});
+      std::move(candidate.result));
 }
 
 operation::Result<TrajectoryFrameResult>
 Workspace::set_trajectory_frame(std::size_t frame_index) {
-  auto *object = mutable_active_object();
+  const auto plan = plan_trajectory_frame(frame_index);
+  if (!plan.has_value())
+    return operation::Result<TrajectoryFrameResult>::failure(plan.error());
+  operation::TaskContext context;
+  auto candidate =
+      build_trajectory_frame_candidate(plan.value(), context);
+  if (!candidate.has_value())
+    return operation::Result<TrajectoryFrameResult>::failure(
+        candidate.error());
+  return commit_trajectory_frame(std::move(candidate.value()));
+}
+
+operation::Result<TrajectoryFramePlan>
+Workspace::plan_trajectory_frame(std::size_t frame_index) const {
+  const auto *object = active_object();
   if (object == nullptr) {
-    return operation::Result<TrajectoryFrameResult>::failure(missing_active());
+    return operation::Result<TrajectoryFramePlan>::failure(missing_active());
   }
   if (!object->trajectory.has_value()) {
-    return operation::Result<TrajectoryFrameResult>::failure(operation::Error{
+    return operation::Result<TrajectoryFramePlan>::failure(operation::Error{
         operation::ErrorCode::not_found,
         "active object has no attached trajectory", "run traj load first"});
   }
   auto next_timeline = object->trajectory->timeline;
   if (const auto error = next_timeline.seek(frame_index); error.has_value()) {
-    return operation::Result<TrajectoryFrameResult>::failure(*error);
+    return operation::Result<TrajectoryFramePlan>::failure(*error);
   }
-  const auto frame = object->trajectory->cache->read_frame(frame_index);
+  return operation::Result<TrajectoryFramePlan>::success(
+      {*object, render_settings_, render_settings_.snapshot(), frame_index});
+}
+
+operation::Result<TrajectoryFrameCandidate>
+Workspace::build_trajectory_frame_candidate(TrajectoryFramePlan plan,
+                                             operation::TaskContext &context) {
+  if (!plan.object.trajectory.has_value())
+    return operation::Result<TrajectoryFrameCandidate>::failure(
+        operation::Error{operation::ErrorCode::invalid_argument,
+                         "trajectory frame plan has no attached source", {}});
+  // Interactive frame work supersedes speculative read-ahead. A reader call
+  // already in progress remains cooperative and is discarded after return.
+  plan.object.trajectory->prefetch->cancel();
+  if (context.cancellation.is_cancelled())
+    return operation::Result<TrajectoryFrameCandidate>::failure(
+        operation::Error{operation::ErrorCode::cancelled,
+                         "trajectory frame candidate was cancelled before "
+                         "decode",
+                         {}});
+  const auto frame =
+      plan.object.trajectory->cache->read_frame(plan.frame_index);
   if (!frame.has_value()) {
-    return operation::Result<TrajectoryFrameResult>::failure(frame.error());
+    return operation::Result<TrajectoryFrameCandidate>::failure(frame.error());
   }
-  const auto rebuilt = rebuild_representations(*object, object->system,
-                                               *frame.value(), frame_index);
+  if (context.report_progress)
+    context.report_progress({0.45, "trajectory-frame-decode"});
+  if (context.cancellation.is_cancelled())
+    return operation::Result<TrajectoryFrameCandidate>::failure(
+        operation::Error{operation::ErrorCode::cancelled,
+                         "trajectory frame candidate was cancelled after "
+                         "decode",
+                         {}});
+  const auto rebuilt = rebuild_representations(
+      plan.object, plan.object.system, *frame.value(), plan.frame_index,
+      plan.render_settings);
   if (!rebuilt.has_value()) {
-    return operation::Result<TrajectoryFrameResult>::failure(rebuilt.error());
+    return operation::Result<TrajectoryFrameCandidate>::failure(
+        rebuilt.error());
   }
+  if (context.report_progress)
+    context.report_progress({0.85, "trajectory-frame-rebuild"});
+  return operation::Result<TrajectoryFrameCandidate>::success(
+      {std::move(plan), frame.value(), std::move(rebuilt.value())});
+}
+
+operation::Result<TrajectoryFrameResult>
+Workspace::commit_trajectory_frame(TrajectoryFrameCandidate candidate) {
+  auto *object = mutable_active_object();
+  const auto stale = [&](std::string message) {
+    return operation::Result<TrajectoryFrameResult>::failure(operation::Error{
+        operation::ErrorCode::stale_result, std::move(message),
+        "retry the seek against the current Workspace state",
+        {{"object_id", std::to_string(candidate.plan.object.id)},
+         {"frame", std::to_string(candidate.plan.frame_index)}}});
+  };
+  if (object == nullptr || object->id != candidate.plan.object.id)
+    return stale("trajectory frame candidate targets a stale active object");
+  if (!object->trajectory.has_value() ||
+      !candidate.plan.object.trajectory.has_value() ||
+      object->system != candidate.plan.object.system ||
+      object->trajectory->cache != candidate.plan.object.trajectory->cache ||
+      object->system->topology()->version() !=
+          candidate.plan.object.system->topology()->version())
+    return stale("trajectory frame candidate targets stale molecular data");
+  if (render_settings_.snapshot() != candidate.plan.render_setting_snapshot ||
+      object->representation_visibility.snapshot() !=
+          candidate.plan.object.representation_visibility.snapshot())
+    return stale("trajectory frame candidate uses stale visual settings");
+  const auto current_selections = object->selections.list();
+  const auto planned_selections = candidate.plan.object.selections.list();
+  const auto same_selections =
+      current_selections.size() == planned_selections.size() &&
+      std::equal(current_selections.begin(), current_selections.end(),
+                 planned_selections.begin(),
+                 [](const auto &left, const auto &right) {
+                   return left.name == right.name &&
+                          left.expression == right.expression &&
+                          left.dynamic == right.dynamic;
+                 });
+  const auto same_representations =
+      object->representations.size() ==
+          candidate.plan.object.representations.size() &&
+      std::equal(object->representations.begin(), object->representations.end(),
+                 candidate.plan.object.representations.begin(),
+                 [](const auto &left, const auto &right) {
+                   return left.kind == right.kind &&
+                          left.selection_expression ==
+                              right.selection_expression;
+                 });
+  if (!same_selections || !same_representations)
+    return stale("trajectory frame candidate uses stale representation inputs");
+  auto next_timeline = object->trajectory->timeline;
+  if (const auto error = next_timeline.seek(candidate.plan.frame_index);
+      error.has_value())
+    return operation::Result<TrajectoryFrameResult>::failure(*error);
   object->trajectory->timeline = std::move(next_timeline);
   object->trajectory->clock.reset();
-  object->representations = std::move(rebuilt.value());
+  object->representations = std::move(candidate.representations);
   const auto prefetch = schedule_prefetch(*object->trajectory);
   return operation::Result<TrajectoryFrameResult>::success(frame_result(
       object->id, object->trajectory->timeline, object->trajectory->clock,
-      *frame.value(), object->representations.size(), 0U, 0U, false, prefetch));
+      *candidate.frame, object->representations.size(), 0U, 0U, false,
+      prefetch));
 }
 
 operation::Result<TrajectoryFrameResult>
@@ -2367,7 +3587,8 @@ Workspace::play_trajectory(trajectory::PlaybackMode mode,
   std::vector<RepresentationRecord> rebuilt;
   if (frame_changed) {
     const auto candidate = rebuild_representations(
-        *object, object->system, *frame.value(), advanced.snapshot.frame);
+        *object, object->system, *frame.value(), advanced.snapshot.frame,
+        render_settings_);
     if (!candidate.has_value()) {
       return operation::Result<TrajectoryFrameResult>::failure(
           candidate.error());
@@ -2414,7 +3635,8 @@ Workspace::configure_trajectory_range(trajectory::PlaybackRange range,
     return operation::Result<TrajectoryFrameResult>::failure(frame.error());
   }
   const auto rebuilt = rebuild_representations(*object, object->system,
-                                               *frame.value(), frame_index);
+                                               *frame.value(), frame_index,
+                                               render_settings_);
   if (!rebuilt.has_value()) {
     return operation::Result<TrajectoryFrameResult>::failure(rebuilt.error());
   }
@@ -2519,7 +3741,8 @@ Workspace::tick_trajectory(double elapsed_seconds) {
   if (advanced.snapshot.frame !=
       object->trajectory->timeline.snapshot().frame) {
     const auto candidate = rebuild_representations(
-        *object, object->system, *frame.value(), advanced.snapshot.frame);
+        *object, object->system, *frame.value(), advanced.snapshot.frame,
+        render_settings_);
     if (!candidate.has_value()) {
       return operation::Result<TrajectoryFrameResult>::failure(
           candidate.error());

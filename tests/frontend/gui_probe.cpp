@@ -1,6 +1,8 @@
+#include <array>
 #include <iostream>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "molshredder/application/default_registry.hpp"
 #include "molshredder/application/dispatcher.hpp"
@@ -12,7 +14,8 @@
 int main(int argc, char* argv[]) {
   if (argc < 2 || argc > 3) {
     std::cerr << "usage: gui_probe version|info|com|view|view-origin-position|projection|view-reset|clip|"
-                 "get-clip|move|turn|stereo|pymol-view|state-all|orient-all "
+                 "get-clip|move|turn|stereo|pymol-view|state-all|orient-all|representation-visibility|render-setting "
+                 "|object-lifecycle|load-batch "
                  "[fixture]\n";
     return 2;
   }
@@ -72,6 +75,14 @@ int main(int argc, char* argv[]) {
                          {"mode", "anaglyph"},
                          {"shift-percent", "2.5"},
                          {"swap-eyes", "true"}};
+  } else if (scenario == "interleaved") {
+    action.command_name = "stereo set";
+    action.parameters = {{"angle-scale", "2.1"},
+                         {"anaglyph-mode", "optimized"},
+                         {"enabled", "true"},
+                         {"mode", "checkerboard"},
+                         {"shift-percent", "2.5"},
+                         {"swap-eyes", "true"}};
   } else if (scenario == "pymol-view") {
     action.command_name = "view import-pymol";
     action.parameters.emplace(
@@ -92,6 +103,38 @@ int main(int argc, char* argv[]) {
     }
     action.command_name = "view orient";
     action.parameters = {{"selection", "all"}, {"state", "all"}};
+  } else if (scenario == "representation-visibility") {
+    if (argc != 3) {
+      std::cerr << "representation-visibility requires a structure fixture\n";
+      return 2;
+    }
+    action.command_name = "toggle";
+    action.parameters = {{"representation", "everything"},
+                         {"selection", "index 2"}};
+  } else if (scenario == "render-setting") {
+    if (argc != 3) {
+      std::cerr << "render-setting requires a structure fixture\n";
+      return 2;
+    }
+    action.command_name = "setting get";
+    action.parameters = {{"name", "sphere_scale"},
+                         {"scope", "atom"},
+                         {"target", "1"}};
+  } else if (scenario == "object-lifecycle") {
+    if (argc != 3) {
+      std::cerr << "object-lifecycle requires a structure fixture\n";
+      return 2;
+    }
+    action.command_name = "object list";
+  } else if (scenario == "load-batch") {
+    if (argc != 3) {
+      std::cerr << "load-batch requires a structure fixture\n";
+      return 2;
+    }
+    action.command_name = "load batch";
+    action.parameters = {{"file-format", "pdb"},
+                         {"names", "batch-one;batch-two"},
+                         {"paths", std::string{argv[2]} + ";" + argv[2]}};
   } else {
     std::cerr << "unsupported probe scenario\n";
     return 2;
@@ -101,17 +144,88 @@ int main(int argc, char* argv[]) {
   const molshredder::application::Dispatcher dispatcher{registry};
   const molshredder::gui::ActionAdapter gui{dispatcher};
   molshredder::operation::TaskContext context;
-  if (scenario == "state-all" || scenario == "orient-all") {
+  std::vector<std::string> lifecycle_results;
+  if (scenario == "state-all" || scenario == "orient-all" ||
+      scenario == "representation-visibility" ||
+      scenario == "render-setting" || scenario == "object-lifecycle") {
+    if (scenario == "object-lifecycle") {
+      const std::array<molshredder::gui::Action, 9U> setup{
+          molshredder::gui::Action{"load", {{"name", "alpha"},
+                                             {"path", argv[2]}}},
+          molshredder::gui::Action{"load", {{"name", "beta"},
+                                             {"path", argv[2]}}},
+          molshredder::gui::Action{"load", {{"name", "gamma"},
+                                             {"path", argv[2]}}},
+          molshredder::gui::Action{"object visibility", {{"id", "2"},
+                                                          {"visible", "false"}}},
+          molshredder::gui::Action{"object activate", {{"id", "1"}}},
+          molshredder::gui::Action{"object rename", {{"name", "delta"},
+                                                      {"object", "2"}}},
+          molshredder::gui::Action{"object reorder", {{"object", "3"},
+                                                       {"position", "1"}}},
+          molshredder::gui::Action{"object delete", {{"object", "current"}}},
+          molshredder::gui::Action{"object topology-retain",
+                                    {{"atom-ids", "3,1"},
+                                     {"expected-version", "1"}}}};
+      for (const auto &setup_action : setup) {
+        const auto setup_outcome = gui.trigger(setup_action, context);
+        if (!setup_outcome.succeeded()) {
+          std::cerr << "object lifecycle setup failed\n";
+          return 2;
+        }
+        const auto setup_rendered = molshredder::command::render(
+            setup_outcome.envelope,
+            molshredder::operation::OutputFormat::json);
+        if (!setup_rendered.has_value()) {
+          std::cerr << "object lifecycle result rendering failed\n";
+          return 2;
+        }
+        lifecycle_results.push_back(setup_rendered.value());
+      }
+    } else {
     const auto loaded = gui.trigger(
         {"load", {{"file-format", "g96"}, {"path", argv[2]}}}, context);
     if (!loaded.succeeded()) {
       std::cerr << "camera state fixture load failed\n";
       return 2;
     }
-    const auto reset = gui.trigger({"view reset", {}}, context);
-    if (!reset.succeeded()) {
-      std::cerr << "camera state reset failed\n";
-      return 2;
+    if (scenario == "representation-visibility") {
+      const std::array<molshredder::gui::Action, 4U> setup{
+          molshredder::gui::Action{"show", {{"representation", "wire"},
+                                             {"selection", "all"}}},
+          molshredder::gui::Action{"show", {{"representation", "spheres"},
+                                             {"selection", "index 1"}}},
+          molshredder::gui::Action{"hide", {{"representation", "lines"},
+                                             {"selection", "index 1"}}},
+          molshredder::gui::Action{"as", {{"representation", "licorice"},
+                                           {"selection", "index 2"}}}};
+      for (const auto &setup_action : setup) {
+        if (!gui.trigger(setup_action, context).succeeded()) {
+          std::cerr << "representation visibility setup failed\n";
+          return 2;
+        }
+      }
+    } else if (scenario == "render-setting") {
+      const std::array<molshredder::gui::Action, 2U> setup{
+          molshredder::gui::Action{"show", {{"representation", "spheres"},
+                                             {"selection", "all"}}},
+          molshredder::gui::Action{"setting set", {{"name", "sphere_scale"},
+                                                    {"value", "2.5"},
+                                                    {"scope", "atom"},
+                                                    {"target", "1"}}}};
+      for (const auto &setup_action : setup) {
+        if (!gui.trigger(setup_action, context).succeeded()) {
+          std::cerr << "render setting setup failed\n";
+          return 2;
+        }
+      }
+    } else {
+      const auto reset = gui.trigger({"view reset", {}}, context);
+      if (!reset.succeeded()) {
+        std::cerr << "camera state reset failed\n";
+        return 2;
+      }
+    }
     }
   }
   const auto outcome = gui.trigger(action, context);
@@ -121,6 +235,8 @@ int main(int argc, char* argv[]) {
     std::cerr << rendered.error().message << '\n';
     return 2;
   }
+  for (const auto &result : lifecycle_results)
+    std::cout << result << '\n';
   std::cout << rendered.value();
   return 0;
 }

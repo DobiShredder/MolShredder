@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <atomic>
 #include <bit>
 #include <chrono>
 #include <cstdint>
@@ -15,6 +16,7 @@
 #include "molshredder/application/default_registry.hpp"
 #include "molshredder/application/dispatcher.hpp"
 #include "molshredder/application/session.hpp"
+#include "molshredder/application/task_service.hpp"
 #include "molshredder/application/workspace.hpp"
 #include "molshredder/command/result.hpp"
 #include "molshredder/gui/action_adapter.hpp"
@@ -122,6 +124,17 @@ bool wait_for_prefetch(
   return false;
 }
 
+bool wait_for_task(
+    const std::shared_ptr<molshredder::operation::TaskScheduler> &scheduler,
+    std::uint64_t task_id, molshredder::operation::TaskState state) {
+  for (std::size_t attempt = 0; attempt < 500U; ++attempt) {
+    const auto snapshot = scheduler->snapshot(task_id);
+    if (snapshot.has_value() && snapshot.value().state == state) return true;
+    std::this_thread::sleep_for(std::chrono::milliseconds{1});
+  }
+  return false;
+}
+
 } // namespace
 
 int main(int argc, char **argv) {
@@ -146,7 +159,8 @@ int main(int argc, char **argv) {
   const gui::ActionAdapter gui{dispatcher};
   passed &=
       expect(!trigger(gui, "traj load",
-                      {{"path", trajectory_path.string()}, {"cache-mib", "1"}})
+                      {{"path", trajectory_path.string()}, {"cache-mib", "1"},
+                       {"mapping", "index"}})
                   .succeeded(),
              "trajectory attach must require an active topology");
   passed &=
@@ -160,19 +174,91 @@ int main(int argc, char **argv) {
   const auto original_cache = workspace->active_object()->trajectory->cache;
   passed &= expect(
       !trigger(gui, "traj load",
-               {{"path", mismatch_path.string()}, {"cache-mib", "1"}})
+               {{"path", trajectory_path.string()}, {"cache-mib", "1"}})
+              .succeeded() &&
+          workspace->active_object()->trajectory.has_value() &&
+          workspace->active_object()->trajectory->cache == original_cache &&
+          workspace->active_object()->system == original_system,
+      "trajectory attach must require mapping and preserve active state when "
+      "it is omitted");
+  passed &= expect(
+      !trigger(gui, "traj load",
+               {{"path", mismatch_path.string()}, {"cache-mib", "1"},
+                {"mapping", "index"}})
               .succeeded() &&
           workspace->active_object()->trajectory.has_value() &&
           workspace->active_object()->trajectory->cache == original_cache &&
           workspace->active_object()->system == original_system,
       "atom-count mismatch must leave the active object unchanged");
 
+  auto load_workspace = std::make_shared<application::Workspace>();
+  auto load_registry = application::make_default_registry(load_workspace);
+  const application::Dispatcher load_dispatcher{load_registry};
+  const gui::ActionAdapter load_gui{load_dispatcher};
+  passed &= expect(
+      trigger(load_gui, "load", {{"path", pdb.string()}}).succeeded() &&
+          trigger(load_gui, "show",
+                  {{"representation", "spheres"}, {"selection", "all"}})
+              .succeeded(),
+      "background load fixture must prepare topology and representation");
+  const auto load_original_system = load_workspace->active_object()->system;
+  auto load_scheduler = operation::TaskScheduler::create(
+      {1U, 2U, 8U * 1024U * 1024U, 2U}).value();
+  application::ScheduledTrajectoryLoadRequest load_request;
+  load_request.path = trajectory_path;
+  load_request.format = io::TrajectoryFormat::dcd;
+  load_request.cache_budget_bytes = 1U * 1024U * 1024U;
+  load_request.mapping_policy = trajectory::AtomMappingPolicy::index_order;
+  load_request.generation = 1U;
+  load_request.generation_is_current =
+      [](std::uint64_t generation) { return generation == 1U; };
+  const auto scheduled_load = application::schedule_trajectory_load(
+      load_workspace, load_scheduler, std::move(load_request));
+  passed &= expect(
+      scheduled_load.has_value() &&
+          scheduled_load.value().reserved_memory_bytes >=
+              1U * 1024U * 1024U &&
+          wait_for_task(load_scheduler, scheduled_load.value().task_id,
+                        operation::TaskState::ready_to_commit) &&
+          load_workspace->active_object()->system == load_original_system &&
+          !load_scheduler->commit_ready(scheduled_load.value().task_id)
+               .has_value(),
+      "background load must preserve owner state until its bounded candidate "
+      "is committed");
+  const auto scheduled_load_result =
+      scheduled_load.value().completion->result();
+  passed &= expect(
+      scheduled_load_result.has_value() &&
+          scheduled_load_result.value().frame_count == 3U &&
+          load_workspace->active_object()->trajectory.has_value() &&
+          load_workspace->active_object()->system != load_original_system &&
+          load_workspace->active_object()->representations[0]
+                  .packet.frame_index == 0U &&
+          load_scheduler->scheduler_snapshot().reserved_memory_bytes == 0U,
+      "owner commit must atomically publish the loaded trajectory and release "
+      "its reservation");
+
   const auto attached = trigger(gui, "traj load",
                                 {{"path", trajectory_path.string()},
                                  {"file-format", "auto"},
-                                 {"cache-mib", "1"}});
+                                 {"cache-mib", "1"},
+                                 {"mapping", "index"}});
   const auto *object = workspace->active_object();
   const auto *scene_node = workspace->scene()->find(object->scene_node);
+  const auto *attached_response =
+      attached.succeeded()
+          ? std::get_if<command::Response>(&attached.envelope.payload)
+          : nullptr;
+  const auto *mapping_value =
+      attached_response != nullptr
+          ? std::get_if<command::Value::Object>(
+                &attached_response->fields.at("atom_mapping").data)
+          : nullptr;
+  const auto *semantics_value =
+      attached_response != nullptr
+          ? std::get_if<command::Value::Object>(
+                &attached_response->fields.at("semantics").data)
+          : nullptr;
   passed &=
       expect(attached.succeeded() && object->trajectory.has_value() &&
                  object->trajectory->format == io::TrajectoryFormat::dcd &&
@@ -180,8 +266,15 @@ int main(int argc, char **argv) {
                  object->system != original_system && scene_node != nullptr &&
                  scene_node->system() == object->system &&
                  object->representations[0].packet.frame_index == 0U &&
-                 object->representations[0].packet.spheres[0].center.x == 0.0,
-             "attach must install cache/system/scene and rebuild frame zero");
+                 object->representations[0].packet.spheres[0].center.x == 0.0 &&
+                 mapping_value != nullptr && semantics_value != nullptr &&
+                 std::get<std::string>(mapping_value->at("policy").data) ==
+                     "index" &&
+                 std::get<std::string>(
+                     semantics_value->at("canonical_coordinate_unit").data) ==
+                     "angstrom",
+             "attach must install cache/system/scene and expose mapping and "
+             "semantic provenance");
   passed &= expect(
       object->trajectory->prefetch_frame_count == 4U &&
           wait_for_prefetch(object->trajectory->prefetch,
@@ -198,6 +291,57 @@ int main(int argc, char **argv) {
           object->representations[0].packet.frame_index == 2U &&
           object->representations[0].packet.spheres[0].center.x == 200.0,
       "frame seek must decode and transactionally rebuild representations");
+
+  auto seek_scheduler = operation::TaskScheduler::create(
+      {1U, 2U, 64U * 1024U * 1024U, 2U}).value();
+  std::atomic_uint64_t seek_generation{1U};
+  auto make_seek_request = [&](std::size_t frame,
+                               std::uint64_t generation) {
+    application::ScheduledTrajectoryFrameRequest request;
+    request.frame_index = frame;
+    request.generation = generation;
+    request.generation_is_current = [&](std::uint64_t value) {
+      return value == seek_generation.load();
+    };
+    return application::schedule_trajectory_frame(workspace, seek_scheduler,
+                                                   std::move(request));
+  };
+  const auto stale_seek = make_seek_request(0U, 1U);
+  passed &= expect(stale_seek.has_value() &&
+                       stale_seek.value().reserved_memory_bytes > 0U &&
+                       wait_for_task(seek_scheduler,
+                                     stale_seek.value().task_id,
+                                     operation::TaskState::ready_to_commit),
+                   "background seek must build a bounded worker candidate");
+  seek_generation = 2U;
+  const auto latest_seek = make_seek_request(1U, 2U);
+  passed &= expect(
+      !seek_scheduler->commit_ready(stale_seek.value().task_id).has_value() &&
+          wait_for_task(seek_scheduler, stale_seek.value().task_id,
+                        operation::TaskState::stale) &&
+          workspace->active_object()->trajectory->timeline.snapshot().frame ==
+              2U,
+      "stale seek completion must not replace the current frame");
+  passed &= expect(
+      latest_seek.has_value() &&
+          wait_for_task(seek_scheduler, latest_seek.value().task_id,
+                        operation::TaskState::ready_to_commit) &&
+          !seek_scheduler->commit_ready(latest_seek.value().task_id)
+               .has_value(),
+      "latest seek candidate must commit on the owner thread");
+  const auto latest_result = latest_seek.value().completion->result();
+  object = workspace->active_object();
+  passed &= expect(
+      latest_result.has_value() &&
+          latest_result.value().playback.frame == 1U &&
+          object->trajectory->timeline.snapshot().frame == 1U &&
+          object->representations[0].packet.frame_index == 1U &&
+          object->representations[0].packet.spheres[0].center.x == 100.0 &&
+          seek_scheduler->scheduler_snapshot().reserved_memory_bytes == 0U,
+      "owner commit must publish the same frame state and release reservation");
+  passed &= expect(
+      trigger(gui, "traj frame", {{"frame", "2"}}).succeeded(),
+      "background seek fixture must restore the existing frame-2 scenario");
   const auto center = trigger(gui, "analyze center",
                               {{"selection", "all"},
                                {"mode", "centroid"},
@@ -374,6 +518,28 @@ int main(int argc, char **argv) {
           std::get<std::string>(
               mass_rmsd_response->fields.at("weight_unit").data) == "dalton",
       "mass-weighted RMSD must expose estimated mass provenance");
+  passed &= expect(
+      workspace->analysis_results().size() == 4U &&
+          workspace->analysis_results()[1].kind ==
+              application::AnalysisResultKind::contact_series &&
+          workspace->analysis_results()[2].kind ==
+              application::AnalysisResultKind::rmsd_series &&
+          workspace->analysis_results()[2].provenance.frame_first == 0U &&
+          workspace->analysis_results()[2].provenance.frame_last == 2U &&
+          workspace->analysis_results()[2].provenance.frame_stride == 1U &&
+          workspace->analysis_results()[3].provenance.algorithm ==
+              "weighted RMSD without fit",
+      "target trajectory analyses must persist typed result/provenance state");
+  operation::TaskContext cancelled_analysis_context;
+  cancelled_analysis_context.cancellation.request_cancel();
+  const auto cancelled_analysis = gui.trigger(
+      {"analyze trajectory rmsd",
+       {{"selection", "all"}, {"fit", "none"},
+        {"result-name", "must-not-commit"}}},
+      cancelled_analysis_context);
+  passed &= expect(!cancelled_analysis.succeeded() &&
+                       workspace->analysis_results().size() == 4U,
+                   "cancelled long analysis must not publish a result object");
 
   const auto rmsf_series = trigger(gui, "analyze trajectory rmsf",
                                    {{"selection", "all"},
@@ -417,6 +583,7 @@ int main(int argc, char **argv) {
                   {{"path", trajectory_path.string()},
                    {"file-format", "dcd"},
                    {"cache-mib", "1"},
+                   {"mapping", "index"},
                    {"prefetch-frames", "0"}})
               .succeeded(),
       "trajectory H-bond fixture must load");
@@ -592,7 +759,8 @@ int main(int argc, char **argv) {
   passed &= expect(
       !trigger(gui, "traj play", {{"steps", "-1"}}).succeeded() &&
           !trigger(gui, "traj load",
-                   {{"path", trajectory_path.string()}, {"cache-mib", "0"}})
+                   {{"path", trajectory_path.string()}, {"cache-mib", "0"},
+                    {"mapping", "index"}})
                .succeeded(),
       "negative steps and zero cache budget must fail validation");
 
@@ -603,8 +771,11 @@ int main(int argc, char **argv) {
        {{"file-format", "pdb"}, {"name", "replayed"}, {"path", pdb.string()}}},
       {"show", {{"representation", "spheres"}, {"selection", "all"}}},
       {"traj load",
-       {{"cache-mib", "1"},
+       {{"atom-map", "3,2,1"},
+        {"cache-mib", "1"},
+        {"expected-topology-version", "1"},
         {"file-format", "dcd"},
+        {"mapping", "explicit"},
         {"path", trajectory_path.string()}}},
       {"traj range",
        {{"direction", "reverse"},
@@ -663,11 +834,71 @@ int main(int argc, char **argv) {
           !replayed_workspace->active_object()
                ->trajectory->timeline.snapshot()
                .playing &&
+          replayed_workspace->analysis_results().size() == 1U &&
+          replayed_workspace->analysis_results()[0].kind ==
+              application::AnalysisResultKind::rmsd_series &&
+          replayed_workspace->active_object()
+                  ->trajectory->mapping.policy ==
+              trajectory::AtomMappingPolicy::explicit_map &&
           replayed_workspace->active_object()
                   ->representations[0]
                   .packet.spheres[0]
-                  .center.x == 0.0,
-      "canonical session replay must reconstruct range/clock/frame state");
+                  .center.x == 2.0,
+      "canonical session replay must reconstruct mapping/range/clock/frame "
+      "state");
+
+  auto mapped_workspace = std::make_shared<application::Workspace>();
+  auto mapped_registry = application::make_default_registry(mapped_workspace);
+  const application::Dispatcher mapped_dispatcher{mapped_registry};
+  const gui::ActionAdapter mapped_gui{mapped_dispatcher};
+  passed &= expect(
+      trigger(mapped_gui, "load", {{"path", pdb.string()}}).succeeded() &&
+          trigger(mapped_gui, "show",
+                  {{"representation", "spheres"}, {"selection", "all"}})
+              .succeeded(),
+      "explicit mapping fixture must load a topology and representation");
+  const auto mapped_original_system = mapped_workspace->active_object()->system;
+  const auto exact_rejected = trigger(
+      mapped_gui, "traj load",
+      {{"path", trajectory_path.string()}, {"mapping", "exact"},
+       {"cache-mib", "1"}, {"prefetch-frames", "0"}});
+  const bool exact_preserved =
+      mapped_workspace->active_object()->system == mapped_original_system;
+  const auto topology_version =
+      mapped_workspace->active_object()->system->topology()->version();
+  const auto &atom_ids =
+      mapped_workspace->active_object()->system->topology()->atom_ids();
+  const auto atom_map = std::to_string(atom_ids[2].value) + "," +
+                        std::to_string(atom_ids[1].value) + "," +
+                        std::to_string(atom_ids[0].value);
+  const auto stale_rejected = trigger(
+      mapped_gui, "traj load",
+      {{"path", trajectory_path.string()}, {"mapping", "explicit"},
+       {"atom-map", atom_map},
+       {"expected-topology-version", std::to_string(topology_version + 1U)},
+       {"cache-mib", "1"}, {"prefetch-frames", "0"}});
+  const bool stale_preserved =
+      mapped_workspace->active_object()->system == mapped_original_system;
+  const auto explicitly_mapped = trigger(
+      mapped_gui, "traj load",
+      {{"path", trajectory_path.string()}, {"mapping", "explicit"},
+       {"atom-map", atom_map},
+       {"expected-topology-version", std::to_string(topology_version)},
+       {"cache-mib", "1"}, {"prefetch-frames", "0"}});
+  passed &= expect(
+      !exact_rejected.succeeded() && exact_preserved &&
+          !stale_rejected.succeeded() && stale_preserved &&
+          explicitly_mapped.succeeded() &&
+          mapped_original_system != mapped_workspace->active_object()->system &&
+          mapped_workspace->active_object()
+                  ->trajectory->mapping.policy ==
+              trajectory::AtomMappingPolicy::explicit_map &&
+          mapped_workspace->active_object()
+                  ->representations[0]
+                  .packet.spheres[0]
+                  .center.x == 2.0,
+      "exact-unavailable and stale explicit mappings must preserve state while "
+      "a valid stable-ID map reorders every channel");
 
   return passed ? 0 : 1;
 }

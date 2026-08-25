@@ -280,22 +280,28 @@ int main() {
       "stereo set", {{"anaglyph-mode", "half_color"},
                      {"enabled", "true"},
                      {"mode", "anaglyph"}});
+  const auto interleaved_stereo = projection_dispatch(
+      "stereo set", {{"enabled", "true"},
+                     {"mode", "row_interleaved"},
+                     {"swap-eyes", "true"}});
   const auto before_invalid_stereo = projection_workspace->stereo();
   const auto invalid_stereo = projection_dispatch(
       "stereo set", {{"mode", "quad_buffer"}});
   passed &= expect(
       stereo_set.succeeded() && stereo_get.succeeded() &&
           stereo_modes.succeeded() && anaglyph_stereo.succeeded() &&
+          interleaved_stereo.succeeded() &&
           !invalid_stereo.succeeded() &&
           projection_workspace->stereo() == before_invalid_stereo &&
           projection_workspace->stereo().enabled &&
-          projection_workspace->stereo().mode == scene::StereoMode::anaglyph &&
+          projection_workspace->stereo().mode ==
+              scene::StereoMode::row_interleaved &&
           projection_workspace->stereo().anaglyph_mode ==
-              scene::AnaglyphMode::half_color &&
-          !projection_workspace->stereo().swap_eyes &&
+              scene::AnaglyphMode::optimized &&
+          projection_workspace->stereo().swap_eyes &&
           std::abs(projection_workspace->stereo().shift_percent - 2.0) <
               1.0e-12,
-      "stereo commands must share anaglyph state and reject unsupported compositors atomically");
+      "stereo commands must share composite state and reject unsupported compositors atomically");
 
   return passed ? 0 : 1;
 }

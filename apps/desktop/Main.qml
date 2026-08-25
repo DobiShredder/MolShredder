@@ -5,10 +5,14 @@ import MolShredder.Desktop
 Window {
     id: root
     property string trajectoryCoordinateUnit: "angstrom"
+    property string trajectoryMapping: "exact"
+    property string trajectoryAtomMap: ""
     property url pendingScriptUrl
     property var systemInfoData: ({})
     property string systemInfoPanelSourceJson: ""
     property string systemInfoPanelError: ""
+    property var analysisExportResultId: 0
+    property string analysisExportFormat: "json"
 
     function systemInfoValue(group, key) {
         if (!root.systemInfoData || !root.systemInfoData[group])
@@ -67,6 +71,17 @@ Window {
         viewsOverlay.clipRange = viewport.clipRangeText()
         viewNameInput.forceActiveFocus()
     }
+
+    function openRenderSettings() {
+        renderSettingsOverlay.visible = true
+        renderSettingNameInput.forceActiveFocus()
+        renderSettingResult.text = "Choose a P0 setting, scope and value. Atom/bond targets are 1-based."
+    }
+
+    function openAnalyze() {
+        analysisOverlay.visible = true
+        analysisPrimaryInput.forceActiveFocus()
+    }
     width: 1080
     height: 720
     visible: true
@@ -120,15 +135,31 @@ Window {
         }
     }
 
+    Repeater {
+        model: viewport.analysisLabelItems
+        Text {
+            required property var modelData
+            x: modelData.x + 8
+            y: modelData.y - height - 6
+            text: modelData.text
+            color: modelData.color
+            font.pixelSize: 13
+            font.bold: true
+            style: Text.Outline
+            styleColor: "#cc050812"
+            z: 20
+        }
+    }
+
     FileDialog {
         id: structureDialog
         title: "Open molecular structure or scalar volume"
-        fileMode: FileDialog.OpenFile
+        fileMode: FileDialog.OpenFiles
         nameFilters: ["Molecular data (*.pdb *.ent *.cif *.mmcif *.bcif *.pqr *.mol *.mol2 *.psf *.prmtop *.parm7 *.top *.sdf *.sd *.gro *.g96 *.vtf *.xyz *.dx *.mrc *.map *.ccp4 *.mrcs)",
                       "OpenDX scalar volumes (*.dx)",
                       "MRC/CCP4 scalar volumes (*.mrc *.map *.ccp4 *.mrcs)",
                       "All files (*)"]
-        onAccepted: viewport.loadStructure(selectedFile)
+        onAccepted: viewport.loadStructures(selectedFiles)
     }
 
     FileDialog {
@@ -165,7 +196,9 @@ Window {
         nameFilters: ["MD trajectories/restarts (*.dcd *.xtc *.trr *.mdcrd *.crd *.nc *.ncdf *.netcdf *.h5md *.rst7 *.restrt *.inpcrd *.inprst *.lammpstrj *.lammpstraj *.dump *.binpos)",
                       "All files (*)"]
         onAccepted: viewport.loadTrajectory(selectedFile,
-                                              root.trajectoryCoordinateUnit)
+                                              root.trajectoryCoordinateUnit,
+                                              root.trajectoryMapping,
+                                              root.trajectoryAtomMap)
     }
 
     FileDialog {
@@ -177,6 +210,19 @@ Window {
             root.pendingScriptUrl = selectedFile
             scriptTrustOverlay.visible = true
         }
+    }
+
+
+    FileDialog {
+        id: analysisExportDialog
+        title: "Export persistent analysis result"
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: root.analysisExportFormat
+        nameFilters: root.analysisExportFormat === "csv"
+                     ? ["CSV table (*.csv)"] : ["JSON result (*.json)"]
+        onAccepted: viewport.exportAnalysisResult(
+                        root.analysisExportResultId, selectedFile,
+                        root.analysisExportFormat)
     }
 
     component ToolbarButton: Rectangle {
@@ -265,6 +311,45 @@ Window {
                 }
             }
             ToolbarButton {
+                objectName: "trajectoryMappingButton"
+                label: root.trajectoryMapping === "exact" ? "Map exact" :
+                       root.trajectoryMapping === "explicit" ? "Map IDs" :
+                       "Map index"
+                selected: root.trajectoryMapping !== "index"
+                action: function() {
+                    root.trajectoryMapping =
+                        root.trajectoryMapping === "index" ? "exact" :
+                        root.trajectoryMapping === "exact" ? "explicit" :
+                        "index"
+                }
+            }
+            Rectangle {
+                objectName: "trajectoryAtomMapInputContainer"
+                visible: root.trajectoryMapping === "explicit"
+                width: visible ? 150 : 0
+                height: 34
+                radius: 6
+                color: "#172235"
+                border.color: "#506889"
+                TextInput {
+                    objectName: "trajectoryAtomMapInput"
+                    anchors.fill: parent
+                    anchors.margins: 8
+                    text: root.trajectoryAtomMap
+                    color: "#eef6ff"
+                    selectByMouse: true
+                    clip: true
+                    onTextChanged: root.trajectoryAtomMap = text
+                    Text {
+                        anchors.fill: parent
+                        text: "stable IDs: 3,2,1"
+                        visible: parent.text.length === 0
+                        color: "#71849c"
+                        font.pixelSize: 11
+                    }
+                }
+            }
+            ToolbarButton {
                 label: "Save"
                 action: function() { saveDialog.open() }
             }
@@ -279,6 +364,14 @@ Window {
             ToolbarButton {
                 label: "System"
                 action: function() { root.openSystemInfo() }
+            }
+            ToolbarButton {
+                label: "Settings"
+                action: function() { root.openRenderSettings() }
+            }
+            ToolbarButton {
+                label: "Analyze"
+                action: function() { root.openAnalyze() }
             }
             ToolbarButton {
                 label: "Lines"
@@ -304,6 +397,30 @@ Window {
                 label: "Cartoon"
                 selected: viewport.representation === "cartoon"
                 action: function() { viewport.setRepresentation("cartoon") }
+            }
+            ToolbarButton {
+                label: "Show"
+                action: function() {
+                    viewport.applyRepresentationVisibility("show", "all")
+                }
+            }
+            ToolbarButton {
+                label: "Hide"
+                action: function() {
+                    viewport.applyRepresentationVisibility("hide", "all")
+                }
+            }
+            ToolbarButton {
+                label: "As"
+                action: function() {
+                    viewport.applyRepresentationVisibility("as", "all")
+                }
+            }
+            ToolbarButton {
+                label: "Toggle"
+                action: function() {
+                    viewport.applyRepresentationVisibility("toggle", "all")
+                }
             }
         }
     }
@@ -361,7 +478,7 @@ Window {
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 20
         width: Math.min(parent.width - 420, 610)
-        height: 104
+        height: 120
         visible: viewport.hasTrajectory
         radius: 9
         color: "#e6101827"
@@ -427,6 +544,12 @@ Window {
                     viewport.setTrajectoryFps(fps)
                 }
             }
+            ToolbarButton {
+                objectName: "trajectoryTaskCancelButton"
+                visible: viewport.trajectoryTaskRunning
+                label: "Cancel"
+                action: function() { viewport.cancelTrajectoryTask() }
+            }
         }
 
         Text {
@@ -435,7 +558,10 @@ Window {
             anchors.top: parent.top
             anchors.rightMargin: 13
             anchors.topMargin: 14
-            text: "Frame " + viewport.trajectoryFrame + " / " +
+            text: viewport.trajectoryTaskRunning ?
+                  viewport.trajectoryTaskStage + " " +
+                  Math.round(viewport.trajectoryTaskProgress * 100) + "%" :
+                  "Frame " + viewport.trajectoryFrame + " / " +
                   Math.max(0, viewport.trajectoryFrameCount - 1)
             color: "#d8e8fa"
             font.pixelSize: 13
@@ -453,6 +579,18 @@ Window {
             radius: 7
             color: "#27364a"
             border.color: "#516984"
+
+            Rectangle {
+                objectName: "trajectoryTaskProgress"
+                visible: viewport.trajectoryTaskRunning
+                anchors.left: parent.left
+                anchors.top: parent.top
+                height: 3
+                width: parent.width * viewport.trajectoryTaskProgress
+                radius: 2
+                color: "#7ad7ff"
+                z: 3
+            }
 
             Rectangle {
                 width: viewport.trajectoryFrameCount <= 1 ? 0 :
@@ -550,7 +688,7 @@ Window {
         anchors.top: parent.top
         anchors.rightMargin: 20
         anchors.topMargin: 90
-        width: 270
+        width: 430
         height: Math.min(330, 52 + viewport.objectItems.length * 44)
         visible: viewport.objectItems.length > 0
         radius: 8
@@ -592,6 +730,9 @@ Window {
 
                     delegate: Rectangle {
                         required property var modelData
+                        required property int index
+                        property bool editingName: false
+                        property bool deleteArmed: false
                         width: objectColumn.width
                         height: 40
                         radius: 6
@@ -635,16 +776,142 @@ Window {
                         }
 
                         Text {
+                            id: objectName
                             anchors.left: visibilityToggle.right
-                            anchors.right: parent.right
+                            anchors.right: renameButton.left
                             anchors.verticalCenter: parent.verticalCenter
                             anchors.leftMargin: 9
-                            anchors.rightMargin: 8
-                            text: parent.modelData.name + " · " + parent.modelData.atoms + " atoms · " +
-                                  parent.modelData.representation
+                            anchors.rightMargin: 5
+                            text: parent.modelData.name + " · " + parent.modelData.atoms + " atoms"
+                            visible: !parent.editingName
                             color: parent.modelData.visible ? "#e5f1ff" : "#8291a6"
                             elide: Text.ElideRight
                             font.pixelSize: 13
+                        }
+
+                        Rectangle {
+                            id: objectNameEditorContainer
+                            objectName: "objectNameEditor"
+                            anchors.left: visibilityToggle.right
+                            anchors.right: renameButton.left
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.leftMargin: 6
+                            anchors.rightMargin: 4
+                            height: 30
+                            visible: parent.editingName
+                            radius: 5
+                            color: "#101827"
+                            border.color: "#69aef0"
+                            z: 3
+                            TextInput {
+                                id: objectNameEditor
+                                anchors.fill: parent
+                                anchors.margins: 6
+                                text: objectNameEditorContainer.parent.modelData.name
+                                color: "#eef6ff"
+                                selectByMouse: true
+                                onAccepted: {
+                                    if (viewport.renameObject(objectNameEditorContainer.parent.modelData.id, text))
+                                        objectNameEditorContainer.parent.editingName = false
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            id: renameButton
+                            objectName: "objectRenameButton"
+                            anchors.right: upButton.left
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 34
+                            height: 28
+                            radius: 5
+                            color: "#28445f"
+                            border.color: "#58799a"
+                            z: 3
+                            Text { anchors.centerIn: parent; text: "✎"; color: "#eef6ff" }
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: {
+                                    renameButton.parent.editingName = true
+                                    objectNameEditor.forceActiveFocus()
+                                    objectNameEditor.selectAll()
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            id: upButton
+                            objectName: "objectMoveUpButton"
+                            anchors.right: downButton.left
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 32
+                            height: 28
+                            enabled: parent.index > 0
+                            opacity: enabled ? 1.0 : 0.35
+                            radius: 5
+                            color: "#28445f"
+                            border.color: "#58799a"
+                            z: 3
+                            Text { anchors.centerIn: parent; text: "↑"; color: "#eef6ff" }
+                            MouseArea {
+                                anchors.fill: parent
+                                enabled: upButton.enabled
+                                onClicked: viewport.reorderObject(upButton.parent.modelData.id,
+                                                                  upButton.parent.index)
+                            }
+                        }
+
+                        Rectangle {
+                            id: downButton
+                            objectName: "objectMoveDownButton"
+                            anchors.right: deleteButton.left
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 32
+                            height: 28
+                            enabled: parent.index + 1 < viewport.objectItems.length
+                            opacity: enabled ? 1.0 : 0.35
+                            radius: 5
+                            color: "#28445f"
+                            border.color: "#58799a"
+                            z: 3
+                            Text { anchors.centerIn: parent; text: "↓"; color: "#eef6ff" }
+                            MouseArea {
+                                anchors.fill: parent
+                                enabled: downButton.enabled
+                                onClicked: viewport.reorderObject(downButton.parent.modelData.id,
+                                                                  downButton.parent.index + 2)
+                            }
+                        }
+
+                        Rectangle {
+                            id: deleteButton
+                            objectName: "objectDeleteButton"
+                            anchors.right: parent.right
+                            anchors.rightMargin: 4
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 32
+                            height: 28
+                            radius: 5
+                            color: parent.deleteArmed ? "#a13e4f" : "#63313b"
+                            border.color: "#a85b6a"
+                            z: 3
+                            Text { anchors.centerIn: parent; text: deleteButton.parent.deleteArmed ? "?" : "×"; color: "#fff0f2" }
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: {
+                                    if (deleteButton.parent.deleteArmed)
+                                        viewport.deleteObject(deleteButton.parent.modelData.id)
+                                    else {
+                                        deleteButton.parent.deleteArmed = true
+                                        deleteReset.restart()
+                                    }
+                                }
+                            }
+                            Timer {
+                                id: deleteReset
+                                interval: 3000
+                                onTriggered: deleteButton.parent.deleteArmed = false
+                            }
                         }
                     }
                 }
@@ -693,6 +960,374 @@ Window {
     }
 
     Rectangle {
+        id: analysisOverlay
+        objectName: "analysisOverlay"
+        property int modeIndex: 0
+        property var modes: ["Centroid", "Center of mass", "Distance", "Contacts", "Trajectory RMSD"]
+        anchors.fill: parent
+        visible: false
+        color: "#99050812"
+        z: 75
+
+        MouseArea { anchors.fill: parent }
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: 760
+            height: 610
+            radius: 12
+            color: "#f0101827"
+            border.color: "#69aef0"
+
+            Column {
+                anchors.fill: parent
+                anchors.margins: 20
+                spacing: 11
+
+                Row {
+                    width: parent.width
+                    spacing: 12
+                    Text {
+                        width: 620
+                        text: "Analyze · persistent results"
+                        color: "#eef6ff"
+                        font.pixelSize: 20
+                        font.bold: true
+                    }
+                    ToolbarButton {
+                        label: "Close"
+                        action: function() { analysisOverlay.visible = false }
+                    }
+                }
+
+                Text {
+                    width: parent.width
+                    text: "Computations, CLI commands and Python calls share one canonical operation. Selections use MolShredder expressions; atom distance endpoints must each select one atom."
+                    color: "#a9bdd5"
+                    font.pixelSize: 13
+                    wrapMode: Text.WordWrap
+                }
+
+                Row {
+                    spacing: 9
+                    ToolbarButton {
+                        label: analysisOverlay.modes[analysisOverlay.modeIndex]
+                        selected: true
+                        action: function() {
+                            analysisOverlay.modeIndex =
+                                (analysisOverlay.modeIndex + 1) % analysisOverlay.modes.length
+                        }
+                    }
+                    Rectangle {
+                        width: 180; height: 36; radius: 6
+                        color: "#172235"; border.color: "#506889"
+                        TextInput {
+                            id: analysisPrimaryInput
+                            anchors.fill: parent; anchors.margins: 9
+                            text: analysisOverlay.modeIndex === 2 ? "index 1" : "all"
+                            color: "#eef6ff"; selectByMouse: true; clip: true
+                        }
+                    }
+                    Rectangle {
+                        width: 160; height: 36; radius: 6
+                        color: "#172235"; border.color: "#506889"
+                        TextInput {
+                            id: analysisSecondaryInput
+                            anchors.fill: parent; anchors.margins: 9
+                            text: "index 2"
+                            color: "#eef6ff"; selectByMouse: true; clip: true
+                        }
+                    }
+                    Rectangle {
+                        width: 130; height: 36; radius: 6
+                        color: "#172235"; border.color: "#506889"
+                        TextInput {
+                            id: analysisResultNameInput
+                            anchors.fill: parent; anchors.margins: 9
+                            text: ""
+                            color: "#eef6ff"; selectByMouse: true; clip: true
+                            Text { anchors.fill: parent; text: "optional name";
+                                   visible: parent.text.length === 0;
+                                   color: "#71849c"; verticalAlignment: Text.AlignVCenter }
+                        }
+                    }
+                }
+
+                Row {
+                    spacing: 9
+                    Text {
+                        width: 265
+                        text: analysisOverlay.modeIndex === 0 || analysisOverlay.modeIndex === 1
+                              ? "Selection"
+                              : analysisOverlay.modeIndex === 2
+                                ? "From / To selections"
+                                : analysisOverlay.modeIndex === 3
+                                  ? "First / optional second selection"
+                                  : "Selection / reference frame"
+                        color: "#91a8c2"; font.pixelSize: 12
+                    }
+                    Rectangle {
+                        width: 85; height: 34; radius: 6
+                        color: "#172235"; border.color: "#506889"
+                        TextInput {
+                            id: analysisCutoffInput
+                            anchors.fill: parent; anchors.margins: 8
+                            text: analysisOverlay.modeIndex === 4 ? "0" : "4.0"
+                            color: "#eef6ff"; validator: DoubleValidator { bottom: 0 }
+                        }
+                    }
+                    ToolbarButton {
+                        label: "Compute and store"
+                        action: function() {
+                            if (analysisOverlay.modeIndex === 0)
+                                viewport.analyzeCenter(analysisPrimaryInput.text, "centroid", analysisResultNameInput.text)
+                            else if (analysisOverlay.modeIndex === 1)
+                                viewport.analyzeCenter(analysisPrimaryInput.text, "com", analysisResultNameInput.text)
+                            else if (analysisOverlay.modeIndex === 2)
+                                viewport.analyzeDistance(analysisPrimaryInput.text, analysisSecondaryInput.text, "raw", analysisResultNameInput.text)
+                            else if (analysisOverlay.modeIndex === 3)
+                                viewport.analyzeContacts(analysisPrimaryInput.text, analysisSecondaryInput.text, Number(analysisCutoffInput.text), "raw", analysisResultNameInput.text)
+                            else
+                                viewport.analyzeTrajectoryRmsd(analysisPrimaryInput.text, Math.max(0, Number(analysisCutoffInput.text)), analysisResultNameInput.text)
+                        }
+                    }
+                }
+
+                Text {
+                    text: "Results (click a row for provenance)"
+                    color: "#dceaff"; font.pixelSize: 14; font.bold: true
+                }
+
+                Flickable {
+                    width: parent.width
+                    height: 210
+                    contentHeight: analysisResultColumn.height
+                    clip: true
+
+                    Column {
+                        id: analysisResultColumn
+                        width: parent.width
+                        spacing: 6
+                        Repeater {
+                            model: viewport.analysisItems
+                            Rectangle {
+                                required property var modelData
+                                width: analysisResultColumn.width
+                                height: 42
+                                radius: 6
+                                color: "#172235"
+                                border.color: modelData.sourceStatus === "current" ? "#405270" : "#b27843"
+
+                                Text {
+                                    anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                                    anchors.leftMargin: 10; width: 330
+                                    text: "#" + parent.modelData.id + " · " + parent.modelData.name +
+                                          " · " + parent.modelData.kind + " · " + parent.modelData.sourceStatus
+                                    color: "#eef6ff"; elide: Text.ElideRight
+                                }
+                                Row {
+                                    anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                                    anchors.rightMargin: 7; spacing: 6
+                                    ToolbarButton {
+                                        label: parent.parent.modelData.visible ? "Hide" : "Show"
+                                        action: function() { viewport.setAnalysisResultVisible(
+                                            parent.parent.modelData.id, !parent.parent.modelData.visible) }
+                                    }
+                                    ToolbarButton {
+                                        label: "JSON"
+                                        action: function() {
+                                            root.analysisExportResultId = parent.parent.modelData.id
+                                            root.analysisExportFormat = "json"
+                                            analysisExportDialog.open()
+                                        }
+                                    }
+                                    ToolbarButton {
+                                        label: "CSV"
+                                        action: function() {
+                                            root.analysisExportResultId = parent.parent.modelData.id
+                                            root.analysisExportFormat = "csv"
+                                            analysisExportDialog.open()
+                                        }
+                                    }
+                                    ToolbarButton {
+                                        label: "Delete"
+                                        action: function() { viewport.deleteAnalysisResult(parent.parent.modelData.id) }
+                                    }
+                                }
+                                MouseArea {
+                                    anchors.left: parent.left; anchors.top: parent.top; anchors.bottom: parent.bottom
+                                    width: 340
+                                    onClicked: analysisResultDetail.text =
+                                        viewport.analysisResultJson(parent.modelData.id)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    width: parent.width; height: 105; radius: 6
+                    color: "#0b1320"; border.color: "#405270"
+                    Text {
+                        id: analysisResultDetail
+                        anchors.fill: parent; anchors.margins: 9
+                        text: "Select a result to inspect algorithm, units, PBC, missing-data policy and source status."
+                        color: "#a9bdd5"; font.pixelSize: 11
+                        wrapMode: Text.WrapAnywhere; elide: Text.ElideRight
+                    }
+                }
+            }
+        }
+    }
+
+    Rectangle {
+        id: renderSettingsOverlay
+        objectName: "renderSettingsOverlay"
+        property int scopeIndex: 0
+        property var scopes: ["global", "object", "state", "atom", "bond"]
+        anchors.fill: parent
+        visible: false
+        color: "#99050812"
+        z: 74
+
+        MouseArea { anchors.fill: parent }
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: 590
+            height: 390
+            radius: 12
+            color: "#f0101827"
+            border.color: "#69aef0"
+
+            Column {
+                anchors.fill: parent
+                anchors.margins: 22
+                spacing: 14
+
+                Text {
+                    text: "Render Settings"
+                    color: "#eef6ff"
+                    font.pixelSize: 20
+                    font.bold: true
+                }
+
+                Text {
+                    width: parent.width
+                    text: "The editor calls the same typed setting operation as CLI and Python. State is current; atom and bond IDs are 1-based."
+                    color: "#a9bdd5"
+                    font.pixelSize: 13
+                    wrapMode: Text.WordWrap
+                }
+
+                Row {
+                    spacing: 10
+
+                    Rectangle {
+                        width: 210; height: 36; radius: 6
+                        color: "#172235"; border.color: "#506889"
+                        TextInput {
+                            id: renderSettingNameInput
+                            anchors.fill: parent; anchors.margins: 9
+                            text: "sphere_scale"
+                            color: "#eef6ff"; selectByMouse: true
+                        }
+                    }
+                    Rectangle {
+                        width: 125; height: 36; radius: 6
+                        color: "#172235"; border.color: "#506889"
+                        TextInput {
+                            id: renderSettingValueInput
+                            anchors.fill: parent; anchors.margins: 9
+                            text: "1.0"
+                            color: "#eef6ff"; selectByMouse: true
+                        }
+                    }
+                    Rectangle {
+                        width: 125; height: 36; radius: 6
+                        color: "#172235"; border.color: "#506889"
+                        TextInput {
+                            id: renderSettingTargetInput
+                            anchors.fill: parent; anchors.margins: 9
+                            text: "1"
+                            color: "#eef6ff"; selectByMouse: true
+                        }
+                    }
+                }
+
+                Row {
+                    spacing: 9
+
+                    ToolbarButton {
+                        label: "Scope: " + renderSettingsOverlay.scopes[renderSettingsOverlay.scopeIndex]
+                        action: function() {
+                            renderSettingsOverlay.scopeIndex =
+                                (renderSettingsOverlay.scopeIndex + 1) % renderSettingsOverlay.scopes.length
+                        }
+                    }
+                    ToolbarButton {
+                        label: "Set"
+                        selected: true
+                        action: function() {
+                            viewport.applyRenderSetting("set", renderSettingNameInput.text,
+                                                        renderSettingValueInput.text,
+                                                        renderSettingsOverlay.scopes[renderSettingsOverlay.scopeIndex],
+                                                        renderSettingTargetInput.text)
+                            renderSettingResult.text = viewport.renderSettingJson(
+                                renderSettingNameInput.text,
+                                renderSettingsOverlay.scopes[renderSettingsOverlay.scopeIndex],
+                                renderSettingTargetInput.text)
+                        }
+                    }
+                    ToolbarButton {
+                        label: "Get"
+                        action: function() {
+                            renderSettingResult.text = viewport.renderSettingJson(
+                                renderSettingNameInput.text,
+                                renderSettingsOverlay.scopes[renderSettingsOverlay.scopeIndex],
+                                renderSettingTargetInput.text)
+                        }
+                    }
+                    ToolbarButton {
+                        label: "Unset"
+                        action: function() {
+                            viewport.applyRenderSetting("unset", renderSettingNameInput.text, "",
+                                                        renderSettingsOverlay.scopes[renderSettingsOverlay.scopeIndex],
+                                                        renderSettingTargetInput.text)
+                        }
+                    }
+                    ToolbarButton {
+                        label: "Reset scope"
+                        action: function() {
+                            viewport.applyRenderSetting("reset", "", "",
+                                                        renderSettingsOverlay.scopes[renderSettingsOverlay.scopeIndex],
+                                                        renderSettingTargetInput.text)
+                        }
+                    }
+                }
+
+                Rectangle {
+                    width: parent.width; height: 92; radius: 7
+                    color: "#111b2a"; border.color: "#405270"
+                    Text {
+                        id: renderSettingResult
+                        objectName: "renderSettingResult"
+                        anchors.fill: parent; anchors.margins: 10
+                        color: "#bcd4ec"; font.pixelSize: 12
+                        wrapMode: Text.WrapAnywhere; elide: Text.ElideRight
+                    }
+                }
+
+                ToolbarButton {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    label: "Close"
+                    action: function() { renderSettingsOverlay.visible = false }
+                }
+            }
+        }
+    }
+
+    Rectangle {
         id: viewsOverlay
         objectName: "viewsOverlay"
         property bool clearArmed: false
@@ -706,7 +1341,8 @@ Window {
         property bool preserveProjectionScale: true
         property bool stereoEnabled: false
         property int stereoModeIndex: 0
-        property var stereoModes: ["side_by_side", "crosseye", "walleye", "anaglyph"]
+        property var stereoModes: ["side_by_side", "crosseye", "walleye", "anaglyph",
+                                   "row_interleaved", "column_interleaved", "checkerboard"]
         property bool stereoSwapEyes: false
         property int anaglyphModeIndex: 4
         property var anaglyphModes: ["true", "gray", "color", "half_color", "optimized"]

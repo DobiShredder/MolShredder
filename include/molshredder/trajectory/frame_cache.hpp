@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstddef>
+#include <condition_variable>
+#include <cstdint>
 #include <future>
 #include <list>
 #include <memory>
@@ -16,6 +18,7 @@ namespace molshredder::trajectory {
 
 struct FrameCacheStats {
   std::size_t payload_budget_bytes{};
+  std::size_t max_in_flight_count{};
   std::size_t resident_payload_bytes{};
   std::size_t resident_frame_count{};
   std::size_t hits{};
@@ -23,6 +26,8 @@ struct FrameCacheStats {
   std::size_t evictions{};
   std::size_t oversized_bypasses{};
   std::size_t duplicate_decodes{};
+  std::size_t coalesced_waits{};
+  std::size_t in_flight_count{};
 };
 
 struct PrefetchResult {
@@ -38,7 +43,8 @@ class FrameCache final : public model::CoordinateSource,
  public:
   [[nodiscard]] static operation::Result<std::shared_ptr<FrameCache>> create(
       std::shared_ptr<const model::CoordinateSource> source,
-      std::size_t payload_budget_bytes);
+      std::size_t payload_budget_bytes,
+      std::size_t max_in_flight_count = 8U);
 
   [[nodiscard]] std::size_t atom_count() const noexcept override {
     return source_->atom_count();
@@ -67,10 +73,20 @@ class FrameCache final : public model::CoordinateSource,
     std::list<std::size_t>::iterator recency;
   };
 
+  struct InFlight {
+    std::condition_variable condition;
+    bool complete{};
+    std::shared_ptr<const model::CoordinateFrame> frame;
+    std::optional<operation::Error> error;
+    std::uint64_t cache_generation{};
+  };
+
   FrameCache(std::shared_ptr<const model::CoordinateSource> source,
-             std::size_t payload_budget_bytes)
+             std::size_t payload_budget_bytes,
+             std::size_t max_in_flight_count)
       : source_{std::move(source)},
-        payload_budget_bytes_{payload_budget_bytes} {}
+        payload_budget_bytes_{payload_budget_bytes},
+        max_in_flight_count_{max_in_flight_count} {}
 
   void promote_locked(std::unordered_map<std::size_t, Entry>::iterator entry)
       const;
@@ -81,15 +97,20 @@ class FrameCache final : public model::CoordinateSource,
 
   std::shared_ptr<const model::CoordinateSource> source_;
   std::size_t payload_budget_bytes_{};
+  std::size_t max_in_flight_count_{};
   mutable std::mutex mutex_;
   mutable std::list<std::size_t> recency_;
   mutable std::unordered_map<std::size_t, Entry> entries_;
+  mutable std::unordered_map<std::size_t, std::shared_ptr<InFlight>>
+      in_flight_;
   mutable std::size_t resident_payload_bytes_{};
   mutable std::size_t hits_{};
   mutable std::size_t misses_{};
   mutable std::size_t evictions_{};
   mutable std::size_t oversized_bypasses_{};
   mutable std::size_t duplicate_decodes_{};
+  mutable std::size_t coalesced_waits_{};
+  mutable std::uint64_t cache_generation_{};
 };
 
 }  // namespace molshredder::trajectory

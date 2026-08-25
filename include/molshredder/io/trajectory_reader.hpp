@@ -446,8 +446,19 @@ struct TrajectoryOpenContext {
 };
 
 struct OpenedTrajectory {
+  OpenedTrajectory(TrajectoryFormat trajectory_format,
+                   std::shared_ptr<const model::CoordinateSource>
+                       coordinate_source,
+                   std::vector<std::int64_t> decoded_ids = {})
+      : format{trajectory_format},
+        source{std::move(coordinate_source)},
+        decoded_source_atom_ids{std::move(decoded_ids)} {}
+
   TrajectoryFormat format{TrajectoryFormat::auto_detect};
   std::shared_ptr<const model::CoordinateSource> source;
+  // IDs correspond to the decoded source order. Empty means that the format
+  // cannot substantiate even source-serial exact identity.
+  std::vector<std::int64_t> decoded_source_atom_ids;
 };
 
 [[nodiscard]] std::string_view to_string(TrajectoryFormat format) noexcept;

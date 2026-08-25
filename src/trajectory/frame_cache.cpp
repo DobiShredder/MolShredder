@@ -1,6 +1,7 @@
 #include "molshredder/trajectory/frame_cache.hpp"
 
 #include <algorithm>
+#include <exception>
 #include <limits>
 #include <string>
 #include <type_traits>
@@ -89,7 +90,8 @@ std::size_t frame_payload_bytes(
 
 operation::Result<std::shared_ptr<FrameCache>> FrameCache::create(
     std::shared_ptr<const model::CoordinateSource> source,
-    std::size_t payload_budget_bytes) {
+    std::size_t payload_budget_bytes,
+    std::size_t max_in_flight_count) {
   if (source == nullptr) {
     return operation::Result<std::shared_ptr<FrameCache>>::failure(
         operation::Error{operation::ErrorCode::invalid_argument,
@@ -100,9 +102,14 @@ operation::Result<std::shared_ptr<FrameCache>> FrameCache::create(
         operation::Error{operation::ErrorCode::invalid_argument,
                          "frame cache payload budget must be positive", {}});
   }
+  if (max_in_flight_count == 0U) {
+    return operation::Result<std::shared_ptr<FrameCache>>::failure(
+        operation::Error{operation::ErrorCode::invalid_argument,
+                         "frame cache in-flight limit must be positive", {}});
+  }
   return operation::Result<std::shared_ptr<FrameCache>>::success(
-      std::shared_ptr<FrameCache>(
-          new FrameCache(std::move(source), payload_budget_bytes)));
+      std::shared_ptr<FrameCache>(new FrameCache(
+          std::move(source), payload_budget_bytes, max_in_flight_count)));
 }
 
 void FrameCache::promote_locked(
@@ -135,8 +142,9 @@ void FrameCache::insert_locked(
 
 operation::Result<std::shared_ptr<const model::CoordinateFrame>>
 FrameCache::read_frame(std::size_t frame_index) const {
+  std::shared_ptr<InFlight> in_flight;
   {
-    std::lock_guard lock{mutex_};
+    std::unique_lock lock{mutex_};
     auto found = entries_.find(frame_index);
     if (found != entries_.end()) {
       ++hits_;
@@ -146,29 +154,72 @@ FrameCache::read_frame(std::size_t frame_index) const {
           found->second.frame);
     }
     ++misses_;
+    const auto existing = in_flight_.find(frame_index);
+    if (existing != in_flight_.end()) {
+      in_flight = existing->second;
+      ++coalesced_waits_;
+      in_flight->condition.wait(lock, [&] { return in_flight->complete; });
+      if (in_flight->error.has_value())
+        return operation::Result<
+            std::shared_ptr<const model::CoordinateFrame>>::failure(
+            *in_flight->error);
+      return operation::Result<
+          std::shared_ptr<const model::CoordinateFrame>>::success(
+          in_flight->frame);
+    }
+    if (in_flight_.size() >= max_in_flight_count_) {
+      return operation::Result<
+          std::shared_ptr<const model::CoordinateFrame>>::failure(
+          operation::Error{
+              operation::ErrorCode::resource_exhausted,
+              "frame cache concurrent decode limit is exhausted", {}});
+    }
+    in_flight = std::make_shared<InFlight>();
+    in_flight->cache_generation = cache_generation_;
+    in_flight_.emplace(frame_index, in_flight);
   }
-  const auto decoded = source_->read_frame(frame_index);
+  const auto decoded = [&]()
+      -> operation::Result<std::shared_ptr<const model::CoordinateFrame>> {
+    try {
+      return source_->read_frame(frame_index);
+    } catch (const std::exception& exception) {
+      return operation::Result<
+          std::shared_ptr<const model::CoordinateFrame>>::failure(
+          operation::Error{operation::ErrorCode::internal,
+                           "trajectory decoder threw an exception: " +
+                               std::string{exception.what()},
+                           {}});
+    } catch (...) {
+      return operation::Result<
+          std::shared_ptr<const model::CoordinateFrame>>::failure(
+          operation::Error{operation::ErrorCode::internal,
+                           "trajectory decoder threw an unknown exception",
+                           {}});
+    }
+  }();
+  std::unique_lock lock{mutex_};
   if (!decoded.has_value()) {
+    in_flight->error = decoded.error();
+  } else {
+    const auto payload_bytes = frame_payload_bytes(*decoded.value());
+    in_flight->frame = decoded.value();
+    if (payload_bytes > payload_budget_bytes_) {
+      ++oversized_bypasses_;
+    } else if (in_flight->cache_generation == cache_generation_) {
+      insert_locked(frame_index, decoded.value(), payload_bytes);
+    }
+  }
+  in_flight->complete = true;
+  in_flight_.erase(frame_index);
+  lock.unlock();
+  in_flight->condition.notify_all();
+  if (in_flight->error.has_value())
     return operation::Result<
         std::shared_ptr<const model::CoordinateFrame>>::failure(
-        decoded.error());
-  }
-  const auto payload_bytes = frame_payload_bytes(*decoded.value());
-  std::lock_guard lock{mutex_};
-  auto raced = entries_.find(frame_index);
-  if (raced != entries_.end()) {
-    ++duplicate_decodes_;
-    promote_locked(raced);
-    return operation::Result<
-        std::shared_ptr<const model::CoordinateFrame>>::success(
-        raced->second.frame);
-  }
-  if (payload_bytes > payload_budget_bytes_) {
-    ++oversized_bypasses_;
-    return decoded;
-  }
-  insert_locked(frame_index, decoded.value(), payload_bytes);
-  return decoded;
+        *in_flight->error);
+  return operation::Result<
+      std::shared_ptr<const model::CoordinateFrame>>::success(
+      in_flight->frame);
 }
 
 std::future<operation::Result<PrefetchResult>> FrameCache::prefetch_async(
@@ -206,9 +257,11 @@ std::future<operation::Result<PrefetchResult>> FrameCache::prefetch_async(
 
 FrameCacheStats FrameCache::stats() const noexcept {
   std::lock_guard lock{mutex_};
-  return FrameCacheStats{payload_budget_bytes_, resident_payload_bytes_,
-                         entries_.size(), hits_, misses_, evictions_,
-                         oversized_bypasses_, duplicate_decodes_};
+  return FrameCacheStats{payload_budget_bytes_, max_in_flight_count_,
+                         resident_payload_bytes_, entries_.size(), hits_,
+                         misses_, evictions_, oversized_bypasses_,
+                         duplicate_decodes_, coalesced_waits_,
+                         in_flight_.size()};
 }
 
 void FrameCache::clear() noexcept {
@@ -216,6 +269,7 @@ void FrameCache::clear() noexcept {
   entries_.clear();
   recency_.clear();
   resident_payload_bytes_ = 0U;
+  ++cache_generation_;
 }
 
 }  // namespace molshredder::trajectory

@@ -140,4 +140,25 @@ make_stereo_pair(const Camera &camera, StereoParameters parameters) {
                  {StereoEye::right, right.value()}, order});
 }
 
+operation::Result<StereoEye>
+interleaved_eye_at(StereoMode mode, std::uint64_t global_x,
+                   std::uint64_t global_y, bool swap_eyes) {
+  bool use_left{};
+  switch (mode) {
+  case StereoMode::row_interleaved: use_left = (global_y & 1U) != 0U; break;
+  case StereoMode::column_interleaved:
+    use_left = (global_x & 1U) != 0U;
+    break;
+  case StereoMode::checkerboard:
+    use_left = ((global_x + global_y) & 1U) != 0U;
+    break;
+  default:
+    return operation::Result<StereoEye>::failure(invalid(
+        "pixel eye assignment requires an interleaved stereo mode"));
+  }
+  if (swap_eyes) use_left = !use_left;
+  return operation::Result<StereoEye>::success(
+      use_left ? StereoEye::left : StereoEye::right);
+}
+
 } // namespace molshredder::scene

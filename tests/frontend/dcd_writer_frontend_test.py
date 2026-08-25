@@ -34,7 +34,7 @@ def main() -> int:
     }
     attach_args = {
         "path": str(output), "file-format": "dcd",
-        "cache-mib": "1", "prefetch-frames": "0"
+        "cache-mib": "1", "prefetch-frames": "0", "mapping": "index"
     }
     python_results = [
         molshredder.invoke("load", load_args),
@@ -67,7 +67,7 @@ def main() -> int:
         f'invoke "traj save" --file-format "dcd" --overwrite "true" '
         f'--path "{output}" --title "frontend DCD"\n'
         f'invoke "traj load" --cache-mib "1" --file-format "dcd" '
-        f'--path "{output}" --prefetch-frames "0"\n'
+        f'--path "{output}" --prefetch-frames "0" --mapping "index"\n'
         "exit\n"
     )
     completed = subprocess.run(

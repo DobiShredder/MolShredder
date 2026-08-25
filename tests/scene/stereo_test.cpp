@@ -58,6 +58,31 @@ int main() {
           !anaglyph_mode_from_string("amber_blue").has_value(),
       "anaglyph mode parsing must cover PyMOL's public modes 0 through 4");
 
+  const auto row_even =
+      interleaved_eye_at(StereoMode::row_interleaved, 10U, 20U);
+  const auto row_odd =
+      interleaved_eye_at(StereoMode::row_interleaved, 10U, 21U);
+  const auto column_odd =
+      interleaved_eye_at(StereoMode::column_interleaved, 11U, 20U);
+  const auto checker_odd =
+      interleaved_eye_at(StereoMode::checkerboard, 11U, 20U);
+  const auto checker_even =
+      interleaved_eye_at(StereoMode::checkerboard, 11U, 21U);
+  const auto swapped =
+      interleaved_eye_at(StereoMode::checkerboard, 11U, 20U, true);
+  const auto invalid_interleave =
+      interleaved_eye_at(StereoMode::anaglyph, 0U, 0U);
+  passed &= expect(
+      row_even.has_value() && row_even.value() == StereoEye::right &&
+          row_odd.has_value() && row_odd.value() == StereoEye::left &&
+          column_odd.has_value() && column_odd.value() == StereoEye::left &&
+          checker_odd.has_value() && checker_odd.value() == StereoEye::left &&
+          checker_even.has_value() &&
+          checker_even.value() == StereoEye::right && swapped.has_value() &&
+          swapped.value() == StereoEye::right &&
+          !invalid_interleave.has_value(),
+      "interleaved modes must assign odd global pixels to left eye and honor swap");
+
   StereoParameters invalid;
   invalid.shift_percent = std::numeric_limits<double>::infinity();
   passed &= expect(!validate_stereo_parameters(invalid).has_value(),

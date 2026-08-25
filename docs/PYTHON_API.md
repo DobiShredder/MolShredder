@@ -1,5 +1,95 @@
 # Python API prototype
 
+## Persistent analysis results
+
+```python
+created = molshredder.invoke("analyze center", {
+    "selection": "all", "mode": "com", "result-name": "protein-com",
+})
+detail = molshredder.invoke("result get", {"id": str(created["data"]["result_id"])})
+molshredder.invoke("result hide", {"id": "1"})
+molshredder.invoke("result export", {
+    "id": "1", "path": "protein-com.json", "output-format": "json",
+})
+```
+
+GUI와 CLI도 같은 Registry/Workspace operation을 호출한다. Stable result identity, algorithm/unit/PBC/
+missing-data provenance, source staleness, overlay와 failure-atomic export contract은
+[Persistent analysis results](ANALYSIS_RESULTS.md)를 참고한다.
+
+## Trajectory attachment
+
+Trajectory attach도 GUI/CLI와 동일한 mandatory mapping policy를 사용한다.
+
+```python
+molshredder.invoke("traj load", {
+    "path": "run.h5md", "mapping": "exact",
+    "cache-mib": "256", "prefetch-frames": "4",
+})
+molshredder.invoke("traj load", {
+    "path": "reordered.dcd", "mapping": "explicit",
+    "atom-map": "3,2,1", "expected-topology-version": "1",
+})
+```
+
+성공 data의 `atom_mapping`과 `semantics`는 policy/identity strength, compared axes, source/canonical unit,
+channel availability, conversion과 missing-data policy를 보존한다. 상세 계약은
+[Trajectory attachment](TRAJECTORY_ATTACHMENT.md)를 참고한다.
+
+Python `invoke`는 canonical operation의 최종 상태를 동기적으로 반환한다. Desktop의 background attach/
+seek도 별도 구현이 아니라 같은 Workspace plan/build/commit kernel을 bounded scheduler에서 실행하므로
+mapping, provenance, cancellation과 failure-atomic 결과 계약이 일치한다.
+
+## Atomic batch load
+
+```python
+result = molshredder.invoke("load batch", {
+    "paths": "protein.pdb;ligand.sdf",
+    "names": "protein;ligand",
+    "file-format": "auto",
+})
+```
+
+`paths`와 선택적인 `names`는 semicolon-delimited이며 name 수는 path 수와 같아야 한다. 모든 input이
+parse/build/name 검증을 통과한 뒤 한 번만 commit한다. 오류나 cancellation에서는 기존 Workspace가
+변하지 않는다. C++ background orchestration의 memory, progress와 stale-generation 경계는
+[Bounded task execution](TASK_EXECUTION.md)을 참고한다.
+
+## Render settings
+
+Python은 CLI와 GUI가 사용하는 같은 typed operation을 호출한다.
+
+```python
+molshredder.invoke("setting set", {
+    "name": "sphere_scale",
+    "value": "1.5",
+    "scope": "global",
+})
+
+result = molshredder.invoke("setting get", {
+    "name": "sphere_scale",
+    "scope": "global",
+})
+```
+
+Atom/bond override에는 topology의 non-zero 64-bit stable ID인 `target`을 추가한다. Operation envelope와 failure-atomic
+규칙은 CLI, GUI ActionAdapter와 동일하다.
+
+## Object lifecycle
+
+```python
+molshredder.invoke("object rename", {"object": "current", "name": "protein"})
+molshredder.invoke("object reorder", {"object": "protein", "position": "1"})
+molshredder.invoke("object delete", {"object": "protein"})
+molshredder.invoke("object topology-retain", {
+    "atom-ids": "3,1", "expected-version": "1",
+})
+```
+
+Position은 1-based이며 result envelope에 stable `object_id`, `scene_node_id`, old/new position,
+ordered object ID와 delete cleanup count가 포함된다. 이 operation은 CLI와 Desktop panel이
+사용하는 것과 동일하다.
+
 MolShredder는 pybind11로 생성한 실제 CPython extension module을 제공한다. 현재 prototype은 Python
 3.12 ABI로 빌드되며 CLI와 toolkit-independent GUI action이 사용하는 동일한 C++ registry,
 normalization, validation, handler와 result envelope를 호출한다.
@@ -71,6 +161,14 @@ secondary_structure = molshredder.invoke(
     "analyze secondary-structure", {"selection": "protein"}
 )
 
+molshredder.invoke("show", {"representation": "sticks", "selection": "protein"})
+molshredder.invoke("hide", {"representation": "lines", "selection": "resn HOH"})
+molshredder.invoke("as", {"representation": "cartoon", "selection": "chain A"})
+visibility = molshredder.invoke(
+    "toggle", {"representation": "everything", "selection": "resn LIG"}
+)
+# visibility["data"] includes the resolved primitive mask and membership counts.
+
 molshredder.invoke("view set", {"target-x": "3", "distance": "25"})
 molshredder.invoke(
     "view center",
@@ -113,6 +211,10 @@ molshredder.invoke(
      "anaglyph-mode": "optimized"},
 )
 stereo_capabilities = molshredder.invoke("stereo modes")
+molshredder.invoke(
+    "stereo set",
+    {"enabled": "true", "mode": "checkerboard", "swap-eyes": "false"},
+)
 molshredder.invoke("view store", {"name": "active site close-up"})
 views = molshredder.invoke("view list")
 molshredder.invoke(

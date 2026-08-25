@@ -17,21 +17,23 @@ metadata string payload를 합한 `frame_payload_bytes()` 기준이다. Containe
 - Eviction/clear는 cache의 reference만 제거한다. Consumer가 가진 immutable frame lease는 계속 유효하다.
 - Decode failure는 cache state를 변경하지 않는다.
 
-`FrameCacheStats`는 budget/resident bytes, resident count, hit/miss, eviction, oversized bypass와 concurrent
-duplicate decode를 누적 기록한다. `clear()`는 resident만 비우고 telemetry는 보존한다.
+`FrameCacheStats`는 budget/resident bytes, resident count, hit/miss, eviction, oversized bypass,
+coalesced wait와 현재/max in-flight 수를 기록한다. `clear()`는 resident와 cache generation만
+교체하고 telemetry는 보존한다. Clear 이전 decode가 늦게 끝나도 새 generation에는 삽입되지 않는다.
 
 ## Concurrency와 prefetch
 
 Lookup/LRU/stat mutation은 mutex로 보호하고 실제 source decode는 lock 밖에서 수행한다. 따라서 느린
-I/O가 cache hit를 막지 않는다. 같은 miss가 동시에 들어오면 현재는 둘 다 decode할 수 있으며 먼저
-insert된 frame을 공유하고 `duplicate_decodes`를 증가시킨다. In-flight request coalescing은 benchmark로
-중복 비용이 확인되면 추가한다.
+I/O가 cache hit를 막지 않는다. 같은 frame miss는 하나의 in-flight decode와 immutable lease/error를
+공유한다. 서로 다른 frame의 동시 decode는 생성 시 고정한 한도(기본 8)를 넘으면
+`resource_exhausted`로 거부한다. Semantic decorator는 최근 normalized frame의 weak lease를 최대 16개
+기억해 sequential validation이 직전 frame을 불필요하게 다시 decode하지 않게 한다.
 
 `prefetch_async(indices, cancellation)`은 cache를 `shared_ptr`로 유지한 worker에서 요청 순서대로
 `read_frame()`을 호출한다. Shared cancellation token은 각 frame decode 전에 확인한다. Cancellation과
 decode error는 partial completed count 또는 frame index를 포함한 stable error로 반환한다. 현재
-`std::async` task 하나를 prefetch 호출마다 만드는 저수준 foundation이다. Application orchestration은
-아래 `PrefetchScheduler`가 담당하며 shared decoder thread pool은 후속 성능 작업으로 남아 있다.
+`std::async` task 하나를 prefetch 호출마다 만드는 저수준 foundation이다. Application attach/interactive
+seek는 bounded shared `TaskScheduler`를 사용하고 read-ahead window는 아래 `PrefetchScheduler`가 담당한다.
 
 Application path는 `PrefetchScheduler`를 사용한다. Object당 단일 `jthread`가 최신 generation의
 direction-aware timeline hint를 처리해 attach/seek/range/play/tick의 오래된 read-ahead를 supersede한다.
@@ -42,10 +44,9 @@ decode cancellation은 아직 없으며 object destruction은 진행 중 read가
 ## 현재 한계
 
 - Playback 속도/cache hit-rate 기반 adaptive window와 priority
-- In-flight decode coalescing과 priority queue
 - Persistent DCD handle, batched reads와 decoder thread pool
 - Cache pressure callback, pinning과 separate CPU/GPU budgets
-- In-flight single-frame cancellation, async progress callback 및 Qt event-loop integration
+- Reader 내부에서 이미 진행 중인 단일 file read의 강제 cancellation
 - Benchmark 기반 default budget
 
 이 계약은 전체 trajectory를 memory에 올리지 않는다는 목표를 유지하면서 cache policy와 frame lease
@@ -71,11 +72,17 @@ positive finite FPS와 elapsed seconds를 fractional transition accumulator로 �
 mode/direction에서 앞으로 방문할 frame을 simulation하고 중복을 제거해 `FrameCache::prefetch_async()`에
 전달할 수 있다. Hint 생성은 실제 playback state를 변경하지 않는다.
 
-Application `traj load`는 indexed source를 `FrameCache`로 감싸 active `MolecularSystem` 및 scene node에
-설치한다. `traj frame/play/range/tick`은 timeline/clock copy에서 seek/advance하고 도착 frame decode와
-representation rebuild가 성공한 뒤에만 state를 commit한다. `traj tick --elapsed-ms`가 UI clock
-adapter의 portable core boundary다. Desktop precise Qt timer가 이 boundary에 실제 elapsed time을
-전달하며 frame transition이 있을 때만 render packet을 교체한다. Cache-miss decode/rebuild의 background
-completion scheduling은 아직 없다.
+Application `traj load`와 `traj frame`은 동일한 owner-thread plan → bounded worker candidate → owner-thread
+commit kernel을 사용한다. Commit은 object/system/topology/cache, render setting, visibility, named selection과
+representation input snapshot이 그대로일 때만 성공한다. CLI/Python canonical operation은 이 kernel을
+동기적으로 끝까지 호출하고 Desktop attach/seek는 generation 기반 background service로 예약한다. Rapid
+seek는 이전 generation을 취소·폐기하고 latest candidate만 commit한다. Progress/cancel 상태는 Qt owner
+thread로 전달되며 failure/cancel/stale completion은 기존 Workspace를 유지한다.
+
+Frame commit 뒤 primitive topology, pick identity와 material layout이 같으면 Desktop은 position/normal/
+instance data만 dynamic QRhi buffer에 갱신한다. Cardinality, representation 또는 material이 달라지면
+검증된 full-buffer rebuild로 자동 fallback한다. `traj tick --elapsed-ms`가 UI clock adapter의 portable
+core boundary이며 frame transition이 있을 때만 packet을 교체한다.
 사용자-facing 계약은
-[Trajectory commands](TRAJECTORY_COMMANDS.md)에 둔다.
+[Trajectory commands](TRAJECTORY_COMMANDS.md)와
+[Trajectory attachment contract](TRAJECTORY_ATTACHMENT.md)에 둔다.

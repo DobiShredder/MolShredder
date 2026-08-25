@@ -14,7 +14,7 @@
 
 namespace molshredder::command {
 
-enum class ParameterType { text, integer, number, boolean };
+enum class ParameterType { text, integer, unsigned_integer, number, boolean };
 enum class UndoPolicy { not_applicable, not_undoable, undoable };
 
 struct ParameterSpec {

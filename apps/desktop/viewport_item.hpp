@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -19,6 +20,7 @@
 #include "molshredder/application/default_registry.hpp"
 #include "molshredder/application/dispatcher.hpp"
 #include "molshredder/application/runtime_diagnostics.hpp"
+#include "molshredder/application/task_service.hpp"
 #include "molshredder/application/workspace.hpp"
 #include "molshredder/command/registry.hpp"
 #include "molshredder/gui/action_adapter.hpp"
@@ -50,6 +52,12 @@ class MolecularViewport : public QQuickRhiItem {
   Q_PROPERTY(
       QString playbackDirection READ playbackDirection NOTIFY trajectoryChanged)
   Q_PROPERTY(double trajectoryFps READ trajectoryFps NOTIFY trajectoryChanged)
+  Q_PROPERTY(bool trajectoryTaskRunning READ trajectoryTaskRunning NOTIFY
+                 trajectoryTaskChanged)
+  Q_PROPERTY(double trajectoryTaskProgress READ trajectoryTaskProgress NOTIFY
+                 trajectoryTaskChanged)
+  Q_PROPERTY(QString trajectoryTaskStage READ trajectoryTaskStage NOTIFY
+                 trajectoryTaskChanged)
   Q_PROPERTY(bool hasVolume READ hasVolume NOTIFY volumeChanged)
   Q_PROPERTY(double volumeLevel READ volumeLevel NOTIFY volumeChanged)
   Q_PROPERTY(double volumeMinimum READ volumeMinimum NOTIFY volumeChanged)
@@ -57,6 +65,10 @@ class MolecularViewport : public QQuickRhiItem {
   Q_PROPERTY(QString scriptOutput READ scriptOutput NOTIFY scriptOutputChanged)
   Q_PROPERTY(bool scriptRunning READ scriptRunning NOTIFY scriptRunningChanged)
   Q_PROPERTY(QVariantList viewItems READ viewItems NOTIFY viewsChanged)
+  Q_PROPERTY(QVariantList analysisItems READ analysisItems NOTIFY
+                 analysisResultsChanged)
+  Q_PROPERTY(QVariantList analysisLabelItems READ analysisLabelItems NOTIFY
+                 analysisResultsChanged)
 
 public:
   explicit MolecularViewport(QQuickItem *parent = nullptr);
@@ -99,6 +111,15 @@ public:
   [[nodiscard]] double trajectoryFps() const noexcept {
     return trajectory_fps_;
   }
+  [[nodiscard]] bool trajectoryTaskRunning() const noexcept {
+    return trajectory_task_running_;
+  }
+  [[nodiscard]] double trajectoryTaskProgress() const noexcept {
+    return trajectory_task_progress_;
+  }
+  [[nodiscard]] const QString &trajectoryTaskStage() const noexcept {
+    return trajectory_task_stage_;
+  }
   [[nodiscard]] bool hasVolume() const noexcept { return has_volume_; }
   [[nodiscard]] double volumeLevel() const noexcept { return volume_level_; }
   [[nodiscard]] double volumeMinimum() const noexcept { return volume_minimum_; }
@@ -108,12 +129,21 @@ public:
   }
   [[nodiscard]] bool scriptRunning() const noexcept { return script_running_; }
   [[nodiscard]] QVariantList viewItems() const;
+  [[nodiscard]] QVariantList analysisItems() const;
+  [[nodiscard]] QVariantList analysisLabelItems() const;
+  Q_INVOKABLE QString trajectoryMappingText() const;
 
   Q_INVOKABLE bool loadStructure(const QUrl &url);
+  Q_INVOKABLE bool loadStructures(const QVariantList &urls);
   Q_INVOKABLE bool saveStructure(const QUrl &url, bool all_frames);
   Q_INVOKABLE bool loadTrajectory(const QUrl &url,
-                                  const QString &coordinate_unit);
+                                  const QString &coordinate_unit,
+                                  const QString &mapping =
+                                      QStringLiteral("index"),
+                                  const QString &atom_map = {});
   Q_INVOKABLE bool seekTrajectory(qulonglong frame);
+  Q_INVOKABLE void cancelTrajectoryTask();
+  [[nodiscard]] bool waitForTrajectoryTask(int timeout_milliseconds);
   Q_INVOKABLE bool setTrajectoryPlaying(bool playing);
   Q_INVOKABLE bool stepTrajectory(int direction);
   Q_INVOKABLE bool setPlaybackMode(const QString &mode);
@@ -121,6 +151,16 @@ public:
   Q_INVOKABLE bool setTrajectoryFps(double frames_per_second);
   Q_INVOKABLE bool tickTrajectory(double elapsed_milliseconds);
   Q_INVOKABLE bool setRepresentation(const QString &representation);
+  Q_INVOKABLE bool applyRepresentationVisibility(const QString &operation,
+                                                  const QString &selection);
+  Q_INVOKABLE bool applyRenderSetting(const QString &operation,
+                                      const QString &name,
+                                      const QString &value,
+                                      const QString &scope,
+                                      const QString &target);
+  Q_INVOKABLE QString renderSettingJson(const QString &name,
+                                        const QString &scope,
+                                        const QString &target) const;
   Q_INVOKABLE bool setVolumeIsosurface(double level);
   Q_INVOKABLE void orbit(double delta_x, double delta_y);
   Q_INVOKABLE void pan(double delta_x, double delta_y);
@@ -168,10 +208,34 @@ public:
   Q_INVOKABLE void pickAt(double x, double y);
   Q_INVOKABLE bool activateObject(qulonglong object_id);
   Q_INVOKABLE bool setObjectVisible(qulonglong object_id, bool visible);
+  Q_INVOKABLE bool renameObject(qulonglong object_id, const QString &name);
+  Q_INVOKABLE bool deleteObject(qulonglong object_id);
+  Q_INVOKABLE bool reorderObject(qulonglong object_id,
+                                 qulonglong one_based_position);
   Q_INVOKABLE bool runPythonScript(const QUrl &url);
   Q_INVOKABLE void cancelPythonScript();
   Q_INVOKABLE void clearScriptOutput();
   Q_INVOKABLE QString systemInfoJson() const;
+  Q_INVOKABLE bool analyzeCenter(const QString &selection,
+                                 const QString &mode,
+                                 const QString &result_name);
+  Q_INVOKABLE bool analyzeDistance(const QString &from, const QString &to,
+                                   const QString &pbc,
+                                   const QString &result_name);
+  Q_INVOKABLE bool analyzeContacts(const QString &first,
+                                   const QString &second, double cutoff,
+                                   const QString &pbc,
+                                   const QString &result_name);
+  Q_INVOKABLE bool analyzeTrajectoryRmsd(const QString &selection,
+                                         qulonglong reference,
+                                         const QString &result_name);
+  Q_INVOKABLE QString analysisResultJson(qulonglong result_id) const;
+  Q_INVOKABLE bool setAnalysisResultVisible(qulonglong result_id,
+                                            bool visible);
+  Q_INVOKABLE bool deleteAnalysisResult(qulonglong result_id);
+  Q_INVOKABLE bool exportAnalysisResult(qulonglong result_id,
+                                        const QUrl &url,
+                                        const QString &format);
   Q_INVOKABLE bool storeNamedView(const QString &name);
   Q_INVOKABLE bool recallNamedView(const QString &name);
   Q_INVOKABLE bool recallNamedViewAnimated(const QString &name,
@@ -193,6 +257,15 @@ public:
   }
   [[nodiscard]] std::uint64_t packetRevision() const noexcept {
     return packet_revision_;
+  }
+  [[nodiscard]] bool packetIncremental() const noexcept {
+    return packet_incremental_;
+  }
+  [[nodiscard]] const QString &packetUpdateMode() const noexcept {
+    return packet_update_mode_;
+  }
+  [[nodiscard]] const QString &packetUpdateReason() const noexcept {
+    return packet_update_reason_;
   }
   [[nodiscard]] const scene::Camera *camera() const noexcept {
     return camera_.has_value() ? &camera_.value() : nullptr;
@@ -220,12 +293,14 @@ signals:
   void selectionChanged();
   void objectsChanged();
   void trajectoryChanged();
+  void trajectoryTaskChanged();
   void volumeChanged();
   void scriptOutputChanged();
   void scriptRunningChanged();
   void scriptFinished(bool succeeded);
   void graphicsDiagnosticsChanged();
   void viewsChanged();
+  void analysisResultsChanged();
 
 private:
   [[nodiscard]] bool rebuildRepresentation();
@@ -233,6 +308,7 @@ private:
   void syncActiveRepresentationName();
   void syncTrajectoryState();
   void onPlaybackTick();
+  void onTrajectoryTaskPoll();
   void onCameraAnimationTick();
   [[nodiscard]] bool invokeTrajectoryAction(
       std::string command_name,
@@ -260,6 +336,9 @@ private:
   gui::ActionAdapter actions_;
   render::RenderPacket packet_;
   std::uint64_t packet_revision_{1U};
+  bool packet_incremental_{};
+  QString packet_update_mode_{QStringLiteral("full")};
+  QString packet_update_reason_{QStringLiteral("initial packet")};
   float angle_{};
   QString status_text_{
       QStringLiteral("Demo packet · open a PDB or mmCIF file")};
@@ -287,6 +366,16 @@ private:
   QString playback_mode_{QStringLiteral("once")};
   QString playback_direction_{QStringLiteral("forward")};
   double trajectory_fps_{30.0};
+  std::shared_ptr<operation::TaskScheduler> trajectory_task_scheduler_;
+  std::shared_ptr<std::atomic_uint64_t> trajectory_task_generation_;
+  std::optional<application::ScheduledTrajectoryFrame>
+      pending_trajectory_frame_;
+  std::optional<application::ScheduledTrajectoryLoad>
+      pending_trajectory_load_;
+  QTimer trajectory_task_timer_;
+  bool trajectory_task_running_{};
+  double trajectory_task_progress_{};
+  QString trajectory_task_stage_{QStringLiteral("idle")};
   bool has_volume_{};
   double volume_level_{};
   double volume_minimum_{};

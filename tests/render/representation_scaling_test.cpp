@@ -65,7 +65,8 @@ int main() {
       atom_count, render::AtomVisual{{0.5F, 0.7F, 0.9F, 1.0F}, 1.5});
 
   render::RepresentationRequest request{
-      topology.value().get(), frame.value().get(), 0U, 1U, visuals, {}, {}, {}};
+      topology.value().get(), frame.value().get(), 0U, 1U, visuals, {}, {}, {},
+      nullptr, 0U, {}};
   const auto started = std::chrono::steady_clock::now();
   const auto lines = render::build_representation(request);
   const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(

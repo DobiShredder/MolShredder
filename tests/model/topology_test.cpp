@@ -1,3 +1,4 @@
+#include <array>
 #include <cstdint>
 #include <iostream>
 #include <limits>
@@ -178,6 +179,14 @@ int main() {
                          topology.bonds()[0].first.value == 0 &&
                          topology.bonds()[0].second.value == 1,
                      "bond endpoints must use canonical stable indices");
+    passed &= expect(
+        topology.atom_ids() ==
+                std::vector<AtomId>{{1U}, {2U}, {3U}, {4U}} &&
+            topology.bond_ids() == std::vector<BondId>{{1U}} &&
+            topology.atom_index(AtomId{4U}) == AtomIndex{3U} &&
+            topology.atom_id(AtomIndex{1U}) == AtomId{2U} &&
+            topology.bond_index(BondId{1U}) == 0U,
+        "topology snapshots must expose non-zero 64-bit atom/bond identities independently of dense indices");
     passed &= expect(topology.angles().size() == 1 &&
                          topology.dihedrals().size() == 1 &&
                          topology.impropers().size() == 1 &&
@@ -227,7 +236,102 @@ int main() {
     passed &= expect(built.value()->version() == 1 &&
                          !built.value()->source_metadata().contains("revision"),
                      "new topology version must not mutate its predecessor");
+
+    auto mutation = TopologyBuilder::from(*built.value());
+    const std::array retained{AtomId{4U}, AtomId{2U}, AtomId{1U}};
+    const auto retained_error = mutation.retain_atoms(retained);
+    const auto remapped = mutation.build();
+    passed &= expect(!retained_error.has_value() && remapped.has_value(),
+                     "stable-ID retain/reorder mutation must build");
+    if (remapped.has_value()) {
+      const auto mapping = remap_topology(*built.value(), *remapped.value());
+      const auto *mass = remapped.value()->properties().find("mass");
+      const auto *mass_values =
+          mass == nullptr
+              ? nullptr
+              : std::get_if<std::vector<double>>(&mass->values);
+      passed &= expect(
+          remapped.value()->version() == 2U &&
+              remapped.value()->atom_ids() ==
+                  std::vector<AtomId>{{4U}, {2U}, {1U}} &&
+              remapped.value()->bond_ids() == std::vector<BondId>{{1U}} &&
+              remapped.value()->bonds()[0].first == AtomIndex{1U} &&
+              remapped.value()->bonds()[0].second == AtomIndex{2U} &&
+              remapped.value()->angles().empty() &&
+              remapped.value()->dihedrals().empty() &&
+              remapped.value()->impropers().empty() &&
+              remapped.value()->cmap_terms().empty() &&
+              mass_values != nullptr &&
+              *mass_values == std::vector<double>{15.999, 12.011, 14.007} &&
+              mapping.source_atoms ==
+                  std::vector<std::optional<AtomIndex>>{
+                      AtomIndex{2U}, AtomIndex{1U}, std::nullopt,
+                      AtomIndex{0U}} &&
+              mapping.source_bonds ==
+                  std::vector<std::optional<std::size_t>>{0U} &&
+              !remapped.value()->atom_index(AtomId{3U}).has_value(),
+          "mutation must preserve surviving identity/property/bond state and expose exact deleted/reordered remap");
+
+      const AtomReference surviving{{kTopologyReferenceSchemaVersion, 42U,
+                                     built.value()->version()},
+                                    AtomId{4U}};
+      const AtomReference deleted{{kTopologyReferenceSchemaVersion, 42U,
+                                   built.value()->version()},
+                                  AtomId{3U}};
+      const auto resolved =
+          resolve_atom_reference(surviving, 42U, *remapped.value());
+      passed &= expect(
+          resolved.has_value() && resolved.value().index == AtomIndex{0U} &&
+              resolved.value().remapped &&
+              !resolve_atom_reference(deleted, 42U, *remapped.value())
+                   .has_value() &&
+              !resolve_atom_reference(surviving, 7U, *remapped.value())
+                   .has_value() &&
+              validate_topology_snapshot(surviving.snapshot, 42U,
+                                         *remapped.value())
+                  .has_value(),
+          "persistent references must follow surviving IDs while deleted, cross-object and stale snapshots fail explicitly");
+    }
+    const auto duplicate_retain =
+        mutation.retain_atoms(std::array{AtomId{1U}, AtomId{1U}});
+    const auto unknown_retain = mutation.retain_atoms(std::array{AtomId{99U}});
+    passed &= expect(duplicate_retain.has_value() && unknown_retain.has_value(),
+                     "duplicate and stale stable IDs must fail without changing the builder snapshot");
   }
+
+
+  TopologyBuilder insertion_builder;
+  const auto insertion_residue = insertion_builder.add_residue(
+      ResidueRecord{"UNK", 1, "", "A", ""});
+  static_cast<void>(insertion_builder.add_atom(
+      AtomRecord{"A", 6U, insertion_residue.value(), "", 0, std::nullopt}));
+  const auto insertion_source = insertion_builder.build();
+  auto insertion_next = TopologyBuilder::from(*insertion_source.value());
+  static_cast<void>(insertion_next.add_atom(
+      AtomRecord{"B", 7U, insertion_residue.value(), "", 0, std::nullopt}));
+  const auto insertion_target = insertion_next.build();
+  const auto insertion_remap =
+      remap_topology(*insertion_source.value(), *insertion_target.value());
+  passed &= expect(
+      insertion_target.has_value() &&
+          insertion_target.value()->atom_ids() ==
+              std::vector<AtomId>{{1U}, {2U}} &&
+          insertion_remap.target_atoms ==
+              std::vector<std::optional<AtomIndex>>{AtomIndex{0U},
+                                                     std::nullopt},
+      "inserted atoms must receive new stable IDs and an explicit missing source ordinal");
+  auto deletion_builder = TopologyBuilder::from(*insertion_target.value());
+  static_cast<void>(deletion_builder.retain_atoms(std::array{AtomId{1U}}));
+  const auto after_deletion = deletion_builder.build();
+  auto reinsertion_builder = TopologyBuilder::from(*after_deletion.value());
+  static_cast<void>(reinsertion_builder.add_atom(
+      AtomRecord{"C", 8U, insertion_residue.value(), "", 0, std::nullopt}));
+  const auto after_reinsertion = reinsertion_builder.build();
+  passed &= expect(
+      after_reinsertion.has_value() &&
+          after_reinsertion.value()->atom_ids() ==
+              std::vector<AtomId>{{1U}, {3U}},
+      "deleted atom identities must never be reused by a later insertion");
 
   return passed ? 0 : 1;
 }

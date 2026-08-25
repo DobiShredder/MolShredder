@@ -32,7 +32,7 @@ def main() -> int:
     }
     attach_args = {
         "path": str(trajectory), "file-format": "trr",
-        "cache-mib": "1", "prefetch-frames": "0"
+        "cache-mib": "1", "prefetch-frames": "0", "mapping": "index"
     }
     frame_args = {"frame": "1"}
     save_args = {
@@ -65,7 +65,7 @@ def main() -> int:
         f'invoke "load" --file-format "xyz" --name "trr-system" '
         f'--path "{topology}"\n'
         f'invoke "traj load" --cache-mib "1" --file-format "trr" '
-        f'--path "{trajectory}" --prefetch-frames "0"\n'
+        f'--path "{trajectory}" --prefetch-frames "0" --mapping "index"\n'
         'invoke "traj frame" --frame "1"\n'
         f'invoke "traj save" --file-format "trr" --overwrite "true" '
         f'--path "{output}"\n'

@@ -49,19 +49,20 @@ int main(int argc, char *argv[]) {
       molshredder::command::file_command_descriptors();
   const auto trajectory_descriptors =
       molshredder::command::trajectory_command_descriptors();
-  passed &= expect(descriptors.size() == 8,
-                   "foundation grammar must define exactly eight commands");
+  passed &= expect(descriptors.size() == 16,
+                   "foundation grammar must define exactly sixteen commands");
   passed &= expect(aliases.size() == 9,
                    "foundation grammar v1 must expose nine shorthand aliases");
   passed &= expect(view_aliases.size() == 3,
                    "view grammar must expose three projection aliases");
   passed &= expect(
-      file_descriptors.size() == 6U &&
+      file_descriptors.size() == 7U &&
           file_descriptors.front().canonical_name == "format list" &&
           file_descriptors[3].canonical_name == "volume save" &&
           file_descriptors[4].canonical_name == "volume isosurface" &&
-          file_descriptors.back().canonical_name == "save",
-      "additive file grammar must expose format, volume and save commands");
+          file_descriptors[5].canonical_name == "save" &&
+          file_descriptors.back().canonical_name == "load batch",
+      "additive file grammar must expose format, volume, save and batch commands");
   const auto has_provider = [](const auto &descriptor) {
     const auto found = std::find_if(
         descriptor.parameters.begin(), descriptor.parameters.end(),
@@ -85,6 +86,7 @@ int main(int argc, char *argv[]) {
           has_provider(file_descriptors[0]) &&
           has_provider(file_descriptors[1]) &&
           has_provider(file_descriptors[3]) &&
+          has_provider(file_descriptors[5]) &&
           has_provider(file_descriptors.back()),
       "all structure and volume I/O commands must expose provider override");
   const auto trajectory_save = std::find_if(
@@ -102,6 +104,22 @@ int main(int argc, char *argv[]) {
                        has_provider(*trajectory_load) &&
                        has_provider(*trajectory_save),
                    "trajectory load/save must expose provider override");
+  const auto trajectory_mapping =
+      trajectory_load == trajectory_descriptors.end()
+          ? std::vector<molshredder::command::ParameterSpec>::const_iterator{}
+          : std::find_if(trajectory_load->parameters.begin(),
+                         trajectory_load->parameters.end(),
+                         [](const auto &parameter) {
+                           return parameter.name == "mapping";
+                         });
+  passed &= expect(
+      trajectory_load != trajectory_descriptors.end() &&
+          trajectory_mapping != trajectory_load->parameters.end() &&
+          trajectory_mapping->required &&
+          !trajectory_mapping->default_value.has_value() &&
+          trajectory_mapping->allowed_values ==
+              std::vector<std::string>{"exact", "index", "explicit"},
+      "trajectory load must require an explicit topology mapping policy");
   const auto trajectory_load_format =
       trajectory_load == trajectory_descriptors.end()
           ? std::vector<molshredder::command::ParameterSpec>::const_iterator{}
@@ -201,6 +219,14 @@ int main(int argc, char *argv[]) {
                        missing_path.error().message ==
                            "missing required parameter: path",
                    "load must require an explicit path");
+  const auto setting_set = registry.normalize(
+      Invocation{"setting set", {{"name", "line_width"}, {"value", "2.5"}}});
+  passed &= expect(
+      setting_set.has_value() &&
+          setting_set.value().arguments.at("scope") == "global" &&
+          setting_set.value().arguments.at("object") == "current" &&
+          setting_set.value().arguments.at("state") == "current",
+      "render setting grammar must normalize one canonical frontend schema");
 
   TaskContext context;
   const auto invoked =

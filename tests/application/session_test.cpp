@@ -39,6 +39,18 @@ int main(int argc, char** argv) {
                   {"update", "false"}}},
       {"show", {{"representation", "spheres"},
                 {"selection", "@chain_a"}}},
+      {"hide", {{"representation", "spheres"},
+                 {"selection", "index 1"}}},
+      {"toggle", {{"representation", "lines"},
+                   {"selection", "index 1"}}},
+      {"as", {{"representation", "licorice"},
+               {"selection", "index 2"}}},
+      {"setting set", {{"name", "sphere_scale"},
+                       {"object", "current"},
+                       {"scope", "atom"},
+                       {"state", "current"},
+                       {"target", "1"},
+                       {"value", "2.5"}}},
       {"measure distance", {{"from", "index 1"},
                             {"mode", "atom"},
                             {"pbc", "raw"},
@@ -66,12 +78,32 @@ int main(int argc, char** argv) {
   const auto replay =
       application::replay_session(parsed.value(), dispatcher, context);
   passed &= expect(
-      replay.has_value() && replay.value().applied_count == 4U &&
-          replay.value().outcomes.size() == 4U &&
+      replay.has_value() && replay.value().applied_count == 8U &&
+          replay.value().outcomes.size() == 8U &&
           workspace->object_count() == 1U &&
-          workspace->active_object()->representations.size() == 1U &&
-          workspace->measurements().size() == 1U,
-      "session replay must reconstruct foundation Workspace state");
+          workspace->active_object()->representations.size() == 2U &&
+          workspace->active_object()
+                  ->representation_visibility
+                  .visible_count(render::RepresentationKind::lines)
+                  .value() == 1U &&
+          workspace->active_object()
+                  ->representation_visibility
+                  .visible_count(render::RepresentationKind::sticks)
+                  .value() == 1U &&
+          workspace->active_object()
+                  ->representation_visibility
+                  .visible_count(render::RepresentationKind::spheres)
+                  .value() == 0U &&
+          std::get<double>(workspace->resolve_render_setting(
+              "sphere_scale", {workspace->active_object()->id, 0U, 1U, 0U})
+                               .value()
+                               .value) == 2.5 &&
+          workspace->measurements().size() == 1U &&
+          workspace->analysis_results().size() == 1U &&
+          workspace->analysis_results()[0].kind ==
+              application::AnalysisResultKind::distance &&
+          workspace->analysis_results()[0].overlay_visible,
+      "session replay must reconstruct exact representation visibility and foundation Workspace state");
 
   auto final_camera_parameters = workspace->camera().parameters();
   final_camera_parameters.target = {3.25, -2.5, 7.75};
@@ -85,7 +117,7 @@ int main(int argc, char** argv) {
   const auto final_camera = workspace->set_camera(final_camera_parameters);
   scene::StereoParameters final_stereo;
   final_stereo.enabled = true;
-  final_stereo.mode = scene::StereoMode::walleye;
+  final_stereo.mode = scene::StereoMode::checkerboard;
   final_stereo.swap_eyes = true;
   final_stereo.shift_percent = 3.0;
   final_stereo.anaglyph_mode = scene::AnaglyphMode::gray;
@@ -183,6 +215,57 @@ int main(int argc, char** argv) {
                "molshredder-session 1\ngenerator 0.1.0\nnot-invoke\n")
                .has_value(),
       "unknown schema and malformed session lines must fail honestly");
+
+  application::SessionDocument lifecycle_journal;
+  lifecycle_journal.generator_version = std::string{version()};
+  lifecycle_journal.invocations = {
+      {"load", {{"file-format", "pdb"}, {"name", "alpha"},
+                {"path", fixture.string()}}},
+      {"load", {{"file-format", "pdb"}, {"name", "beta"},
+                {"path", fixture.string()}}},
+      {"load", {{"file-format", "pdb"}, {"name", "gamma"},
+                {"path", fixture.string()}}},
+      {"object visibility", {{"id", "2"}, {"visible", "false"}}},
+      {"object activate", {{"id", "1"}}},
+      {"object rename", {{"name", "delta"}, {"object", "2"}}},
+      {"object reorder", {{"object", "3"}, {"position", "1"}}},
+      {"object delete", {{"object", "current"}}},
+      {"object topology-retain",
+       {{"atom-ids", "3,1"}, {"expected-version", "1"}}}};
+  const auto lifecycle_text =
+      application::serialize_session(lifecycle_journal);
+  const auto lifecycle_parsed =
+      lifecycle_text.has_value()
+          ? application::parse_session(lifecycle_text.value())
+          : operation::Result<application::SessionDocument>::failure(
+                lifecycle_text.error());
+  auto lifecycle_workspace = std::make_shared<application::Workspace>();
+  const auto lifecycle_registry =
+      application::make_default_registry(lifecycle_workspace);
+  const application::Dispatcher lifecycle_dispatcher{lifecycle_registry};
+  operation::TaskContext lifecycle_context;
+  const auto lifecycle_replay = lifecycle_parsed.has_value()
+                                    ? application::replay_session(
+                                          lifecycle_parsed.value(),
+                                          lifecycle_dispatcher,
+                                          lifecycle_context)
+                                    : operation::Result<
+                                          application::SessionReplayResult>::
+                                          failure(lifecycle_parsed.error());
+  const auto lifecycle_objects = lifecycle_workspace->list_objects();
+  passed &= expect(
+      lifecycle_replay.has_value() &&
+          lifecycle_replay.value().applied_count == 9U &&
+          lifecycle_objects.size() == 2U && lifecycle_objects[0].id == 3U &&
+          lifecycle_objects[0].name == "gamma" &&
+          lifecycle_objects[1].id == 2U &&
+          lifecycle_objects[1].name == "delta" &&
+          lifecycle_objects[1].atom_count == 2U &&
+          lifecycle_workspace->objects()[1].system->topology()->version() == 2U &&
+          lifecycle_objects[1].active && !lifecycle_objects[1].visible &&
+          lifecycle_workspace->scene()->selection().contains(
+              lifecycle_workspace->objects()[1].scene_node),
+      "session replay must preserve object rename/delete/reorder order, active identity and visibility");
 
   application::SessionDocument failing;
   failing.generator_version = std::string{version()};

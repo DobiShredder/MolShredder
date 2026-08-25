@@ -43,15 +43,22 @@ int main(int argc, char** argv) {
   const auto center = trigger(
       gui, "analyze center",
       {{"selection", "chain A"}, {"mode", "centroid"},
-       {"precision", "6"}, {"unit", "nanometer"}});
+       {"precision", "6"}, {"unit", "nanometer"},
+       {"result-name", "chain-center"}});
   const auto com = trigger(
       gui, "analyze center",
       {{"selection", "all"}, {"mode", "com"},
-       {"precision", "6"}, {"unit", "angstrom"}});
+       {"precision", "6"}, {"unit", "angstrom"},
+       {"result-name", "all-com"}});
   const auto distance = trigger(
       gui, "measure distance",
       {{"from", "index 1"}, {"to", "index 2"}, {"mode", "atom"},
        {"pbc", "minimum-image"}, {"precision", "6"},
-       {"unit", "nanometer"}});
-  return print(center) && print(com) && print(distance) ? 0 : 1;
+       {"unit", "nanometer"}, {"result-name", "atom-distance"}});
+  const auto detail = trigger(gui, "result get", {{"id", "2"}});
+  const auto list = trigger(gui, "result list", {});
+  return print(center) && print(com) && print(distance) && print(detail) &&
+                 print(list)
+             ? 0
+             : 1;
 }

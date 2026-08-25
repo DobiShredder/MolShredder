@@ -155,14 +155,18 @@ open_trajectory(const std::filesystem::path &path, TrajectoryFormat format,
         {resolved, source.value()});
   }
   if (resolved == TrajectoryFormat::h5md) {
+    H5mdMetadata metadata;
     const auto source =
         open_h5md(path, context.expected_atom_count, context.source_atom_ids,
-                  context.coordinate_unit, context.h5md_particle_group);
+                  context.coordinate_unit, context.h5md_particle_group,
+                  &metadata);
     if (!source.has_value()) {
       return operation::Result<OpenedTrajectory>::failure(source.error());
     }
-    return operation::Result<OpenedTrajectory>::success(
-        {resolved, source.value()});
+    return operation::Result<OpenedTrajectory>::success(OpenedTrajectory{
+        resolved, source.value(),
+        metadata.has_ids ? context.source_atom_ids
+                         : std::vector<std::int64_t>{}});
   }
   if (resolved == TrajectoryFormat::lammps_dump) {
     if (!context.coordinate_unit.has_value()) {
@@ -178,7 +182,7 @@ open_trajectory(const std::filesystem::path &path, TrajectoryFormat format,
       return operation::Result<OpenedTrajectory>::failure(source.error());
     }
     return operation::Result<OpenedTrajectory>::success(
-        {resolved, source.value()});
+        OpenedTrajectory{resolved, source.value(), context.source_atom_ids});
   }
   if (resolved == TrajectoryFormat::binpos) {
     if (!context.expected_atom_count.has_value()) {

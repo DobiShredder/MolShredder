@@ -25,9 +25,11 @@ molshredder analyze trajectory rmsd|rmsf [--selection EXPR]
                                         [--missing error|skip]
                                         [--precision 0..15]
                                         [--unit angstrom|nanometer]
-molshredder traj load --path PATH [--file-format auto|dcd|trr|xtc|mdcrd|crd|crdbox|netcdf|nc|ncdf|ncrst|h5md|rst7|lammps|binpos] [--provider auto|native]
+molshredder traj load --path PATH --mapping exact|index|explicit [--file-format auto|dcd|trr|xtc|mdcrd|crd|crdbox|netcdf|nc|ncdf|ncrst|h5md|rst7|lammps|binpos] [--provider auto|native]
                                       [--coordinate-unit auto|angstrom|nanometer]
                                       [--particle-group NAME]
+                                      [--atom-map STABLE_ID,...]
+                                      [--expected-topology-version VERSION]
                                       [--cache-mib POSITIVE_INTEGER]
                                       [--prefetch-frames NON_NEGATIVE_INTEGER]
 molshredder traj save --path PATH [--file-format auto|dcd|binpos|rst7|trr|mdcrd|crd|crdbox] [--provider auto|native]
@@ -55,7 +57,9 @@ Python에서는 같은 순서로 `molshredder.invoke()`를 호출한다.
 
 ## Attach
 
-`traj load`는 active topology의 atom 수를 reader에 전달해 trajectory와 topology mismatch를 attach
+`traj load`는 `--mapping`을 반드시 요구한다. Exact/index/explicit stable-ID policy, stale topology rejection,
+모든 atom channel remap과 machine-readable provenance는
+[Trajectory attachment contract](TRAJECTORY_ATTACHMENT.md)를 따른다. Active topology의 atom 수 mismatch도 attach
 전에 거부한다. `auto`는 case-insensitive `.dcd`, `.trr`, `.xtc`, `.mdcrd`, `.crd`, `.nc`, `.ncdf`, `.netcdf`, `.ncrst`, `.h5md`, `.rst7`, `.restrt`, `.inpcrd`, `.inprst`
 suffix를 사용하고 알 수 없는 suffix는 추정하지 않는다. 기본 cache budget은 256 MiB이며 decoded scientific payload의 상한이지 process RSS
 hard limit은 아니다.
@@ -96,7 +100,8 @@ H5MD는 `.h5md` 또는 `--file-format h5md`로 연다. `--particle-group`을 주
 추정하지 않고 이름을 요구한다. Position unit은 H5MD `unit`을 우선하며 없을 때만
 `--coordinate-unit angstrom|nanometer`가 필요하다. Static/dynamic `id`로 source atom을 topology
 `source_serial`에 재배치하고 fill value와 `presence`로 frame별 missing atom을 보존한다. 독립 channel
-timeline은 source step으로 position frame과 맞추며, 맞지 않는 optional channel은 해당 frame에서 생략한다.
+timeline은 source step으로 position frame과 맞춘다. Semantic attachment layer는 frame 사이 optional channel
+availability drift를 명시적 read failure로 처리한다.
 현재 arbitrary `/observables`, partial-periodic box, writer와 external/virtual HDF5 storage는 지원하지 않는다.
 
 LAMMPS custom text dump는 `ITEM: UNITS`가 없으면 length unit을 알 수 없으므로
@@ -154,8 +159,11 @@ Clock, timeline, frame decode와 representation rebuild는 copy에서 계산하�
 
 Desktop viewport는 16 ms precise Qt timer에서 실제 elapsed milliseconds만 `traj tick`에 전달한다.
 QML은 transition이나 boundary를 계산하지 않는다. Frame이 바뀌지 않은 fractional tick은 trajectory
-state만 동기화하고 render packet/GPU geometry를 다시 올리지 않는다. Attach, seek, first/last step,
-play/pause, once/loop/rock, direction과 FPS control도 모두 같은 canonical action을 호출한다.
+state만 동기화하고 render packet/GPU geometry를 다시 올리지 않는다. Attach와 explicit seek는 bounded
+background task로 같은 canonical Workspace kernel을 호출하며 progress/cancel을 노출한다. Rapid seek는
+latest generation만 commit한다. Stable primitive layout에서는 coordinate/instance GPU buffer만 갱신하고
+layout 변화는 full rebuild로 fallback한다. First/last step, play/pause, once/loop/rock, direction과 FPS도
+같은 trajectory operation을 사용한다.
 
 Canonical session에 `traj load`, `traj frame`, `traj play`를 기록하면 external trajectory path를 다시
 열어 state를 재현한다. 따라서 session은 아직 self-contained가 아니며 파일 변경/hash 검증 정책도
@@ -163,11 +171,10 @@ Canonical session에 `traj load`, `traj frame`, `traj play`를 기록하면 exte
 
 ## 현재 한계
 
-- adaptive window/priority와 GUI event-loop completion integration
-- background cache-miss decode, rapid-seek cancellation과 frame-drop/backpressure policy
-- desktop editable range/stride, physical-time display와 topology mapping policy UI
-- in-flight single-frame decode cancellation 및 cross-object worker pool
+- adaptive prefetch window와 measured priority tuning
+- desktop editable range/stride와 physical-time display
+- reader 내부 in-flight file read의 강제 cancellation
 - 여러 molecule의 synchronized playback
-- coordinate-dependent selection과 incremental GPU representation update
+- coordinate-dependent dynamic selection 재평가
 - trajectory append/delete/write, topology detach와 original coordinate-source restore
 - file identity/hash 확인, live file mutation 감지와 transactional whole-session replay

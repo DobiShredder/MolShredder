@@ -158,6 +158,13 @@ operation::Result<double> metadata_number(const model::FrameMetadata &metadata,
   return operation::Result<double>::success(value);
 }
 
+bool internal_semantic_field(std::string_view name) {
+  return name == "molshredder.semantic_schema" ||
+         name == "molshredder.coordinate_unit" ||
+         name == "molshredder.time_unit" ||
+         name == "molshredder.coordinate_remap";
+}
+
 void append_u32(std::string &output, std::uint32_t value) {
   output.push_back(static_cast<char>((value >> 24U) & 0xffU));
   output.push_back(static_cast<char>((value >> 16U) & 0xffU));
@@ -478,7 +485,7 @@ write_dcd(const model::CoordinateFrame &frame, TrajectoryWriteOptions options,
     static_cast<void>(unused);
     if (name != "dcd.raw_delta" && name != "dcd.title" &&
         name != "dcd.signed_step" && name != "dcd.fixed_atom_count" &&
-        name != "format")
+        name != "format" && !internal_semantic_field(name))
       ++other_fields;
   }
   if (other_fields != 0U)
@@ -656,7 +663,8 @@ write_mdcrd(const model::CoordinateFrame &frame,
   for (const auto &[name, unused] : metadata.fields) {
     static_cast<void>(unused);
     if (name != "title" && name != "format" &&
-        name != "coordinate_field" && name != "box_angle_source")
+        name != "coordinate_field" && name != "box_angle_source" &&
+        !internal_semantic_field(name))
       ++other_fields;
   }
   if (other_fields != 0U) {
@@ -762,7 +770,7 @@ write_binpos(const model::CoordinateFrame &frame,
   for (const auto &[name, unused] : metadata.fields) {
     static_cast<void>(unused);
     if (name != "format" && name != "byte_order" &&
-        name != "coordinate_unit_source")
+        name != "coordinate_unit_source" && !internal_semantic_field(name))
       ++metadata_fields;
   }
   if (metadata_fields != 0U) {
@@ -982,7 +990,8 @@ write_trr_precision(const model::CoordinateFrame &frame,
     if (name != "trr.lambda" && name != "trr.nre" &&
         name != "trr.signed_step" && name != "format" &&
         name != "velocity_source_unit" &&
-        name != "velocity_scale_to_angstrom_per_ps")
+        name != "velocity_scale_to_angstrom_per_ps" &&
+        !internal_semantic_field(name))
       ++other_fields;
   }
   if (other_fields != 0U) {
@@ -1244,7 +1253,8 @@ write_rst7(const model::CoordinateFrame &frame, TrajectoryWriteOptions options,
     if (name != "title" && name != "temperature" &&
         name != "temperature_unit" && name != "format" &&
         name != "velocity_source_unit" &&
-        name != "velocity_scale_to_angstrom_per_ps") {
+        name != "velocity_scale_to_angstrom_per_ps" &&
+        !internal_semantic_field(name)) {
       ++other_fields;
     }
   }

@@ -129,8 +129,10 @@ Stereo도 `Workspace::stereo()`의 validated value가 source of truth다. `shift
 left/right camera와 adjacent viewport presentation order를 분리해 crosseye와 explicit eye swap을 결정적으로 합성한다.
 QRhi renderer는 side-by-side/crosseye/walleye에서 두 uniform buffer와 두 viewport를 실제 draw하고 picking은
 full-size monoscopic camera로 분리한다. Anaglyph는 두 full-size offscreen eye target을 독립 depth clear한 뒤
-`true`, `gray`, `color`, `half_color`, `optimized` matrix 중 하나로 fullscreen 합성한다. Quad-buffer,
-interleaved와 OpenVR는 구현 전 명시적 unsupported다.
+`true`, `gray`, `color`, `half_color`, `optimized` matrix 중 하나로 fullscreen 합성한다. Row/column/checkerboard
+interleave는 같은 eye target을 global physical-pixel parity로 선택한다. QQuick item의 global origin과 device pixel
+ratio를 매 frame 전달하므로 창 이동에도 phase가 유지되고 eye swap이 left/right phase를 반전한다. Composite resource
+생성 실패는 mono fallback으로 위장하지 않는다. Quad-buffer와 OpenVR는 구현 전 명시적 unsupported다.
 
 Named view는 name→`CameraParameters`의 정렬된 Workspace map이다. Store는 같은 name을 atomic하게 교체하며 recall은
 stored snapshot 전체를 검증·적용한다. Delete/clear 실패나 invalid snapshot은 현재 camera와 inventory를 바꾸지 않는다.

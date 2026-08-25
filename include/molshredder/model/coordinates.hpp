@@ -164,4 +164,42 @@ class InMemoryCoordinateSource final : public CoordinateSource {
   std::vector<std::shared_ptr<const CoordinateFrame>> frames_;
 };
 
+// Immutable coordinate adapter for a topology stable-ID remap. Each target
+// entry points to one source ordinal or nullopt for a newly inserted/missing
+// atom. Missing atoms use finite zero placeholders with presence=0.
+class RemappedCoordinateSource final : public CoordinateSource {
+ public:
+  [[nodiscard]] static operation::Result<
+      std::shared_ptr<const RemappedCoordinateSource>>
+  create(std::shared_ptr<const CoordinateSource> source,
+         std::vector<std::optional<std::size_t>> target_to_source);
+
+  [[nodiscard]] std::size_t atom_count() const noexcept override {
+    return target_to_source_.size();
+  }
+  [[nodiscard]] std::optional<std::size_t> frame_count() const noexcept override {
+    return source_->frame_count();
+  }
+  [[nodiscard]] FrameAccess access() const noexcept override {
+    return source_->access();
+  }
+  [[nodiscard]] operation::Result<std::shared_ptr<const CoordinateFrame>>
+  read_frame(std::size_t frame_index) const override;
+
+  [[nodiscard]] const std::vector<std::optional<std::size_t>>& mapping() const
+      noexcept {
+    return target_to_source_;
+  }
+
+ private:
+  RemappedCoordinateSource(
+      std::shared_ptr<const CoordinateSource> source,
+      std::vector<std::optional<std::size_t>> target_to_source)
+      : source_{std::move(source)},
+        target_to_source_{std::move(target_to_source)} {}
+
+  std::shared_ptr<const CoordinateSource> source_;
+  std::vector<std::optional<std::size_t>> target_to_source_;
+};
+
 }  // namespace molshredder::model

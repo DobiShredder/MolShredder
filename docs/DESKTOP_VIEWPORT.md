@@ -1,5 +1,35 @@
 # Desktop viewport prototype
 
+## Multi-file open
+
+Open dialog은 여러 molecular structure를 동시에 선택할 수 있다. Desktop은 file stem으로 충돌 없는
+기본 object name을 만들고 `load batch` canonical operation을 호출한다. 따라서 CLI와 Python과 같은
+failure-atomic transaction을 사용하며 중간 input 오류 시 일부 object가 panel에 남지 않는다. Scalar
+volume은 현재 한 번에 하나씩 연다. Batch progress는 공용 `TaskContext` status로 표시된다.
+
+## Settings editor
+
+Viewport toolbar의 **Settings**는 render setting editor를 연다. Setting name/value, scope와
+atom/bond target을 입력하고 Set, Get, Unset, Reset을 수행할 수 있다. Editor는
+Desktop 전용 state를 직접 바꾸지 않고 CLI/Python과 같은 canonical operation을 호출한다.
+Atom/bond target은 topology의 64-bit stable ID이며 실패한 적용은 현재 scene packet을 유지한다.
+
+## Analyze panel
+
+Toolbar의 **Analyze**는 centroid/COM, atom distance, contacts와 trajectory RMSD 계산 및 persistent
+result browser를 연다. 각 row에서 provenance detail, overlay show/hide, JSON/CSV export와 delete를
+사용할 수 있다. Center marker와 distance endpoint/dashed line은 QRhi packet에 포함되고 label은 같은
+world anchor를 Qt Quick screen-facing text로 투영한다. 계산과 lifecycle control은 Desktop-owned
+shortcut이 아니라 CLI/Python과 동일한 canonical operation이다. 상세 계약은
+[Persistent analysis results](ANALYSIS_RESULTS.md)에 둔다.
+
+## Object panel
+
+Object panel은 visibility, activation, inline rename, 위/아래 reorder와 delete를 제공한다.
+Delete는 첫 클릭에서 3초 confirmation 상태(`?`)로 바뀌고 두 번째 클릭에서만
+실행된다. 모든 control은 `object rename/delete/reorder` canonical operation을 호출하며
+실패한 mutation은 panel order, active object와 render packet을 변경하지 않는다.
+
 The optional desktop target uses Qt Quick 6.8.3 and `QQuickRhiItem`/QRhi. Qt
 selects Metal on macOS, Direct3D on Windows, and Vulkan or OpenGL on Linux.
 MolShredder pins the exact Qt minor because QRhi is exposed through
@@ -12,6 +42,19 @@ cmake --preset desktop
 cmake --build --preset desktop
 ctest --preset desktop -R desktop.gpu_smoke --output-on-failure
 ```
+
+Local staging install과 대표 workflow smoke:
+
+```bash
+cmake --install build/desktop --prefix build/stage
+./build/stage/molshredder_desktop.app/Contents/MacOS/molshredder_desktop \
+  --daily-workflow-smoke --open=topology.pdb --trajectory=run.dcd \
+  --trajectory-unit=angstrom --representation=spheres
+```
+
+Daily smoke는 open, representation, GPU pick을 통한 canonical selection, COM/distance result, rapid seek/play,
+task cancellation, JSON/CSV result export와 current-frame structure save를 한 Workspace에서 검증한다. 이는 local
+regression harness이며 novice/expert 사용성 연구나 signed installer 검증을 대신하지 않는다.
 
 Open PDB/PDBx-mmCIF/BinaryCIF/PQR/MOL/SDF/MOL2/PSF/GRO/G96/VTF/XYZ/XMol or an
 OpenDX or MRC2014/CCP4 scalar volume from the toolbar or at startup:
@@ -34,12 +77,24 @@ The adjacent `Traj Å`/`Traj nm` toggle supplies the explicit coordinate unit
 required by unitless formats such as LAMMPS text dump. Encoded-unit formats
 retain their native reader semantics.
 
+The `Map exact`/`Map index`/`Map IDs` control selects the mandatory topology
+mapping policy. Exact is the default and succeeds only when the format carries
+usable atom identity. Index order is an explicit user assertion. Map IDs shows
+an inline stable-ID list; the GUI submits the current topology version with the
+same canonical `traj load` action used by CLI and Python.
+
 The representation toolbar uses the same registry, dispatcher, GUI action and
 `Workspace` operations as the non-visual GUI adapter. Status shows the active
 object, representation, atom count and primitive count. Left drag orbits,
 right drag pans, the wheel dollies and double click reframes through the core
 `scene::Camera` implementation. Toolbar presets send canonical `show
 --replace true`; ordinary CLI/Python `show` remains additive.
+
+The `Show`, `Hide`, `As`, and `Toggle` toolbar actions apply the selected
+representation to `all` atoms through the same canonical actions exposed by CLI
+and Python. `As` is selection-local in the core operation; the toolbar's `all`
+scope makes it an object-wide replacement. Object visibility remains independent
+and does not erase representation membership.
 `Run Script` opens a local `.py` picker and an explicit arbitrary-code trust
 confirmation. Approved scripts execute through the same `script run` operation
 as CLI/Python and use the viewport's Registry/Workspace. Captured stdout/stderr
@@ -78,11 +133,13 @@ view and an explicit `Scale locked`/`Raw switch` policy. Opening the panel
 reads the current camera rather than showing stale defaults. Apply invokes
 canonical `view projection`; its default keeps target-plane scale continuous
 while switching perspective and orthographic cameras.
-The same panel exposes stereo enable, side-by-side/cross-eye/wall-eye/anaglyph
-mode, eye swap, objective-distance shift percentage, angular scale and five
-anaglyph color policies. QRhi draws adjacent modes with two viewports and
-anaglyph through two offscreen eye targets plus a fullscreen color compositor.
-macOS Metal captures verify both paths; Linux Vulkan/OpenGL and Windows D3D
+The same panel exposes stereo enable, side-by-side/cross-eye/wall-eye/anaglyph,
+row/column/checkerboard interleaving, eye swap, objective-distance shift
+percentage, angular scale and five anaglyph color policies. QRhi draws adjacent
+modes with two viewports. Composite modes render two full-size eye targets and
+then apply color matrices or global device-pixel parity in a fullscreen pass;
+eye swap can calibrate display phase. macOS Metal captures verify both paths;
+Linux Vulkan/OpenGL and Windows D3D
 captures remain required before cross-platform stereo parity is claimed.
 The same panel has a multiline PyMOL 18-value field. `Export current` fills it
 through canonical `view export-pymol` and selects the text for copying;
@@ -112,8 +169,10 @@ effectively-visible object's stored representations instead of discarding
 inactive objects.
 The trajectory panel shows a zero-based current/last frame and provides first,
 previous, play/pause, next, last, once/loop/rock, forward/reverse, FPS and a
-seek track. Every control invokes the shared `traj` operations; QML does not
-calculate playback transitions or decode frames.
+seek track. Attach와 seek는 bounded C++ worker에서 candidate를 만들고 GUI owner thread에서 commit한다.
+Panel은 progress와 cancel을 제공하며 rapid seek에서는 마지막 generation만 반영한다. CLI/Python의
+synchronous path와 같은 Workspace plan/build/commit kernel을 사용하고 QML은 playback transition이나
+frame decode를 구현하지 않는다.
 The Open dialog also accepts PQR, MOL/SDF V2000, Tripos MOL2, CHARMM/NAMD PSF, Amber PRMTOP,
 concatenated GROMACS GRO,
 ordered GROMOS-96 G96, VMD VTF, plain multi-frame XYZ, ASCII OpenDX and MRC/CCP4 maps. Volume files use the same
@@ -161,6 +220,12 @@ uses the active conda prefix as `CMAKE_PREFIX_PATH`.
   duration to canonical `traj tick`. The core fractional clock owns FPS,
   catch-up and once/loop/rock transitions. A tick that does not cross a frame
   boundary does not replace or upload the composite render packet.
+- Trajectory attach/seek uses a two-worker, two-entry bounded queue and a
+  fixed memory reservation budget. Progress is marshalled to the GUI thread;
+  cancellation and stale generations cannot publish Workspace state.
+- Stable trajectory packet topology updates only dynamic vertex/instance
+  buffers. Primitive cardinality, pick identity or material changes select a
+  deterministic full-buffer rebuild fallback.
 - Trusted Python scripts run on one owned worker thread. The GUI blocks
   Workspace editing, stops playback before dispatch, and only rebuilds the
   immutable render packet after the completion is queued back to the GUI
@@ -232,17 +297,17 @@ the same Metal render path.
 
 This is still a prototype, not the production renderer. Hover, visual selection
 highlight, additive/multi-pick gestures, hierarchical object editing,
-analysis/sequence/representation panels, asynchronous file and cache-miss
-decoding, transparency,
-trajectory coordinate-only updates, culling/LOD and 10k/100k/1M GPU benchmarks
+analysis/sequence/representation panels, general asynchronous structure/volume
+file decoding, transparency, culling/LOD and 10k/100k/1M GPU benchmarks
 remain open.
 Volume slice/direct-volume rendering, volume picking and a volume object panel are still open. The current contour
 panel offers bounded step/midpoint controls but not editable numeric entry, color ramps or multiple contour rows.
-The object panel itself still lacks hierarchy, rename/delete/reorder, transform,
-solo/fixed/lock and per-representation child rows. The trajectory panel still
-lacks editable first/last/stride, physical-time display, topology mapping UI,
-multi-object synchronization, background rapid seek and frame-drop policy.
-Windows D3D and Linux Vulkan/OpenGL have not yet been executed. The offscreen
+The object panel itself still lacks hierarchy, transform, solo/fixed/lock and
+per-representation child rows. The trajectory panel still lacks editable
+first/last/stride, physical-time display and multi-object synchronization.
+The manual cross-platform checkpoint workflow is configured to reject a null or unexpected backend and to run the
+installed daily workflow on Metal, Linux Vulkan/OpenGL and Windows Direct3D. Windows D3D and Linux Vulkan/OpenGL
+have not yet been executed, so configuration alone is not support evidence. The offscreen
 texture item adds a render pass; an underlay/direct render-pass path should be
 benchmarked before the final viewport composition strategy is fixed.
 

@@ -27,7 +27,8 @@ def main() -> int:
     load_args = {"path": str(prmtop), "file-format": "prmtop",
                  "name": "amber-netcdf"}
     attach_args = {"path": str(trajectory), "file-format": "netcdf",
-                   "cache-mib": "1", "prefetch-frames": "0"}
+                   "cache-mib": "1", "prefetch-frames": "0",
+                   "mapping": "index"}
     frame_args = {"frame": "1"}
     center_args = {"selection": "all", "mode": "centroid",
                    "precision": "6", "unit": "angstrom"}
@@ -50,7 +51,7 @@ def main() -> int:
         f'invoke "load" --file-format "prmtop" --name "amber-netcdf" '
         f'--path "{prmtop}"\n'
         f'invoke "traj load" --cache-mib "1" --file-format "netcdf" '
-        f'--path "{trajectory}" --prefetch-frames "0"\n'
+        f'--path "{trajectory}" --prefetch-frames "0" --mapping "index"\n'
         'invoke "traj frame" --frame "1"\n'
         'invoke "analyze center" --mode "centroid" --precision "6" '
         '--selection "all" --unit "angstrom"\n'

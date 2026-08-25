@@ -476,7 +476,8 @@ def main() -> int:
             "Python PRMTOP load did not expose topology-only state")
     rst7_attached = molshredder.invoke(
         "traj load", {"path": str(rst7_fixture), "file-format": "rst7",
-                      "cache-mib": "1", "prefetch-frames": "0"}
+                      "cache-mib": "1", "prefetch-frames": "0",
+                      "mapping": "index"}
     )
     require(rst7_attached["status"] == "ok" and
             rst7_attached["data"]["format"] == "rst7" and
@@ -487,7 +488,7 @@ def main() -> int:
         f'invoke "load" --file-format "prmtop" --name "amber" '
         f'--path "{prmtop_fixture}"\n'
         f'invoke "traj load" --cache-mib "1" --file-format "rst7" '
-        f'--path "{rst7_fixture}" --prefetch-frames "0"\nexit\n'
+        f'--path "{rst7_fixture}" --prefetch-frames "0" --mapping "index"\nexit\n'
     )
     amber_completed = subprocess.run(
         [str(cli_path), "console"], input=portable_console_script(amber_script),

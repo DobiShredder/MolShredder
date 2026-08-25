@@ -30,7 +30,7 @@ def main() -> int:
     }
     attach_args = {
         "path": str(restart), "file-format": "rst7",
-        "cache-mib": "1", "prefetch-frames": "0"
+        "cache-mib": "1", "prefetch-frames": "0", "mapping": "index"
     }
     save_args = {
         "path": str(output), "file-format": "rst7",
@@ -62,7 +62,7 @@ def main() -> int:
         f'invoke "load" --file-format "prmtop" --name "amber" '
         f'--path "{topology}"\n'
         f'invoke "traj load" --cache-mib "1" --file-format "rst7" '
-        f'--path "{restart}" --prefetch-frames "0"\n'
+        f'--path "{restart}" --prefetch-frames "0" --mapping "index"\n'
         f'invoke "traj save" --file-format "rst7" --overwrite "true" '
         f'--path "{output}" --title "frontend restart"\n'
         "exit\n"

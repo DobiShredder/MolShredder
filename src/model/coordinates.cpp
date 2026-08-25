@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <type_traits>
+#include <set>
 #include <utility>
 
 #include "molshredder/operation/error.hpp"
@@ -161,6 +162,96 @@ InMemoryCoordinateSource::read_frame(std::size_t frame_index) const {
   }
   return operation::Result<std::shared_ptr<const CoordinateFrame>>::success(
       frames_[frame_index]);
+}
+
+operation::Result<std::shared_ptr<const RemappedCoordinateSource>>
+RemappedCoordinateSource::create(
+    std::shared_ptr<const CoordinateSource> source,
+    std::vector<std::optional<std::size_t>> target_to_source) {
+  if (source == nullptr)
+    return operation::Result<
+        std::shared_ptr<const RemappedCoordinateSource>>::failure(
+        invalid("remapped coordinate source must not be null"));
+  std::set<std::size_t> used;
+  for (const auto index : target_to_source) {
+    if (!index.has_value())
+      continue;
+    if (*index >= source->atom_count())
+      return operation::Result<
+          std::shared_ptr<const RemappedCoordinateSource>>::failure(
+          invalid("coordinate remap source index is out of range"));
+    if (!used.insert(*index).second)
+      return operation::Result<
+          std::shared_ptr<const RemappedCoordinateSource>>::failure(
+          invalid("coordinate remap source indices must be unique"));
+  }
+  return operation::Result<
+      std::shared_ptr<const RemappedCoordinateSource>>::success(
+      std::shared_ptr<const RemappedCoordinateSource>(
+          new RemappedCoordinateSource(std::move(source),
+                                       std::move(target_to_source))));
+}
+
+operation::Result<std::shared_ptr<const CoordinateFrame>>
+RemappedCoordinateSource::read_frame(std::size_t frame_index) const {
+  const auto source_frame = source_->read_frame(frame_index);
+  if (!source_frame.has_value())
+    return operation::Result<std::shared_ptr<const CoordinateFrame>>::failure(
+        source_frame.error());
+  const auto remap_buffer = [this](const CoordinateBuffer &buffer) {
+    return std::visit(
+        [this](const auto &values) -> CoordinateBuffer {
+          using Values = std::decay_t<decltype(values)>;
+          Values result;
+          result.reserve(target_to_source_.size());
+          for (const auto source : target_to_source_)
+            result.push_back(source.has_value()
+                                 ? values[*source]
+                                 : typename Values::value_type{});
+          return CoordinateBuffer{std::move(result)};
+        },
+        buffer.values());
+  };
+  const auto &source = *source_frame.value();
+  auto metadata = source.metadata();
+  for (auto &[name, property] : metadata.atom_properties) {
+    static_cast<void>(name);
+    property.values = std::visit(
+        [this](const auto &values) -> AtomPropertyColumn {
+          using Values = std::decay_t<decltype(values)>;
+          if constexpr (std::is_same_v<Values, BooleanColumn>) {
+            BooleanColumn result;
+            result.values.reserve(target_to_source_.size());
+            for (const auto source : target_to_source_)
+              result.values.push_back(source.has_value()
+                                          ? values.values[*source]
+                                          : 0U);
+            return result;
+          } else {
+            Values result;
+            result.reserve(target_to_source_.size());
+            for (const auto source : target_to_source_)
+              result.push_back(source.has_value()
+                                   ? values[*source]
+                                   : typename Values::value_type{});
+            return result;
+          }
+        },
+        property.values);
+  }
+  metadata.fields.insert_or_assign("molshredder.coordinate_remap",
+                                   "stable-identity-v1");
+  std::vector<std::uint8_t> presence;
+  presence.reserve(target_to_source_.size());
+  for (const auto index : target_to_source_)
+    presence.push_back(index.has_value() && source.atom_present(*index) ? 1U
+                                                                       : 0U);
+  std::optional<CoordinateBuffer> velocities;
+  if (source.velocities().has_value())
+    velocities = remap_buffer(*source.velocities());
+  return CoordinateFrame::create(remap_buffer(source.positions()),
+                                 std::move(velocities), std::move(presence),
+                                 std::move(metadata));
 }
 
 }  // namespace molshredder::model

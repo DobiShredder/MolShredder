@@ -28,7 +28,7 @@ def main() -> int:
                  "name": "lammps"}
     attach_args = {"path": str(trajectory), "file-format": "lammps",
                    "coordinate-unit": "angstrom", "cache-mib": "1",
-                   "prefetch-frames": "0"}
+                   "prefetch-frames": "0", "mapping": "exact"}
     frame_args = {"frame": "1"}
     python_results = [
         molshredder.invoke("load", load_args),
@@ -48,7 +48,7 @@ def main() -> int:
         f'--path "{topology}"\n'
         f'invoke "traj load" --cache-mib "1" '
         f'--coordinate-unit "angstrom" --file-format "lammps" '
-        f'--path "{trajectory}" --prefetch-frames "0"\n'
+        f'--path "{trajectory}" --prefetch-frames "0" --mapping "exact"\n'
         'invoke "traj frame" --frame "1"\n'
         "exit\n"
     )
@@ -69,7 +69,7 @@ def main() -> int:
             "format json\n"
             f'invoke "load" --file-format "pdb" --path "{topology}"\n'
             f'invoke "traj load" --file-format "lammps" '
-            f'--path "{trajectory}"\nexit\n'),
+            f'--path "{trajectory}" --mapping "exact"\nexit\n'),
         text=True, capture_output=True, check=True)
     require("does not encode its coordinate unit" in missing_unit.stderr,
             "CLI must reject an implicit LAMMPS coordinate unit")

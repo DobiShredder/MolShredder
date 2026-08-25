@@ -29,7 +29,8 @@ def main() -> int:
     load_args = {"path": str(prmtop), "file-format": "prmtop",
                  "name": "amber"}
     attach_args = {"path": str(mdcrd), "file-format": "mdcrd",
-                   "cache-mib": "1", "prefetch-frames": "0"}
+                   "cache-mib": "1", "prefetch-frames": "0",
+                   "mapping": "index"}
     frame_args = {"frame": "1"}
     save_args = {"path": str(output), "file-format": "mdcrd",
                  "title": "frontend CRD", "overwrite": "true"}
@@ -38,9 +39,10 @@ def main() -> int:
                         "title": "frontend CRDBOX", "overwrite": "true"}
     crdbox_roundtrip_args = {"path": str(crdbox_output),
                              "file-format": "crdbox", "cache-mib": "1",
-                             "prefetch-frames": "0"}
+                             "prefetch-frames": "0", "mapping": "index"}
     roundtrip_args = {"path": str(output), "file-format": "mdcrd",
-                      "cache-mib": "1", "prefetch-frames": "0"}
+                      "cache-mib": "1", "prefetch-frames": "0",
+                      "mapping": "index"}
     python_results = [
         molshredder.invoke("load", load_args),
         molshredder.invoke("traj load", attach_args),
@@ -74,16 +76,16 @@ def main() -> int:
         f'invoke "load" --file-format "prmtop" --name "amber" '
         f'--path "{prmtop}"\n'
         f'invoke "traj load" --cache-mib "1" --file-format "mdcrd" '
-        f'--path "{mdcrd}" --prefetch-frames "0"\n'
+        f'--path "{mdcrd}" --prefetch-frames "0" --mapping "index"\n'
         'invoke "traj frame" --frame "1"\n'
         f'invoke "traj save" --file-format "mdcrd" --overwrite "true" '
         f'--path "{output}" --title "frontend CRD"\n'
         f'invoke "traj save" --file-format "crdbox" --overwrite "true" '
         f'--path "{crdbox_output}" --title "frontend CRDBOX"\n'
         f'invoke "traj load" --cache-mib "1" --file-format "crdbox" '
-        f'--path "{crdbox_output}" --prefetch-frames "0"\n'
+        f'--path "{crdbox_output}" --prefetch-frames "0" --mapping "index"\n'
         f'invoke "traj load" --cache-mib "1" --file-format "mdcrd" '
-        f'--path "{output}" --prefetch-frames "0"\n'
+        f'--path "{output}" --prefetch-frames "0" --mapping "index"\n'
         "exit\n"
     )
     completed = subprocess.run([str(cli_path), "console"],

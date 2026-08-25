@@ -335,9 +335,12 @@ target_sources(
     src/analysis/secondary_structure.cpp
     src/analysis/time_series.cpp
     src/application/default_registry.cpp
+    src/application/analysis_result.cpp
     src/application/dispatcher.cpp
     src/application/runtime_diagnostics.cpp
     src/application/session.cpp
+    src/application/task_service.cpp
+    src/application/representation_visibility.cpp
     src/application/workspace.cpp
     src/command/foundation_grammar.cpp
     src/command/registry.cpp
@@ -379,13 +382,16 @@ target_sources(
     src/model/molecular_system.cpp
     src/model/topology.cpp
     src/model/volume.cpp
+    src/operation/task_scheduler.cpp
     src/render/reference_renderer.cpp
     src/render/representation.cpp
+    src/render/setting_store.cpp
     src/render/volume_isosurface.cpp
     src/selection/evaluator.cpp
     src/selection/expression.cpp
     src/selection/named_selection.cpp
     src/trajectory/frame_cache.cpp
+    src/trajectory/attachment.cpp
     src/trajectory/prefetch_scheduler.cpp
     src/trajectory/playback.cpp
     src/trajectory/pbc.cpp
@@ -405,9 +411,12 @@ target_sources(
       include/molshredder/analysis/secondary_structure.hpp
       include/molshredder/analysis/time_series.hpp
       include/molshredder/application/default_registry.hpp
+      include/molshredder/application/analysis_result.hpp
       include/molshredder/application/dispatcher.hpp
       include/molshredder/application/runtime_diagnostics.hpp
+      include/molshredder/application/representation_visibility.hpp
       include/molshredder/application/session.hpp
+      include/molshredder/application/task_service.hpp
       include/molshredder/application/workspace.hpp
       include/molshredder/command/foundation_grammar.hpp
       include/molshredder/operation/common_types.hpp
@@ -415,6 +424,7 @@ target_sources(
       include/molshredder/operation/operation.hpp
       include/molshredder/operation/result.hpp
       include/molshredder/operation/task_context.hpp
+      include/molshredder/operation/task_scheduler.hpp
       include/molshredder/command/registry.hpp
       include/molshredder/command/result.hpp
       include/molshredder/command/serialization.hpp
@@ -429,11 +439,13 @@ target_sources(
       include/molshredder/model/coordinates.hpp
       include/molshredder/model/molecular_system.hpp
       include/molshredder/model/topology.hpp
+      include/molshredder/trajectory/attachment.hpp
       include/molshredder/scene/stereo.hpp
       include/molshredder/model/volume.hpp
       include/molshredder/render/packet.hpp
       include/molshredder/render/reference_renderer.hpp
       include/molshredder/render/representation.hpp
+      include/molshredder/render/setting_store.hpp
       include/molshredder/render/volume_isosurface.hpp
       include/molshredder/selection/evaluator.hpp
       include/molshredder/selection/expression.hpp
@@ -659,8 +671,8 @@ if(MOLSHREDDER_BUILD_DESKTOP)
       apps/desktop/shaders/pick_sphere.vert
       apps/desktop/shaders/pick_cylinder.vert
       apps/desktop/shaders/pick_line.vert
-      apps/desktop/shaders/anaglyph.vert
-      apps/desktop/shaders/anaglyph.frag
+      apps/desktop/shaders/stereo_composite.vert
+      apps/desktop/shaders/stereo_composite.frag
   )
   install(
     TARGETS molshredder_desktop
@@ -748,12 +760,77 @@ if(MOLSHREDDER_BUILD_DESKTOP)
         PASS_REGULAR_EXPRESSION "MolShredder desktop anaglyph ready: mode=optimized eyes=2 compositor=QRhi"
     )
     add_test(
+      NAME desktop.interleaved_smoke
+      COMMAND molshredder_desktop --smoke --interleaved-smoke
+    )
+    set_tests_properties(
+      desktop.interleaved_smoke
+      PROPERTIES
+        TIMEOUT 10
+        PASS_REGULAR_EXPRESSION "MolShredder desktop interleaved ready: modes=3 final=checkerboard eyes=2 compositor=QRhi"
+    )
+    add_test(
       NAME desktop.structure_open_smoke
       COMMAND
         molshredder_desktop --smoke
         "--camera-smoke"
         "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/synthetic_multimodel.pdb"
         "--representation=sticks"
+    )
+    add_test(
+      NAME desktop.batch_load_smoke
+      COMMAND
+        molshredder_desktop --smoke --batch-load-smoke
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/synthetic_multimodel.pdb"
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/electrostatics.pqr"
+    )
+    set_tests_properties(
+      desktop.batch_load_smoke
+      PROPERTIES
+        TIMEOUT 10
+        PASS_REGULAR_EXPRESSION "MolShredder desktop atomic batch load ready: inputs=2 objects=2 canonical=shared"
+    )
+    add_test(
+      NAME desktop.representation_visibility_smoke
+      COMMAND
+        molshredder_desktop --smoke
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/synthetic_multimodel.pdb"
+        "--representation=sticks"
+        "--representation-visibility-smoke"
+    )
+    set_tests_properties(
+      desktop.representation_visibility_smoke
+      PROPERTIES
+        TIMEOUT 10
+        PASS_REGULAR_EXPRESSION "MolShredder desktop representation visibility ready: operations=4 canonical=shared"
+    )
+    add_test(
+      NAME desktop.render_setting_smoke
+      COMMAND
+        molshredder_desktop --smoke
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/synthetic_multimodel.pdb"
+        "--representation=spheres"
+        "--render-setting-smoke"
+    )
+    set_tests_properties(
+      desktop.render_setting_smoke
+      PROPERTIES
+        TIMEOUT 10
+        PASS_REGULAR_EXPRESSION "MolShredder desktop render setting ready: typed=shared geometry=updated editor=visible"
+    )
+    add_test(
+      NAME desktop.analysis_smoke
+      COMMAND
+        molshredder_desktop --smoke
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/synthetic_multimodel.pdb"
+        "--representation=sticks"
+        "--analysis-smoke"
+    )
+    set_tests_properties(
+      desktop.analysis_smoke
+      PROPERTIES
+        TIMEOUT 10
+        PASS_REGULAR_EXPRESSION "MolShredder desktop analysis ready: results=2 overlay=marker-dash-label canonical=shared panel=visible"
     )
     set_tests_properties(
       desktop.structure_open_smoke
@@ -863,7 +940,7 @@ if(MOLSHREDDER_BUILD_DESKTOP)
       desktop.object_panel_smoke
       PROPERTIES
         TIMEOUT 10
-        PASS_REGULAR_EXPRESSION "MolShredder desktop objects ready: objects=2 active=1 visible=1 spheres=1"
+        PASS_REGULAR_EXPRESSION "MolShredder desktop objects ready: objects=1 active=2 visible=0 rename-delete-reorder=true spheres=0"
     )
     add_test(
       NAME desktop.trajectory_smoke
@@ -879,6 +956,21 @@ if(MOLSHREDDER_BUILD_DESKTOP)
         FIXTURES_REQUIRED desktop_trajectory_fixture
         TIMEOUT 10
         PASS_REGULAR_EXPRESSION "MolShredder desktop trajectory ready: frames=4 scheduler=qt mode=loop"
+    )
+    add_test(
+      NAME desktop.daily_workflow_smoke
+      COMMAND
+        molshredder_desktop --daily-workflow-smoke
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/synthetic_multimodel.pdb"
+        "--trajectory=${MOLSHREDDER_DESKTOP_DCD_FIXTURE}"
+        "--representation=spheres"
+    )
+    set_tests_properties(
+      desktop.daily_workflow_smoke
+      PROPERTIES
+        FIXTURES_REQUIRED desktop_trajectory_fixture
+        TIMEOUT 10
+        PASS_REGULAR_EXPRESSION "MolShredder desktop daily workflow ready: open=1 representation=sticks selection=1 analysis=2 trajectory=4 exports=3 cancellation=preserved"
     )
     add_test(
       NAME desktop.xyz_save_smoke
@@ -1061,6 +1153,7 @@ if(MOLSHREDDER_BUILD_DESKTOP)
         molshredder_desktop --smoke --h5md-smoke
         "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/lammps_topology.pdb"
         "--trajectory=${MOLSHREDDER_H5MD_FIXTURE}"
+        "--trajectory-mapping=exact"
         "--representation=sticks"
     )
     set_tests_properties(
@@ -1083,6 +1176,7 @@ if(MOLSHREDDER_BUILD_DESKTOP)
         "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/lammps_topology.pdb"
         "--trajectory=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/trajectory.lammpstrj"
         "--trajectory-unit=angstrom"
+        "--trajectory-mapping=exact"
         "--representation=sticks"
     )
     set_tests_properties(
@@ -1145,6 +1239,7 @@ install(
 
 install(
   FILES
+    docs/schemas/capability-support-v1.schema.json
     docs/schemas/result-envelope-v1.schema.json
     docs/schemas/result-envelope-v2.schema.json
     docs/schemas/support-configuration-v1.schema.json
@@ -1172,6 +1267,17 @@ if(BUILD_TESTING)
   target_link_libraries(molshredder_operation_tests PRIVATE MolShredder::Core)
   molshredder_enable_warnings(molshredder_operation_tests)
   add_test(NAME operation.contract COMMAND molshredder_operation_tests)
+
+  add_executable(
+    molshredder_task_scheduler_tests
+    tests/operation/task_scheduler_test.cpp
+  )
+  target_compile_features(molshredder_task_scheduler_tests PRIVATE cxx_std_20)
+  target_link_libraries(
+    molshredder_task_scheduler_tests PRIVATE MolShredder::Core
+  )
+  molshredder_enable_warnings(molshredder_task_scheduler_tests)
+  add_test(NAME operation.task_scheduler COMMAND molshredder_task_scheduler_tests)
 
   add_executable(molshredder_topology_tests tests/model/topology_test.cpp)
   target_compile_features(molshredder_topology_tests PRIVATE cxx_std_20)
@@ -1621,6 +1727,31 @@ if(BUILD_TESTING)
   add_test(NAME render.representation COMMAND molshredder_representation_tests)
 
   add_executable(
+    molshredder_p0_geometry_tests
+    tests/render/p0_geometry_test.cpp
+  )
+  target_compile_features(molshredder_p0_geometry_tests PRIVATE cxx_std_20)
+  target_link_libraries(molshredder_p0_geometry_tests PRIVATE MolShredder::Core)
+  molshredder_enable_warnings(molshredder_p0_geometry_tests)
+  add_test(NAME render.p0_geometry COMMAND molshredder_p0_geometry_tests)
+
+  add_executable(
+    molshredder_render_setting_store_tests
+    tests/render/setting_store_test.cpp
+  )
+  target_compile_features(
+    molshredder_render_setting_store_tests PRIVATE cxx_std_20
+  )
+  target_link_libraries(
+    molshredder_render_setting_store_tests PRIVATE MolShredder::Core
+  )
+  molshredder_enable_warnings(molshredder_render_setting_store_tests)
+  add_test(
+    NAME render.setting_store
+    COMMAND molshredder_render_setting_store_tests
+  )
+
+  add_executable(
     molshredder_volume_isosurface_tests
     tests/render/volume_isosurface_test.cpp
   )
@@ -1745,6 +1876,22 @@ if(BUILD_TESTING)
   add_test(NAME trajectory.frame_cache COMMAND molshredder_frame_cache_tests)
 
   add_executable(
+    molshredder_trajectory_attachment_tests
+    tests/trajectory/attachment_test.cpp
+  )
+  target_compile_features(
+    molshredder_trajectory_attachment_tests PRIVATE cxx_std_20
+  )
+  target_link_libraries(
+    molshredder_trajectory_attachment_tests PRIVATE MolShredder::Core
+  )
+  molshredder_enable_warnings(molshredder_trajectory_attachment_tests)
+  add_test(
+    NAME trajectory.attachment
+    COMMAND molshredder_trajectory_attachment_tests
+  )
+
+  add_executable(
     molshredder_prefetch_scheduler_tests
     tests/trajectory/prefetch_scheduler_test.cpp
   )
@@ -1777,6 +1924,36 @@ if(BUILD_TESTING)
   target_link_libraries(molshredder_pbc_tests PRIVATE MolShredder::Core)
   molshredder_enable_warnings(molshredder_pbc_tests)
   add_test(NAME trajectory.pbc COMMAND molshredder_pbc_tests)
+
+  add_executable(
+    molshredder_representation_visibility_tests
+    tests/application/representation_visibility_test.cpp
+  )
+  target_compile_features(
+    molshredder_representation_visibility_tests PRIVATE cxx_std_20
+  )
+  target_link_libraries(
+    molshredder_representation_visibility_tests PRIVATE MolShredder::Core
+  )
+  molshredder_enable_warnings(molshredder_representation_visibility_tests)
+  add_test(
+    NAME application.representation_visibility
+    COMMAND molshredder_representation_visibility_tests
+  )
+
+  add_executable(
+    molshredder_analysis_result_tests
+    tests/application/analysis_result_test.cpp
+  )
+  target_compile_features(molshredder_analysis_result_tests PRIVATE cxx_std_20)
+  target_link_libraries(
+    molshredder_analysis_result_tests PRIVATE MolShredder::Core
+  )
+  molshredder_enable_warnings(molshredder_analysis_result_tests)
+  add_test(
+    NAME application.analysis_result
+    COMMAND molshredder_analysis_result_tests "${CMAKE_CURRENT_BINARY_DIR}"
+  )
 
   add_executable(
     molshredder_workspace_tests
@@ -2013,6 +2190,28 @@ if(BUILD_TESTING)
   )
 
   add_test(
+    NAME frontend.representation_visibility_parity
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/representation_visibility_parity_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "$<TARGET_FILE:molshredder>"
+      "$<TARGET_FILE:molshredder_gui_probe>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/trajectory.g96"
+  )
+
+  add_test(
+    NAME frontend.render_setting_parity
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/render_setting_parity_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "$<TARGET_FILE:molshredder>"
+      "$<TARGET_FILE:molshredder_gui_probe>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/trajectory.g96"
+  )
+
+  add_test(
     NAME frontend.python_script_parity
     COMMAND
       Python3::Interpreter
@@ -2067,6 +2266,18 @@ if(BUILD_TESTING)
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/object_frontend_test.py"
       "$<TARGET_FILE:molshredder_python>"
       "$<TARGET_FILE:molshredder>"
+      "$<TARGET_FILE:molshredder_gui_probe>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/synthetic_multimodel.pdb"
+  )
+
+  add_test(
+    NAME frontend.batch_load_parity
+    COMMAND
+      ${Python3_EXECUTABLE}
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/batch_load_parity_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "$<TARGET_FILE:molshredder>"
+      "$<TARGET_FILE:molshredder_gui_probe>"
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/synthetic_multimodel.pdb"
   )
 

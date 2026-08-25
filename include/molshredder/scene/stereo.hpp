@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
 #include <string_view>
 
 #include "molshredder/operation/result.hpp"
@@ -72,5 +73,11 @@ validate_stereo_parameters(StereoParameters parameters);
 
 [[nodiscard]] operation::Result<StereoPair>
 make_stereo_pair(const Camera &camera, StereoParameters parameters);
+
+// Odd global display rows/columns/cells use the left eye. Passing swap_eyes
+// reverses the hardware phase without changing camera geometry.
+[[nodiscard]] operation::Result<StereoEye>
+interleaved_eye_at(StereoMode mode, std::uint64_t global_x,
+                   std::uint64_t global_y, bool swap_eyes = false);
 
 } // namespace molshredder::scene

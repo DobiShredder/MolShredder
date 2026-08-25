@@ -66,3 +66,6 @@ Desktop.ini
 
 # Agent-private files live outside this public repository
 /AGENTS.md
+
+# Local release and publication automation must never be published
+/scripts/

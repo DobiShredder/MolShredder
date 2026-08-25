@@ -51,15 +51,16 @@ field/value typo가 조용히 다른 결과로 바뀌는 것을 막는다.
 cycle 또는 평가 오류가 있으면 기존 entry를 복원한다. 이름은 letter/underscore로 시작하고 이후
 letter/digit/`_-.`를 사용할 수 있으며 `all`, `none`은 reserved다. List는 이름순이다.
 
-- Static selection은 정의 시 mask를 계산하고 정확히 같은 immutable topology snapshot에서만
-  반환한다.
+- Static selection은 정의 시 mask를 계산한다. Versioned topology transaction에서는 stable atom
+  ID로 target snapshot에 remap하고 삭제된 atom을 제거한다. 임의의 별도 snapshot에 직접
+  적용하는 것은 거부한다.
 - Dynamic selection은 호출 시 expression과 dependency를 다시 평가한다.
 - 참조 중인 entry는 dependent selection을 교체하거나 삭제하기 전에는 삭제할 수 없다.
 
 현재 predicate는 topology field만 사용하므로 dynamic은 topology snapshot 변화에 대한 재평가를
 뜻한다. Coordinate/frame-dependent property와 spatial predicate가 추가되면 같은 flag가 frame
 변화에 따른 재평가를 제어한다. Static entry는 topology를 소유하지 않으므로 registry보다 topology
-snapshot lifetime이 길어야 한다. 저장된 pointer는 snapshot identity 비교에만 사용한다.
+snapshot lifetime이 길어야 한다. 저장된 pointer와 version은 snapshot/remap identity 검증에만 사용한다.
 
 ## Validation과 limitation
 

@@ -1,3 +1,5 @@
+#include <atomic>
+#include <chrono>
 #include <cmath>
 #include <filesystem>
 #include <iostream>
@@ -7,10 +9,12 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <thread>
 
 #include "molshredder/application/default_registry.hpp"
 #include "molshredder/application/dispatcher.hpp"
 #include "molshredder/application/workspace.hpp"
+#include "molshredder/application/task_service.hpp"
 #include "molshredder/cli/console.hpp"
 #include "molshredder/gui/action_adapter.hpp"
 #include "molshredder/gui/analysis_presenter.hpp"
@@ -54,6 +58,168 @@ int main(int argc, char** argv) {
   const std::filesystem::path rst7_fixture{argv[11]};
 
   {
+    auto batch_workspace = std::make_shared<application::Workspace>();
+    double progress{};
+    operation::TaskContext batch_context{
+        {}, [&](const auto& update) { progress = update.fraction; }};
+    const std::vector<application::StructureLoadRequest> batch_requests{
+        {fixture, std::string{"batch-pdb"}, io::StructureFormat::pdb},
+        {pqr_fixture, std::string{"batch-pqr"}, io::StructureFormat::pqr}};
+    const auto loaded =
+        batch_workspace->load_structure_batch(batch_requests, batch_context);
+    passed &= expect(
+        loaded.has_value() && loaded.value().input_count == 2U &&
+            loaded.value().objects.size() == 2U &&
+            loaded.value().objects[0].object_name == "batch-pdb" &&
+            loaded.value().objects[1].object_name == "batch-pqr" &&
+            loaded.value().formats ==
+                std::vector<io::StructureFormat>{io::StructureFormat::pdb,
+                                                 io::StructureFormat::pqr} &&
+            batch_workspace->object_count() == 2U &&
+            batch_workspace->active_object()->id == 2U && progress == 1.0,
+        "multi-input structure batch must parse, build and commit once");
+
+    const auto scene_before_failure = batch_workspace->scene();
+    const auto active_before_failure = batch_workspace->active_object()->id;
+    const std::vector<application::StructureLoadRequest> invalid_requests{
+        {fixture, std::string{"would-be-added"}, io::StructureFormat::pdb},
+        {fixture.parent_path() / "missing-batch-input.pdb",
+         std::string{"missing"}, io::StructureFormat::pdb}};
+    operation::TaskContext failure_context;
+    const auto failed = batch_workspace->load_structure_batch(
+        invalid_requests, failure_context);
+    passed &= expect(
+        !failed.has_value() && failed.error().details.at("input_index") == "1" &&
+            batch_workspace->object_count() == 2U &&
+            batch_workspace->active_object()->id == active_before_failure &&
+            batch_workspace->scene() == scene_before_failure,
+        "middle parse failure must preserve objects, active state and scene exactly");
+
+    operation::TaskContext cancelled_context;
+    cancelled_context.cancellation.request_cancel();
+    const auto cancelled = batch_workspace->load_structure_batch(
+        batch_requests, cancelled_context);
+    passed &= expect(!cancelled.has_value() &&
+                         cancelled.error().code ==
+                             operation::ErrorCode::cancelled &&
+                         batch_workspace->object_count() == 2U &&
+                         batch_workspace->scene() == scene_before_failure,
+                     "cancelled structure batch must not publish partial state");
+  }
+
+  {
+    auto async_workspace = std::make_shared<application::Workspace>();
+    auto scheduler = operation::TaskScheduler::create(
+                         {1U, 4U, 1024U * 1024U, 2U})
+                         .value();
+    std::atomic_uint64_t generation{1U};
+    std::atomic<double> progress{};
+    application::ScheduledStructureBatchRequest scheduled;
+    scheduled.inputs = {
+        {fixture, std::string{"async-one"}, io::StructureFormat::pdb},
+        {pqr_fixture, std::string{"async-two"}, io::StructureFormat::pqr}};
+    scheduled.memory_reservation_bytes = 4096U;
+    scheduled.generation = 1U;
+    scheduled.generation_is_current = [&](std::uint64_t value) {
+      return value == generation.load();
+    };
+    scheduled.report_progress = [&](const auto& update) {
+      progress = update.fraction;
+    };
+    const auto task = application::schedule_structure_batch(
+        async_workspace, scheduler, std::move(scheduled));
+    bool ready{};
+    for (std::size_t attempt = 0; attempt < 500U; ++attempt) {
+      const auto snapshot = scheduler->snapshot(task.value());
+      if (snapshot.has_value() &&
+          snapshot.value().state == operation::TaskState::ready_to_commit) {
+        ready = true;
+        break;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds{1});
+    }
+    passed &= expect(ready && async_workspace->object_count() == 0U &&
+                         progress.load() >= 0.8,
+                     "bounded worker must parse without mutating Workspace");
+    const auto commit_error = scheduler->commit_ready(task.value());
+    const auto completion = scheduler->wait(
+        task.value(), std::chrono::seconds{2});
+    passed &= expect(!commit_error.has_value() && completion.has_value() &&
+                         completion.value().state ==
+                             operation::TaskState::succeeded &&
+                         async_workspace->object_count() == 2U &&
+                         progress.load() == 1.0,
+                     "owner-thread commit must publish the complete batch");
+
+    application::ScheduledStructureBatchRequest stale_request;
+    stale_request.inputs = {
+        {fixture, std::string{"stale-one"}, io::StructureFormat::pdb}};
+    stale_request.memory_reservation_bytes = 1024U;
+    stale_request.generation = 1U;
+    stale_request.generation_is_current = [&](std::uint64_t value) {
+      return value == generation.load();
+    };
+    const auto stale = application::schedule_structure_batch(
+        async_workspace, scheduler, std::move(stale_request));
+    bool stale_ready{};
+    for (std::size_t attempt = 0; attempt < 500U; ++attempt) {
+      const auto snapshot = scheduler->snapshot(stale.value());
+      if (snapshot.has_value() &&
+          snapshot.value().state == operation::TaskState::ready_to_commit) {
+        stale_ready = true;
+        break;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds{1});
+    }
+    generation = 2U;
+    const auto stale_commit = scheduler->commit_ready(stale.value());
+    const auto stale_completion = scheduler->wait(
+        stale.value(), std::chrono::seconds{2});
+    passed &= expect(stale_ready && !stale_commit.has_value() &&
+                         stale_completion.has_value() &&
+                         stale_completion.value().state ==
+                             operation::TaskState::stale &&
+                         async_workspace->object_count() == 2U,
+                     "generation change must discard parsed batch before commit");
+  }
+
+  {
+    auto frontend_workspace = std::make_shared<application::Workspace>();
+    const auto frontend_registry =
+        application::make_default_registry(frontend_workspace);
+    const application::Dispatcher frontend_dispatcher{frontend_registry};
+    const gui::ActionAdapter frontend_gui{frontend_dispatcher};
+    double frontend_progress{};
+    operation::TaskContext frontend_context{
+        {}, [&](const auto& update) { frontend_progress = update.fraction; }};
+    const gui::Action batch_action{
+        "load batch",
+        {{"file-format", "pdb"},
+         {"names", "frontend-one;frontend-two"},
+         {"paths", fixture.string() + ";" + fixture.string()}}};
+    const auto loaded = frontend_gui.trigger(batch_action, frontend_context);
+    passed &= expect(loaded.succeeded() && frontend_progress == 1.0 &&
+                         frontend_workspace->object_count() == 2U,
+                     "GUI adapter must observe canonical batch progress");
+
+    auto cancelled_workspace = std::make_shared<application::Workspace>();
+    const auto cancelled_registry =
+        application::make_default_registry(cancelled_workspace);
+    const application::Dispatcher cancelled_dispatcher{cancelled_registry};
+    const gui::ActionAdapter cancelled_gui{cancelled_dispatcher};
+    operation::TaskContext cancelled_context;
+    cancelled_context.cancellation.request_cancel();
+    const auto cancelled =
+        cancelled_gui.trigger(batch_action, cancelled_context);
+    passed &= expect(!cancelled.succeeded() &&
+                         std::get<operation::Error>(
+                             cancelled.envelope.payload).code ==
+                             operation::ErrorCode::cancelled &&
+                         cancelled_workspace->object_count() == 0U,
+                     "GUI adapter cancellation must preserve an empty Workspace");
+  }
+
+  {
     auto amber_workspace = std::make_shared<application::Workspace>();
     auto amber_registry = application::make_default_registry(amber_workspace);
     const application::Dispatcher amber_dispatcher{amber_registry};
@@ -65,7 +231,8 @@ int main(int argc, char** argv) {
     const auto attached = trigger(
         amber_gui, "traj load",
         {{"path", rst7_fixture.string()}, {"file-format", "rst7"},
-         {"cache-mib", "1"}, {"prefetch-frames", "0"}});
+         {"cache-mib", "1"}, {"mapping", "index"},
+         {"prefetch-frames", "0"}});
     const auto shown = trigger(
         amber_gui, "show",
         {{"representation", "sticks"}, {"selection", "all"}});
@@ -290,6 +457,54 @@ int main(int argc, char** argv) {
                        workspace->scene()->selection().contains(
                            workspace->active_object()->scene_node),
                    "GUI load must create active object and scene node");
+
+  const render::RenderSettingScope setting_global{};
+  const render::RenderSettingScope setting_object{
+      render::RenderSettingScopeLevel::object, 1U};
+  const render::RenderSettingScope setting_state{
+      render::RenderSettingScopeLevel::object_state, 1U, 1U};
+  const render::RenderSettingScope setting_atom{
+      render::RenderSettingScopeLevel::atom, 1U, 1U, 1U};
+  const render::RenderSettingScope setting_bond{
+      render::RenderSettingScopeLevel::bond, 1U, 1U, 0U, 1U};
+  passed &= expect(
+      !workspace->set_render_setting("line_width", setting_global, 2.0)
+           .has_value() &&
+          !workspace->set_render_setting("line_width", setting_object, 3.0)
+               .has_value() &&
+          !workspace->set_render_setting("line_width", setting_state, 4.0)
+               .has_value() &&
+          !workspace->set_render_setting("line_width", setting_atom, 5.0)
+               .has_value() &&
+          !workspace->set_render_setting("line_width", setting_bond, 6.0)
+               .has_value() &&
+          std::get<double>(workspace
+                               ->resolve_render_setting(
+                                   "line_width", {1U, 1U, 1U, 1U})
+                               .value()
+                               .value) == 6.0,
+      "Workspace must resolve validated bond-to-global setting precedence");
+  const auto setting_snapshot = workspace->render_setting_snapshot();
+  const auto setting_text = render::serialize_render_settings(setting_snapshot);
+  const auto parsed_settings =
+      setting_text.has_value()
+          ? render::parse_render_settings(setting_text.value())
+          : operation::Result<render::RenderSettingSnapshot>::failure(
+                setting_text.error());
+  const render::RenderSettingScope missing_setting_atom{
+      render::RenderSettingScopeLevel::atom, 1U, 1U, 99U};
+  const auto invalid_setting_target = workspace->set_render_setting(
+      "line_width", missing_setting_atom, 9.0);
+  const auto restored_settings =
+      parsed_settings.has_value()
+          ? workspace->restore_render_settings(parsed_settings.value())
+          : std::optional<operation::Error>{parsed_settings.error()};
+  passed &= expect(
+      setting_text.has_value() && parsed_settings.has_value() &&
+          invalid_setting_target.has_value() &&
+          workspace->render_setting_snapshot() == setting_snapshot &&
+          !restored_settings.has_value(),
+      "Workspace setting target validation and session restore must be failure-atomic");
 
   const auto all_extent = workspace->selection_extent("all");
   const auto first_extent = workspace->selection_extent("index 1");
@@ -574,6 +789,36 @@ int main(int argc, char** argv) {
                                ->representations[0]
                                .packet.pick_targets.size() == 2U,
                    "GUI show must evaluate selection and store render packet");
+  const auto original_sphere_radius = workspace->active_object()
+                                          ->representations.front()
+                                          .packet.spheres.front()
+                                          .radius;
+  const auto setting_applied = trigger(
+      gui, "setting set", {{"name", "sphere_scale"},
+                            {"value", "2"},
+                            {"scope", "atom"},
+                            {"target", "1"}});
+  const auto updated_sphere_radius = workspace->active_object()
+                                         ->representations.front()
+                                         .packet.spheres.front()
+                                         .radius;
+  const auto setting_before_failure = workspace->render_setting_snapshot();
+  const auto failed_setting = trigger(
+      gui, "setting set", {{"name", "sphere_color"},
+                            {"value", "not-a-color"},
+                            {"scope", "atom"},
+                            {"target", "1"}});
+  passed &= expect(
+      setting_applied.succeeded() &&
+          std::abs(updated_sphere_radius - original_sphere_radius * 2.0) <
+              1.0e-12 &&
+          !failed_setting.succeeded() &&
+          workspace->render_setting_snapshot() == setting_before_failure &&
+          workspace->active_object()
+                  ->representations.front()
+                  .packet.spheres.front()
+                  .radius == updated_sphere_radius,
+      "canonical setting operation must rebuild geometry and preserve scene on invalid update");
   const auto failed_replace =
       trigger(gui, "show", {{"representation", "sticks"},
                              {"selection", "unknown X"},
@@ -595,6 +840,71 @@ int main(int argc, char** argv) {
                                .kind == render::RepresentationKind::sticks,
                    "replace show must atomically retain only the new packet");
 
+  const auto additive_visibility = workspace->mutate_representation_visibility(
+      render::RepresentationKind::spheres, "index 1",
+      application::RepresentationVisibilityMutation::show);
+  const auto selective_hide = workspace->mutate_representation_visibility(
+      render::RepresentationKind::sticks, "index 1",
+      application::RepresentationVisibilityMutation::hide);
+  const auto visibility_snapshot =
+      workspace->representation_visibility_session_snapshot();
+  const auto visibility_text =
+      visibility_snapshot.has_value()
+          ? application::serialize_representation_visibility_session(
+                visibility_snapshot.value())
+          : operation::Result<std::string>::failure(
+                visibility_snapshot.error());
+  const auto visibility_parsed =
+      visibility_text.has_value()
+          ? application::parse_representation_visibility_session(
+                visibility_text.value())
+          : operation::Result<
+                application::RepresentationVisibilitySessionSnapshot>::
+                failure(visibility_text.error());
+  const auto exclusive_visibility =
+      workspace->mutate_representation_visibility(
+          render::RepresentationKind::cartoon, "index 2",
+          application::RepresentationVisibilityMutation::exclusive);
+  const auto restored_visibility =
+      visibility_parsed.has_value()
+          ? workspace->restore_representation_visibility_session(
+                visibility_parsed.value())
+          : operation::Result<application::RepresentationVisibilityResult>::
+                failure(visibility_parsed.error());
+  passed &= expect(
+      additive_visibility.has_value() && selective_hide.has_value() &&
+          additive_visibility.value().representation_count == 2U &&
+          selective_hide.value().visible_atom_count == 1U &&
+          visibility_snapshot.has_value() && visibility_text.has_value() &&
+          visibility_parsed.has_value() && exclusive_visibility.has_value() &&
+          exclusive_visibility.value().representation_count == 2U &&
+          restored_visibility.has_value() &&
+          restored_visibility.value().representation_count == 2U &&
+          workspace->active_object()->representations.size() == 2U,
+      "Workspace visibility must support additive show, selective hide, exclusive replacement and session-fragment restore");
+
+  const auto stable_visibility =
+      workspace->representation_visibility_snapshot().value();
+  auto wrong_identity_snapshot =
+      workspace->representation_visibility_session_snapshot().value();
+  ++wrong_identity_snapshot.object_id;
+  const auto failed_identity_restore =
+      workspace->restore_representation_visibility_session(
+          wrong_identity_snapshot);
+  auto wrong_object_snapshot = stable_visibility;
+  ++wrong_object_snapshot.atom_count;
+  for (auto &mask : wrong_object_snapshot.masks)
+    mask.resize((wrong_object_snapshot.atom_count + 63U) / 64U, 0U);
+  const auto failed_visibility_restore =
+      workspace->restore_representation_visibility(wrong_object_snapshot);
+  passed &= expect(
+      !failed_identity_restore.has_value() &&
+          !failed_visibility_restore.has_value() &&
+          workspace->representation_visibility_snapshot().value() ==
+              stable_visibility &&
+          workspace->active_object()->representations.size() == 2U,
+      "visibility restore for another topology must fail without mutating Workspace state");
+
   const auto center = trigger(
       gui, "analyze center",
       {{"selection", "@chain_a"}, {"mode", "centroid"},
@@ -603,10 +913,45 @@ int main(int argc, char** argv) {
       gui, "measure distance",
       {{"from", "index 1"}, {"to", "index 2"}, {"mode", "atom"},
        {"pbc", "raw"}, {"precision", "6"}, {"unit", "angstrom"}});
+  const auto result_list = trigger(gui, "result list");
+  const auto result_get = trigger(gui, "result get", {{"id", "2"}});
+  const auto result_hidden = trigger(gui, "result hide", {{"id", "2"}});
+  const auto result_shown = trigger(gui, "result show", {{"id", "2"}});
+  const auto measurements_before_duplicate_result =
+      workspace->measurements().size();
+  const auto named_center = trigger(
+      gui, "analyze center",
+      {{"selection", "all"}, {"mode", "centroid"},
+       {"precision", "6"}, {"unit", "angstrom"},
+       {"result-name", "stable-center"}});
+  const auto duplicate_result_name = trigger(
+      gui, "measure distance",
+      {{"from", "index 1"}, {"to", "index 2"}, {"mode", "atom"},
+       {"pbc", "raw"}, {"precision", "6"}, {"unit", "angstrom"},
+       {"result-name", "stable-center"}});
+  const auto *get_response = result_get.succeeded()
+                                 ? std::get_if<command::Response>(
+                                       &result_get.envelope.payload)
+                                 : nullptr;
   passed &= expect(center.succeeded() && distance.succeeded() &&
+                       result_list.succeeded() && result_get.succeeded() &&
+                       result_hidden.succeeded() && result_shown.succeeded() &&
+                       named_center.succeeded() &&
+                       !duplicate_result_name.succeeded() &&
                        workspace->measurements().size() == 1U &&
-                       workspace->measurements()[0].measurement_id == 1U,
-                   "analysis must be pure while measurement persists once");
+                       workspace->measurements().size() ==
+                           measurements_before_duplicate_result &&
+                       workspace->measurements()[0].measurement_id == 1U &&
+                       workspace->analysis_results().size() == 3U &&
+                       get_response != nullptr &&
+                       std::get<std::string>(
+                           get_response->fields.at("source_status").data) ==
+                           "current" &&
+                       std::get<std::string>(
+                           get_response->fields.at("algorithm_version").data) ==
+                           "molshredder-distance-v1" &&
+                       workspace->analysis_results()[1].overlay_visible,
+                   "analysis operations must persist queryable results and duplicate-name failure must be atomic");
   const auto secondary=trigger(gui,"analyze secondary-structure",
       {{"selection","all"},{"energy-cutoff","-0.5"},
        {"helix-propensity","0.05"},{"beta-propensity","0.02"},
@@ -642,6 +987,73 @@ int main(int argc, char** argv) {
   passed &= expect(second.succeeded() && workspace->object_count() == 2U &&
                        workspace->active_object()->id == 2U,
                    "second load must append and activate a distinct object");
+  const auto second_node = workspace->objects()[1].scene_node;
+  const auto renamed = trigger(
+      gui, "object rename", {{"object", "2"}, {"name", "renamed ligand"}});
+  const auto scene_after_rename = workspace->scene();
+  const auto duplicate_rename = trigger(
+      gui, "object rename", {{"object", "2"}, {"name", "protein"}});
+  passed &= expect(
+      renamed.succeeded() && !duplicate_rename.succeeded() &&
+          workspace->objects()[1].id == 2U &&
+          workspace->objects()[1].scene_node == second_node &&
+          workspace->objects()[1].system->name() == "renamed ligand" &&
+          workspace->scene()->find(second_node)->name() == "renamed ligand" &&
+          workspace->scene() == scene_after_rename,
+      "rename must preserve object/scene identity and duplicate failure must be atomic");
+
+  const auto third = trigger(
+      gui, "load", {{"path", fixture.string()}, {"name", "third"}});
+  const auto third_node = workspace->objects()[2].scene_node;
+  const auto third_measurement = trigger(
+      gui, "measure distance",
+      {{"from", "index 1"}, {"to", "index 2"}, {"mode", "atom"},
+       {"pbc", "raw"}, {"precision", "6"}, {"unit", "angstrom"}});
+  const auto third_setting = trigger(
+      gui, "setting set",
+      {{"name", "sphere_scale"}, {"value", "2.0"},
+       {"scope", "object"}});
+  const auto reordered = trigger(
+      gui, "object reorder", {{"object", "3"}, {"position", "1"}});
+  const auto scene_after_reorder = workspace->scene();
+  const auto invalid_reorder = trigger(
+      gui, "object reorder", {{"object", "3"}, {"position", "9"}});
+  passed &= expect(
+      third.succeeded() && third_measurement.succeeded() &&
+          third_setting.succeeded() && reordered.succeeded() &&
+          !invalid_reorder.succeeded() && workspace->objects()[0].id == 3U &&
+          workspace->objects()[1].id == 1U &&
+          workspace->objects()[2].id == 2U &&
+          workspace->active_object()->id == 3U &&
+          workspace->scene()->find(workspace->scene()->root())->children()[0] ==
+              workspace->objects()[0].scene_node &&
+          workspace->scene() == scene_after_reorder,
+      "reorder must preserve stable identity/active object, update scene order and reject invalid positions atomically");
+  const auto measurements_before_delete = workspace->measurements().size();
+  const auto deleted =
+      trigger(gui, "object delete", {{"object", "current"}});
+  const auto setting_snapshot_after_delete = workspace->render_setting_snapshot();
+  passed &= expect(
+      deleted.succeeded() && workspace->object_count() == 2U &&
+          workspace->objects()[0].id == 1U && workspace->objects()[1].id == 2U &&
+          workspace->active_object()->id == 1U &&
+          workspace->scene()->find(third_node) == nullptr &&
+          workspace->measurements().size() + 1U == measurements_before_delete &&
+          std::any_of(workspace->analysis_results().begin(),
+                      workspace->analysis_results().end(),
+                      [&](const auto &record) {
+                        return record.provenance.source.object_id == 3U &&
+                               workspace->analysis_source_status(record) ==
+                                   application::AnalysisSourceStatus::object_deleted;
+                      }) &&
+          std::none_of(setting_snapshot_after_delete.overrides.begin(),
+                       setting_snapshot_after_delete.overrides.end(),
+                       [](const auto &entry) {
+                         return entry.scope.object_id == 3U;
+                       }),
+      "delete must remove scene/object/dependent state and choose the next active object in one transaction");
+  const auto object_one_visibility_before_hide =
+      workspace->objects()[0].representation_visibility.snapshot();
   const auto hidden = trigger(
       gui, "object visibility", {{"id", "1"}, {"visible", "false"}});
   passed &= expect(hidden.succeeded() &&
@@ -651,20 +1063,107 @@ int main(int argc, char** argv) {
   const auto activated = trigger(gui, "object activate", {{"id", "1"}});
   passed &= expect(activated.succeeded() &&
                        workspace->active_object()->id == 1U &&
+                       workspace->active_object()
+                               ->representation_visibility.snapshot() ==
+                           object_one_visibility_before_hide &&
                        workspace->scene()->selection().contains(
                            workspace->active_object()->scene_node),
-                   "object activation must update Workspace and scene selection");
+                   "object activation must preserve representation visibility while updating scene selection");
   const auto previous_scene = workspace->scene();
   const auto missing_object =
       trigger(gui, "object activate", {{"id", "999"}});
+  const auto above_uint32_object = trigger(
+      gui, "object activate", {{"id", "4294967296"}});
+  const auto max_uint64_object = trigger(
+      gui, "object activate", {{"id", "18446744073709551615"}});
+  const auto overflow_uint64_object = trigger(
+      gui, "object activate", {{"id", "18446744073709551616"}});
   passed &= expect(!missing_object.succeeded() &&
+                       !above_uint32_object.succeeded() &&
+                       !max_uint64_object.succeeded() &&
+                       !overflow_uint64_object.succeeded() &&
+                       std::get<operation::Error>(above_uint32_object.envelope.payload)
+                               .code == operation::ErrorCode::not_found &&
+                       std::get<operation::Error>(max_uint64_object.envelope.payload)
+                               .code == operation::ErrorCode::not_found &&
+                       std::get<operation::Error>(overflow_uint64_object.envelope.payload)
+                               .code == operation::ErrorCode::invalid_argument &&
                        workspace->active_object()->id == 1U &&
                        workspace->scene() == previous_scene,
-                   "failed activation must preserve active object and scene");
+                   "object ID parser must preserve uint32/uint64 boundaries and failed activation must preserve Workspace state");
   passed &= expect(trigger(gui, "object visibility",
                            {{"id", "1"}, {"visible", "true"}})
                        .succeeded(),
                    "hidden object must be showable without losing state");
+  passed &= expect(
+      !workspace->set_named_selection(
+           "stable_first", "index 1", false)
+           .has_value(),
+      "static selection fixture must be created");
+  const auto topology_visibility =
+      workspace->mutate_representation_visibility(
+          render::RepresentationKind::spheres, "index 1",
+          application::RepresentationVisibilityMutation::show);
+  const auto deleted_target_setting = trigger(
+      gui, "setting set", {{"name", "sphere_scale"}, {"value", "3"},
+                            {"scope", "atom"}, {"target", "2"}});
+  const auto measurements_before_topology = workspace->measurements().size();
+  const auto topology_changed = trigger(
+      gui, "object topology-retain",
+      {{"atom-ids", "3,1"}, {"expected-version", "1"}});
+  const auto topology_scene = workspace->scene();
+  const auto topology_system = workspace->active_object()->system;
+  const auto stale_visibility_restore =
+      workspace->restore_representation_visibility_session(
+          visibility_snapshot.value());
+  const auto stale_topology_change = trigger(
+      gui, "object topology-retain",
+      {{"atom-ids", "1"}, {"expected-version", "1"}});
+  const auto remapped_static = workspace->active_object()->selections.evaluate(
+      "stable_first", *workspace->active_object()->system->topology());
+  const auto remapped_spheres = workspace->active_object()
+                                    ->representation_visibility.selection_mask(
+                                        render::RepresentationKind::spheres);
+  const auto settings_after_topology = workspace->render_setting_snapshot();
+  passed &= expect(
+      topology_visibility.has_value() && deleted_target_setting.succeeded() &&
+          topology_changed.succeeded() &&
+          !stale_visibility_restore.has_value() &&
+          !stale_topology_change.succeeded() &&
+          workspace->active_object()->system == topology_system &&
+          workspace->scene() == topology_scene &&
+          topology_system->topology()->version() == 2U &&
+          topology_system->topology()->atom_ids() ==
+              std::vector<model::AtomId>{{3U}, {1U}} &&
+          topology_system->coordinates()->read_frame(0U).value()->atom_count() ==
+              2U &&
+          remapped_static.has_value() &&
+          remapped_static.value() == selection::Mask({0U, 1U}) &&
+          remapped_spheres.has_value() && remapped_spheres.value()[1] == 1U &&
+          workspace->measurements().empty() &&
+          measurements_before_topology > 0U &&
+          std::any_of(workspace->analysis_results().begin(),
+                      workspace->analysis_results().end(),
+                      [&](const auto &record) {
+                        return record.provenance.source.object_id == 1U &&
+                               workspace->analysis_source_status(record) ==
+                                   application::AnalysisSourceStatus::topology_changed;
+                      }) &&
+          std::any_of(settings_after_topology.overrides.begin(),
+                      settings_after_topology.overrides.end(),
+                      [](const auto &entry) {
+                        return entry.scope.level ==
+                                   render::RenderSettingScopeLevel::atom &&
+                               entry.scope.atom_id == 1U;
+                      }) &&
+          std::none_of(settings_after_topology.overrides.begin(),
+                       settings_after_topology.overrides.end(),
+                       [](const auto &entry) {
+                         return entry.scope.level ==
+                                    render::RenderSettingScopeLevel::atom &&
+                                entry.scope.atom_id == 2U;
+                       }),
+      "topology transaction must remap stable selection/visibility/settings/coordinates, invalidate measurements and reject stale completion atomically");
   const auto bad_selection = trigger(
       gui, "select", {{"name", "bad"}, {"expression", "unknown X"}});
   passed &= expect(!bad_selection.succeeded(),
@@ -687,13 +1186,24 @@ int main(int argc, char** argv) {
       "exit\n"};
   std::ostringstream output;
   std::ostringstream error;
-  passed &= expect(console.run(input, output, error) == 0 && error.str().empty() &&
+  const auto console_exit = console.run(input, output, error);
+  const auto console_ok = console_exit == 0 && error.str().empty() &&
                        console_workspace->object_count() == 1U &&
                        console_workspace->active_object()
                                ->representations.size() == 1U &&
                        console.history().size() == 3U &&
                        output.str().find("\"primitive_count\":2") !=
-                           std::string::npos,
+                           std::string::npos;
+  if (!console_ok) {
+    std::cerr << "console_exit=" << console_exit
+              << " error=" << error.str()
+              << " objects=" << console_workspace->object_count()
+              << " representations="
+              << console_workspace->active_object()->representations.size()
+              << " history=" << console.history().size()
+              << " output=" << output.str() << '\n';
+  }
+  passed &= expect(console_ok,
                    "native console must preserve load/select/show state");
 
   auto pbc_workspace = std::make_shared<application::Workspace>();

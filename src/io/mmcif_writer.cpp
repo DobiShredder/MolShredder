@@ -368,6 +368,7 @@ std::string bond_order(model::BondOrder order) {
   case model::BondOrder::aromatic:
     return "arom";
   case model::BondOrder::amide:
+  case model::BondOrder::zero:
   case model::BondOrder::unknown:
     return "?";
   }
@@ -736,6 +737,7 @@ write_mmcif(std::ostream &output, const model::Topology &topology,
   output << "#\n";
 
   std::uint64_t amide_bonds{};
+  std::uint64_t zero_order_bonds{};
   if (!topology.bonds().empty()) {
     output << "loop_\n"
            << "_struct_conn.id\n"
@@ -795,6 +797,8 @@ write_mmcif(std::ostream &output, const model::Topology &topology,
       }
       if (bond.order == model::BondOrder::amide)
         ++amide_bonds;
+      if (bond.order == model::BondOrder::zero)
+        ++zero_order_bonds;
     }
     output << "#\n";
   }
@@ -824,6 +828,9 @@ write_mmcif(std::ostream &output, const model::Topology &topology,
              "space-group relationships");
   losses.add("amide_bond_order", amide_bonds,
              "PDBx struct_conn has no native amide value-order code; endpoint "
+             "is preserved with unknown order");
+  losses.add("zero_bond_order", zero_order_bonds,
+             "PDBx struct_conn has no native zero value-order code; endpoint "
              "is preserved with unknown order");
   losses.add("higher_connectivity",
              static_cast<std::uint64_t>(topology.angles().size() +

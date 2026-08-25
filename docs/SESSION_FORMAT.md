@@ -9,7 +9,7 @@ generator 0.1.0
 invoke "load" --file-format "pdb" --name "protein" --path "input.pdb"
 invoke "select" --expression "chain A" --name "chain_a" --update "false"
 invoke "show" --representation "spheres" --selection "@chain_a"
-invoke "traj load" --cache-mib "256" --file-format "dcd" --path "run.dcd"
+invoke "traj load" --cache-mib "256" --file-format "dcd" --mapping "index" --path "run.dcd"
 invoke "traj range" --direction "forward" --first "0" --last "500" --mode "loop" --stride "5"
 invoke "traj speed" --fps "30"
 invoke "traj frame" --frame "250"

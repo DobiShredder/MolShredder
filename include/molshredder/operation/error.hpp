@@ -13,6 +13,8 @@ enum class ErrorCode {
   invalid_selection,
   not_found,
   cancelled,
+  resource_exhausted,
+  stale_result,
   script_failed,
   unsupported,
   internal,
@@ -28,6 +30,10 @@ enum class ErrorCode {
       return "not_found";
     case ErrorCode::cancelled:
       return "cancelled";
+    case ErrorCode::resource_exhausted:
+      return "resource_exhausted";
+    case ErrorCode::stale_result:
+      return "stale_result";
     case ErrorCode::script_failed:
       return "script_failed";
     case ErrorCode::unsupported:

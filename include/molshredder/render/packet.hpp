@@ -57,6 +57,15 @@ struct SphereInstance {
   std::uint64_t pick_id{};
 };
 
+// Screen-facing text is retained as typed scene data. GPU and reference
+// frontends may choose their own deterministic glyph backend.
+struct TextLabelInstance {
+  model::Vec3d anchor;
+  std::string text;
+  ColorRgba color;
+  std::uint64_t pick_id{};
+};
+
 struct MeshVertex {
   model::Vec3d position;
   model::Vec3d normal;
@@ -83,6 +92,7 @@ struct RenderPacket {
   std::vector<LineInstance> lines;
   std::vector<CylinderInstance> cylinders;
   std::vector<SphereInstance> spheres;
+  std::vector<TextLabelInstance> labels;
   std::vector<MeshVertex> mesh_vertices;
   std::vector<MeshTriangle> mesh_triangles;
   std::map<std::uint64_t, PickTarget> pick_targets;

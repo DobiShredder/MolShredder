@@ -1,5 +1,48 @@
 # Command grammar v1
 
+## Render settings
+
+Render style는 GUI, CLI와 Python이 공유하는 canonical operation으로 변경한다.
+
+```text
+setting list
+setting get --name sphere_scale --scope global
+setting set --name line_width --value 2.0 --scope object
+setting set --name sphere_color --value '#33aaff' --scope atom --target 12
+setting unset --name sphere_color --scope atom --target 12
+setting reset --scope state
+```
+
+Scope는 `global`, `object`, `state`, `atom`, `bond`이다. 명시적 state는 1-based이고 atom/bond
+`--target`은 topology가 발급한 non-zero 64-bit stable ID다. Atom/bond scope에서 target은
+필수다. 오류는 기존 setting과 scene을
+변경하지 않는다. 전체 catalog와 value contract은 [Render setting service](RENDER_SETTINGS.md)를
+참고한다.
+
+## Object lifecycle
+
+```text
+object list
+object activate --id 2
+object visibility --id 2 --visible false
+object rename --object 2 --name "ligand A"
+object reorder --object 2 --position 1
+object delete --object current
+object topology-retain --atom-ids 3,1 --expected-version 1
+```
+
+`--object`는 `current`, stable object ID 또는 exact name을 받는다. `--position`은 object
+panel의 1-based position이다. Rename과 reorder는 object ID와 scene-node ID를 바꾸지 않는다.
+Delete는 object에 속한 measurement와 render-setting override를 같이 제거하고, active object를
+지우면 같은 panel position의 다음 object 또는 직전 object를 선택한다. Missing target,
+duplicate name이나 범위 밖 position은 Workspace와 scene을 변경하지 않는다.
+
+`object topology-retain`은 editing UI가 도입되기 전의 low-level snapshot operation이다. Active
+object의 stable atom ID를 주어진 순서로 유지하고 나머지를 삭제한다. 반드시 읽은 topology
+version을 `--expected-version`으로 보내며 stale version, duplicate/deleted ID와 uint64 overflow는
+transaction 전체를 거부한다. 자세한 계약은 [Persistent identity and numeric contract](IDENTITY_AND_NUMERIC_CONTRACT.md)를
+참고한다.
+
 첫 molecular vertical slice의 GUI·Console·Python parity와 session replay 검증을 기준으로 foundation
 command grammar를 version 1로 pin한다. Canonical history/session에는 생략된 기본값과 alias가 모두
 정규화된 invocation을 저장한다.
@@ -8,6 +51,8 @@ command grammar를 version 1로 pin한다. Canonical history/session에는 생�
 
 ```text
 molshredder load --path PATH [--name NAME] [--file-format FORMAT]
+molshredder load batch --paths "PATH1;PATH2" [--names "NAME1;NAME2"]
+                       [--file-format FORMAT]
 molshredder format list [--family all|structure|trajectory|volume]
                            [--direction all|read|write]
 molshredder volume load --path PATH [--name NAME]
@@ -23,14 +68,26 @@ molshredder save --path PATH [--file-format auto|pdb|mmcif|cif|mol|mol2|psf|pqr|
                  [--frames current|all] [--precision 0..15]
                  [--comment TEXT] [--overwrite false|true]
 molshredder select --name NAME --expression EXPR [--update false|true]
-molshredder show --representation lines|sticks|spheres|ribbon|cartoon [--selection EXPR]
+molshredder show --representation REP [--selection EXPR]
                    [--replace false|true]
+molshredder hide --representation REP [--selection EXPR]
+molshredder as --representation REP [--selection EXPR]
+molshredder toggle --representation REP [--selection EXPR]
 molshredder analyze center [--selection EXPR] [--mode centroid|com]
                                [--precision 0..15] [--unit angstrom|nanometer]
+                               [--result-name NAME]
 molshredder measure distance --from EXPR --to EXPR
                                [--mode atom|centroid|com|minimum|maximum|mean|closest]
                                [--pbc raw|minimum-image]
                                [--precision 0..15] [--unit angstrom|nanometer]
+                               [--result-name NAME]
+molshredder result list
+molshredder result get --id ID
+molshredder result show --id ID
+molshredder result hide --id ID
+molshredder result export --id ID --path PATH
+                           [--output-format json|csv] [--overwrite false|true]
+molshredder result delete --id ID
 molshredder script run --path SCRIPT.py --trust true
                          [--arguments-json '["arg1","arg2"]']
                          [--working-directory DIRECTORY]
@@ -87,6 +144,9 @@ required/default/choice metadata에서 생성되는 authoritative user help다.
 MD vertical slice의 additive trajectory playback 및 time-series 문법은
 [Trajectory commands](TRAJECTORY_COMMANDS.md)에 둔다. 이는 foundation 다섯 command의 grammar v1을
 변경하지 않는다.
+Trajectory attach는 `--mapping exact|index|explicit`을 반드시 선택한다. Identity strength, stable-ID map,
+topology version 및 channel/unit conversion result는
+[Trajectory attachment contract](TRAJECTORY_ATTACHMENT.md)를 따른다.
 다중 object의 additive `object list/activate/visibility` 문법과 failure-atomic scene semantics는
 [Molecular objects and visibility](OBJECTS.md)에 둔다.
 Additive `format list`와 `save` 문법, atomic output 및 semantic loss table은
@@ -102,6 +162,10 @@ Additive `format list`와 `save` 문법, atomic output 및 semantic loss table�
   G96 ordered POSITION block도 stable identity의 frame들로 한 object에 유지된다. PSF와 Amber PRMTOP은
   정상적인 zero-frame topology object로 load되며 `traj load` 전에는 coordinate operation이 명시적으로
   실패한다. PRMTOP에는 `--file-format prmtop`을 사용하며 `.prmtop`, `.parm7`, `.top`은 자동 판별된다.
+- `load batch`: semicolon으로 구분한 여러 structure input을 모두 parse/build한 뒤 Workspace와 Scene에 한 번에
+  commit한다. `--names`를 사용하면 path 수와 정확히 같아야 한다. 중간 parse 오류, duplicate name 또는
+  cancellation에서는 어떤 object도 추가하지 않는다. Python과 Desktop multi-file Open도 같은 canonical
+  operation을 사용한다. Resource와 stale-completion 계약은 [Bounded task execution](TASK_EXECUTION.md)을 참고한다.
   VTF는 `--file-format vtf` 또는 `.vtf` suffix로 topology, bond, atom property, unit cell과 ordered/indexed
   sparse frame을 한 object에 load한다. Multi-frame structure는 즉시 `traj frame/play`에 연결된다.
   BinaryCIF 0.3.x는 `.bcif` 또는 `--file-format bcif`로 읽으며 multi-block/model semantics는 mmCIF와 같다.
@@ -119,10 +183,14 @@ Additive `format list`와 `save` 문법, atomic output 및 semantic loss table�
   `--replace true`가 기본이다. GUI, CLI와 Python은 같은 failure-atomic Workspace operation을 호출한다.
 - `select`: atom selection expression을 named selection으로 생성 또는 교체한다. `--update true`는
   frame/state 변화에 따라 다시 평가되는 selection을 뜻한다.
-- `show`: selection에 representation을 보이게 한다. 현재 choice는 lines/sticks/spheres와
-  protein backbone ribbon/cartoon이다. 기본은 기존 representation에 append하며 `--replace true`는
-  새 packet 생성이 성공한 뒤 기존 representation을 atomic하게 교체한다. Cartoon은 독립
-  STRIDE-method v0 assignment를 사용한다.
+- `show/hide/as/toggle`: object별 atom×representation visibility bitset을 같은 typed operation으로 바꾼다.
+  `REP`은 `lines|sticks|spheres|ribbon|cartoon|everything|wire|licorice`다. Show는 선택 범위에 additive,
+  hide는 subtractive, as는 선택 범위의 competing representation을 지운 뒤 요청 mask를 켠다. Toggle은 요청
+  mask 중 선택 atom에 켜진 bit가 하나라도 있으면 선택 범위 전체를 끄고, 모두 꺼져 있으면 전부 켠다.
+  `show --replace true`는 호환 문법으로 `as`와 같다. 모든 mutation은 packet rebuild 성공 후 state와 함께
+  atomic commit되며 object visibility를 바꾸지 않는다. `everything`은 현재 구현된 다섯 primitive를 뜻한다.
+  PyMOL의 `wire`/`licorice`에 포함되는 별도 nonbonded primitive는 아직 없으므로 각각 lines/sticks로
+  축소되어 결과의 `resolved_representations`에 명시된다. Cartoon은 독립 STRIDE-method v0 assignment를 사용한다.
 - `analyze center`: 재사용 가능한 scalar/vector analysis result를 계산한다. `centroid`와 `com`을
   구분하며 기본 selection은 `all`이다. COM은 topology의 explicit `mass` property를 우선하고 없을
   때 versioned estimated element-mass table을 사용하며 provenance를 결과에 포함한다.
@@ -130,6 +198,9 @@ Additive `format list`와 `save` 문법, atomic output 및 semantic loss table�
   expression이고 mode가 reduction semantics를 지정한다. 현재 실행되는 첫 slice는 endpoint마다
   정확히 한 atom을 선택하는 `mode=atom`이며 `pbc=raw|minimum-image`를 지원한다. Minimum-image는
   active frame의 orthorhombic/triclinic unit cell을 요구한다.
+- `result list/get/show/hide/export/delete`: analysis 결과와 provenance, stale source 상태 및 독립적인
+  viewport overlay를 관리한다. 상세 schema와 atomic export 계약은
+  [Persistent analysis results](ANALYSIS_RESULTS.md)에 둔다.
 - `view get/set`: target, normalized quaternion orientation, distance, projection, FOV/orthographic height,
   별도 model-space rotation origin, aspect ratio와 near/far clip으로 구성된 validated camera snapshot을 조회·부분 갱신한다. Validation 실패는
   이전 snapshot을 보존한다. Quaternion component를 직접 바꿀 때에는 결과 네 component가 unit quaternion이어야 한다.
@@ -173,8 +244,10 @@ Additive `format list`와 `save` 문법, atomic output 및 semantic loss table�
   perspective FOV 변경은 distance를 다시 계산하며 near/far clip도 distance와 같은 비율로 조정한다. Target,
   orientation과 model origin은 유지한다. `--preserve-scale false`는 projection/FOV field만 바꾸는 raw switch다.
 - `stereo set/get/modes`: `stereo_shift`(objective distance의 %)와 `stereo_angle` scale을 validated state로
-  관리한다. 현재 QRhi renderer는 `side_by_side`, `crosseye`, `walleye`, `anaglyph`를 실제 렌더링한다.
-  Anaglyph는 `true`, `gray`, `color`, `half_color`, `optimized` 색상 조합을 선택한다. 다른 알려진 mode는
+  관리한다. 현재 QRhi renderer는 `side_by_side`, `crosseye`, `walleye`, `anaglyph`, `row_interleaved`,
+  `column_interleaved`, `checkerboard`를 실제 렌더링한다. Anaglyph는 `true`, `gray`, `color`, `half_color`,
+  `optimized` 색상 조합을 선택한다. Interleaved mode는 global device-pixel parity를 사용하고 eye swap으로
+  display phase를 반전할 수 있다. 다른 알려진 mode는
   monoscopic fallback으로 위장하지 않고 `unsupported`를 반환하며, `stereo modes`가 구현 여부와 runtime availability를 구분한다.
   FOV는 `0 < degrees < 180`이어야 하며 실패 시 camera 전체를 보존한다. `perspective`, `orthographic`,
   PyMOL 용어 `orthoscopic` shorthand도 이 operation으로 정규화된다.

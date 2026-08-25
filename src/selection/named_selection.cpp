@@ -132,4 +132,40 @@ std::vector<NamedSelectionInfo> NamedSelections::list() const {
   return result;
 }
 
+operation::Result<NamedSelections> NamedSelections::remap(
+    const model::Topology& source, const model::Topology& target,
+    const model::TopologyRemap& remap) const {
+  if (remap.source_version != source.version() ||
+      remap.target_version != target.version() ||
+      remap.source_atoms.size() != source.atom_count() ||
+      remap.target_atoms.size() != target.atom_count()) {
+    return operation::Result<NamedSelections>::failure(
+        invalid("named selection topology remap does not match snapshots"));
+  }
+  auto result = *this;
+  for (auto& [name, entry] : result.entries_) {
+    static_cast<void>(name);
+    if (entry.dynamic)
+      continue;
+    if (entry.static_topology != &source ||
+        entry.static_topology_version != source.version() ||
+        !mask_is_valid(entry.static_mask, source.atom_count())) {
+      return operation::Result<NamedSelections>::failure(invalid(
+          "static named selection belongs to a stale topology snapshot"));
+    }
+    Mask target_mask(target.atom_count(), 0U);
+    for (std::size_t source_index = 0;
+         source_index < remap.source_atoms.size(); ++source_index) {
+      if (entry.static_mask[source_index] == 0U ||
+          !remap.source_atoms[source_index].has_value())
+        continue;
+      target_mask[remap.source_atoms[source_index]->value] = 1U;
+    }
+    entry.static_topology = &target;
+    entry.static_topology_version = target.version();
+    entry.static_mask = std::move(target_mask);
+  }
+  return operation::Result<NamedSelections>::success(std::move(result));
+}
+
 }  // namespace molshredder::selection

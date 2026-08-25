@@ -74,6 +74,49 @@ render::RepresentationKind representation_kind(std::string_view value) {
   return render::RepresentationKind::lines;
 }
 
+std::vector<render::RepresentationKind>
+representation_kinds(std::string_view value) {
+  if (value == "everything") {
+    return {render::RepresentationKind::lines,
+            render::RepresentationKind::sticks,
+            render::RepresentationKind::spheres,
+            render::RepresentationKind::ribbon,
+            render::RepresentationKind::cartoon};
+  }
+  if (value == "wire")
+    return {render::RepresentationKind::lines};
+  if (value == "licorice")
+    return {render::RepresentationKind::sticks};
+  return {representation_kind(value)};
+}
+
+std::string resolved_representation_names(
+    std::span<const render::RepresentationKind> kinds) {
+  std::string result;
+  for (const auto kind : kinds) {
+    if (!result.empty())
+      result += ',';
+    switch (kind) {
+    case render::RepresentationKind::lines:
+      result += "lines";
+      break;
+    case render::RepresentationKind::sticks:
+      result += "sticks";
+      break;
+    case render::RepresentationKind::spheres:
+      result += "spheres";
+      break;
+    case render::RepresentationKind::ribbon:
+      result += "ribbon";
+      break;
+    case render::RepresentationKind::cartoon:
+      result += "cartoon";
+      break;
+    }
+  }
+  return result;
+}
+
 operation::LengthUnit length_unit(std::string_view value) {
   return value == "nanometer" ? operation::LengthUnit::nanometer
                               : operation::LengthUnit::angstrom;
@@ -102,6 +145,27 @@ command::Value precise(double value, unsigned int precision) {
   return command::Number{rounded(value, precision), precision};
 }
 
+std::optional<std::string> requested_result_name(
+    const command::Arguments &arguments) {
+  const auto found = arguments.find("result-name");
+  return found == arguments.end() ? std::nullopt
+                                  : std::optional<std::string>{found->second};
+}
+
+std::optional<operation::Error> validate_result_name(
+    const Workspace &workspace, const command::Arguments &arguments) {
+  return workspace.validate_analysis_result_name(
+      requested_result_name(arguments));
+}
+
+operation::Result<command::Response> persist_analysis_response(
+    Workspace &workspace, AnalysisResultDraft draft) {
+  const auto stored = workspace.store_analysis_result(std::move(draft));
+  if (!stored.has_value())
+    return operation::Result<command::Response>::failure(stored.error());
+  return operation::Result<command::Response>::success(stored.value().response);
+}
+
 operation::Result<std::size_t>
 size_argument(const command::Arguments &arguments, std::string_view name,
               bool require_positive = false) {
@@ -127,6 +191,150 @@ size_argument(const command::Arguments &arguments, std::string_view name,
   }
   return operation::Result<std::size_t>::success(
       static_cast<std::size_t>(parsed));
+}
+
+operation::Result<std::vector<std::string>> batch_values(
+    std::string_view text, std::string_view parameter) {
+  std::vector<std::string> values;
+  std::size_t begin{};
+  while (begin <= text.size()) {
+    const auto end = text.find(';', begin);
+    const auto length = end == std::string_view::npos ? text.size() - begin
+                                                      : end - begin;
+    if (length == 0U) {
+      return operation::Result<std::vector<std::string>>::failure(
+          operation::Error{operation::ErrorCode::invalid_argument,
+                           "--" + std::string{parameter} +
+                               " contains an empty batch item",
+                           "provide non-empty semicolon-delimited values"});
+    }
+    values.emplace_back(text.substr(begin, length));
+    if (end == std::string_view::npos) break;
+    begin = end + 1U;
+  }
+  return operation::Result<std::vector<std::string>>::success(
+      std::move(values));
+}
+
+operation::Result<std::uint64_t>
+uint64_argument(const command::Arguments &arguments, std::string_view name,
+                bool require_positive = false) {
+  const auto found = arguments.find(name);
+  if (found == arguments.end())
+    return operation::Result<std::uint64_t>::failure(operation::Error{
+        operation::ErrorCode::internal,
+        "normalized command is missing --" + std::string{name}, {}});
+  std::uint64_t parsed{};
+  const auto &text = found->second;
+  const auto result =
+      std::from_chars(text.data(), text.data() + text.size(), parsed);
+  if (result.ec != std::errc{} || result.ptr != text.data() + text.size() ||
+      (require_positive && parsed == 0U)) {
+    return operation::Result<std::uint64_t>::failure(operation::Error{
+        operation::ErrorCode::invalid_argument,
+        "invalid unsigned 64-bit value for --" + std::string{name} + ": " +
+            text,
+        require_positive ? "provide a positive integer in the uint64 range"
+                         : "provide an integer in the uint64 range"});
+  }
+  return operation::Result<std::uint64_t>::success(parsed);
+}
+
+operation::Result<std::vector<model::AtomId>> atom_id_list_argument(
+    const command::Arguments &arguments, std::string_view name) {
+  const auto found = arguments.find(name);
+  if (found == arguments.end())
+    return operation::Result<std::vector<model::AtomId>>::failure(
+        operation::Error{operation::ErrorCode::internal,
+                         "normalized command is missing --" +
+                             std::string{name},
+                         {}});
+  if (found->second == "none")
+    return operation::Result<std::vector<model::AtomId>>::success({});
+  std::vector<model::AtomId> ids;
+  std::string_view remaining{found->second};
+  while (!remaining.empty()) {
+    const auto comma = remaining.find(',');
+    const auto token = remaining.substr(0U, comma);
+    std::uint64_t value{};
+    const auto parsed =
+        std::from_chars(token.data(), token.data() + token.size(), value);
+    if (token.empty() || parsed.ec != std::errc{} ||
+        parsed.ptr != token.data() + token.size() || value == 0U) {
+      return operation::Result<std::vector<model::AtomId>>::failure(
+          operation::Error{operation::ErrorCode::invalid_argument,
+                           "invalid stable atom ID list: " + found->second,
+                           "use comma-separated positive uint64 IDs or none"});
+    }
+    ids.push_back(model::AtomId{value});
+    if (comma == std::string_view::npos)
+      break;
+    remaining.remove_prefix(comma + 1U);
+  }
+  return operation::Result<std::vector<model::AtomId>>::success(
+      std::move(ids));
+}
+
+trajectory::AtomMappingPolicy trajectory_mapping_policy(
+    std::string_view value) {
+  if (value == "exact") return trajectory::AtomMappingPolicy::exact;
+  if (value == "explicit") return trajectory::AtomMappingPolicy::explicit_map;
+  return trajectory::AtomMappingPolicy::index_order;
+}
+
+command::Value trajectory_mapping_value(
+    const trajectory::AtomMappingReport &mapping) {
+  command::Value::Array axes;
+  for (const auto &axis : mapping.compared_axes) axes.emplace_back(axis);
+  return command::Value::Object{
+      {"compared_axes", std::move(axes)},
+      {"identity_strength", mapping.identity_strength},
+      {"policy", std::string{trajectory::to_string(mapping.policy)}},
+      {"topology_version", mapping.topology_version}};
+}
+
+std::string_view time_unit_name(model::TimeUnit unit) {
+  return unit == model::TimeUnit::femtosecond ? "femtosecond" : "picosecond";
+}
+
+command::Value trajectory_semantics_value(
+    const trajectory::TrajectorySemanticReport &semantics) {
+  const auto &channels = semantics.channels;
+  return command::Value::Object{
+      {"canonical_coordinate_unit", semantics.canonical_coordinate_unit},
+      {"canonical_time_unit", semantics.canonical_time_unit},
+      {"channels",
+       command::Value::Object{
+           {"force", channels.has_forces},
+           {"physical_time", channels.has_physical_time},
+           {"source_step", channels.has_source_step},
+           {"unit_cell", channels.has_unit_cell},
+           {"velocity", channels.has_velocities}}},
+      {"coordinate_conversion_applied",
+       semantics.coordinate_conversion_applied},
+      {"force_conversion_applied", semantics.force_conversion_applied},
+      {"force_unit", channels.force_unit.empty()
+                         ? command::Value{nullptr}
+                         : command::Value{channels.force_unit}},
+      {"schema", semantics.schema},
+      {"missing_data_policy", semantics.missing_data_policy},
+      {"source_coordinate_unit",
+       std::string{length_unit_name(channels.source_coordinate_unit)}},
+      {"source_force_unit", channels.source_force_unit.empty()
+                                ? command::Value{nullptr}
+                                : command::Value{channels.source_force_unit}},
+      {"source_physical_time_unit",
+       channels.has_physical_time
+           ? command::Value{std::string{
+                 time_unit_name(channels.physical_time_unit)}}
+           : command::Value{nullptr}},
+      {"source_velocity_time_unit",
+       channels.has_velocities
+           ? command::Value{std::string{
+                 time_unit_name(channels.velocity_time_unit)}}
+           : command::Value{nullptr}},
+      {"time_conversion_applied", semantics.time_conversion_applied},
+      {"validation_scope", semantics.validation_scope}};
 }
 
 operation::Result<CameraStateScope>
@@ -194,6 +402,166 @@ operation::Result<double> number_argument(const command::Arguments &arguments,
                          "provide a finite number"});
   }
   return operation::Result<double>::success(parsed);
+}
+
+struct RenderSettingTarget {
+  render::RenderSettingScope scope;
+  render::RenderSettingContext context;
+};
+
+std::string_view render_setting_scope_name(
+    render::RenderSettingScopeLevel level) {
+  using enum render::RenderSettingScopeLevel;
+  switch (level) {
+  case global: return "global";
+  case object: return "object";
+  case object_state: return "state";
+  case atom: return "atom";
+  case bond: return "bond";
+  }
+  return "global";
+}
+
+operation::Result<RenderSettingTarget> render_setting_target(
+    const command::Arguments &arguments, const Workspace &workspace) {
+  using operation::Error;
+  using operation::ErrorCode;
+  using operation::Result;
+  const auto scope_name = arguments.at("scope");
+  if (scope_name == "global")
+    return Result<RenderSettingTarget>::success({{}, {}});
+  const auto object_reference = arguments.at("object");
+  const WorkspaceObject *object = nullptr;
+  for (const auto &candidate : workspace.objects()) {
+    if ((object_reference == "current" &&
+         workspace.active_object() == &candidate) ||
+        object_reference == candidate.system->name() ||
+        object_reference == std::to_string(candidate.id)) {
+      object = &candidate;
+      break;
+    }
+  }
+  if (object == nullptr) {
+    return Result<RenderSettingTarget>::failure(
+        Error{ErrorCode::not_found,
+              "render setting object does not exist: " + object_reference,
+              "use current, an object name, or object list ID"});
+  }
+  std::size_t state_index{};
+  const auto state = arguments.at("state");
+  if (state == "current") {
+    if (object->trajectory.has_value())
+      state_index = object->trajectory->timeline.snapshot().frame;
+  } else {
+    unsigned long long parsed{};
+    const auto conversion =
+        std::from_chars(state.data(), state.data() + state.size(), parsed);
+    if (conversion.ec != std::errc{} ||
+        conversion.ptr != state.data() + state.size() || parsed == 0U ||
+        parsed - 1U > std::numeric_limits<std::size_t>::max()) {
+      return Result<RenderSettingTarget>::failure(Error{
+          ErrorCode::invalid_argument, "invalid render setting state: " + state,
+          "use current or a positive one-based state"});
+    }
+    state_index = static_cast<std::size_t>(parsed - 1U);
+  }
+  auto level = render::RenderSettingScopeLevel::object;
+  std::uint64_t atom_id{};
+  std::uint64_t bond_id{};
+  if (scope_name == "state") {
+    level = render::RenderSettingScopeLevel::object_state;
+  } else if (scope_name == "atom" || scope_name == "bond") {
+    const auto found = arguments.find("target");
+    if (found == arguments.end()) {
+      return Result<RenderSettingTarget>::failure(Error{
+          ErrorCode::invalid_argument,
+          "--target is required for atom and bond render setting scopes",
+          "provide the one-based atom or bond ID"});
+    }
+    unsigned long long parsed{};
+    const auto conversion = std::from_chars(
+        found->second.data(), found->second.data() + found->second.size(), parsed);
+    if (conversion.ec != std::errc{} ||
+        conversion.ptr != found->second.data() + found->second.size() ||
+        parsed == 0U) {
+      return Result<RenderSettingTarget>::failure(Error{
+          ErrorCode::invalid_argument,
+          "invalid positive render setting target: " + found->second,
+          "provide a one-based atom or bond ID"});
+    }
+    if (scope_name == "atom") {
+      level = render::RenderSettingScopeLevel::atom;
+      atom_id = parsed;
+    } else {
+      level = render::RenderSettingScopeLevel::bond;
+      bond_id = parsed;
+    }
+  } else if (scope_name != "object") {
+    return Result<RenderSettingTarget>::failure(
+        Error{ErrorCode::invalid_argument,
+              "unknown render setting scope: " + scope_name, {}});
+  }
+  const auto scope_state =
+      level == render::RenderSettingScopeLevel::object ? 0U : state_index;
+  return Result<RenderSettingTarget>::success(
+      {{level, object->id, scope_state, atom_id, bond_id},
+       {object->id, state_index, atom_id, bond_id}});
+}
+
+operation::Result<render::RenderSettingValue> parse_render_setting_value(
+    const render::RenderSettingDefinition &definition,
+    std::string_view text) {
+  using operation::Error;
+  using operation::ErrorCode;
+  using operation::Result;
+  switch (definition.value_type) {
+  case render::RenderSettingValueType::boolean:
+    if (text == "true")
+      return Result<render::RenderSettingValue>::success(true);
+    if (text == "false")
+      return Result<render::RenderSettingValue>::success(false);
+    break;
+  case render::RenderSettingValueType::integer: {
+    std::int64_t parsed{};
+    const auto conversion =
+        std::from_chars(text.data(), text.data() + text.size(), parsed);
+    if (conversion.ec == std::errc{} &&
+        conversion.ptr == text.data() + text.size())
+      return Result<render::RenderSettingValue>::success(parsed);
+    break;
+  }
+  case render::RenderSettingValueType::number: {
+    double parsed{};
+    const auto conversion =
+        std::from_chars(text.data(), text.data() + text.size(), parsed);
+    if (conversion.ec == std::errc{} &&
+        conversion.ptr == text.data() + text.size() && std::isfinite(parsed))
+      return Result<render::RenderSettingValue>::success(parsed);
+    break;
+  }
+  case render::RenderSettingValueType::color:
+    return Result<render::RenderSettingValue>::success(std::string{text});
+  }
+  return Result<render::RenderSettingValue>::failure(
+      Error{ErrorCode::invalid_argument,
+            "render setting value does not match type for " + definition.name,
+            "inspect setting list for the declared type and range"});
+}
+
+command::Value render_setting_value(const render::RenderSettingValue &value) {
+  return std::visit(
+      [](const auto &item) -> command::Value { return item; }, value);
+}
+
+std::string_view render_setting_type_name(render::RenderSettingValueType type) {
+  using enum render::RenderSettingValueType;
+  switch (type) {
+  case boolean: return "boolean";
+  case integer: return "integer";
+  case number: return "number";
+  case color: return "color";
+  }
+  return "number";
 }
 
 operation::Result<model::Vec3d> vector_argument(
@@ -421,6 +789,29 @@ command::Value::Object object_fields(const WorkspaceObjectInfo &object) {
           {"visible", object.visible}};
 }
 
+command::Value::Object
+object_lifecycle_fields(const ObjectLifecycleResult &result) {
+  command::Value::Array order;
+  order.reserve(result.ordered_object_ids.size());
+  for (const auto id : result.ordered_object_ids)
+    order.emplace_back(id);
+  return {{"active_object_id",
+           result.active_object_id.has_value()
+               ? command::Value{*result.active_object_id}
+               : command::Value{nullptr}},
+          {"deleted", result.deleted},
+          {"name", result.name},
+          {"new_position", result.new_position + 1U},
+          {"object_count", result.object_count},
+          {"object_id", result.object_id},
+          {"old_position", result.old_position + 1U},
+          {"ordered_object_ids", std::move(order)},
+          {"removed_measurement_count", result.removed_measurement_count},
+          {"removed_setting_override_count",
+           result.removed_setting_override_count},
+          {"scene_node_id", result.scene_node_id}};
+}
+
 io::TrajectoryFormat trajectory_format(std::string_view value) {
   if (value == "dcd")
     return io::TrajectoryFormat::dcd;
@@ -497,7 +888,10 @@ bool implemented_stereo_mode(scene::StereoMode mode) {
   return mode == scene::StereoMode::side_by_side ||
          mode == scene::StereoMode::crosseye ||
          mode == scene::StereoMode::walleye ||
-         mode == scene::StereoMode::anaglyph;
+         mode == scene::StereoMode::anaglyph ||
+         mode == scene::StereoMode::row_interleaved ||
+         mode == scene::StereoMode::column_interleaved ||
+         mode == scene::StereoMode::checkerboard;
 }
 
 command::Value stereo_value(const scene::StereoParameters &stereo) {
@@ -880,6 +1274,8 @@ command::Registry make_default_registry(
   auto view_descriptors = command::view_command_descriptors();
   auto file_descriptors = command::file_command_descriptors();
   auto trajectory_descriptors = command::trajectory_command_descriptors();
+  auto analysis_result_descriptors =
+      command::analysis_result_command_descriptors();
   descriptors.insert(descriptors.end(),
                      std::make_move_iterator(object_descriptors.begin()),
                      std::make_move_iterator(object_descriptors.end()));
@@ -892,10 +1288,100 @@ command::Registry make_default_registry(
   descriptors.insert(descriptors.end(),
                      std::make_move_iterator(trajectory_descriptors.begin()),
                      std::make_move_iterator(trajectory_descriptors.end()));
+  descriptors.insert(
+      descriptors.end(),
+      std::make_move_iterator(analysis_result_descriptors.begin()),
+      std::make_move_iterator(analysis_result_descriptors.end()));
   for (auto descriptor : std::move(descriptors)) {
     const auto canonical_name = descriptor.canonical_name;
     command::Handler handler;
-    if (canonical_name == "view get") {
+    if (canonical_name == "result list") {
+      handler = [workspace](const Arguments &, TaskContext &) {
+        command::Table table;
+        table.columns = {"result_id", "name", "kind", "source_status",
+                         "object_id", "topology_version", "created_at_utc",
+                         "overlay_visible"};
+        for (const auto &record : workspace->analysis_results()) {
+          table.rows.push_back(
+              {record.result_id, record.name,
+               std::string{to_string(record.kind)},
+               std::string{to_string(workspace->analysis_source_status(record))},
+               record.provenance.source.object_id,
+               record.provenance.source.topology_version,
+               record.provenance.created_at_utc, record.overlay_visible});
+        }
+        return Result<Response>::success(
+            {"persistent analysis results",
+             {{"result_count", workspace->analysis_results().size()}},
+             std::move(table)});
+      };
+    } else if (canonical_name == "result get") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const auto id = size_argument(arguments, "id", true);
+        if (!id.has_value()) return Result<Response>::failure(id.error());
+        const auto record = workspace->analysis_result(id.value());
+        if (!record.has_value())
+          return Result<Response>::failure(record.error());
+        return Result<Response>::success(analysis_result_response(
+            record.value(), workspace->analysis_source_status(record.value())));
+      };
+    } else if (canonical_name == "result delete") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const auto id = size_argument(arguments, "id", true);
+        if (!id.has_value()) return Result<Response>::failure(id.error());
+        const auto removed = workspace->delete_analysis_result(id.value());
+        if (!removed.has_value())
+          return Result<Response>::failure(removed.error());
+        return Result<Response>::success(
+            {"analysis result deleted",
+             {{"name", removed.value().name},
+              {"result_id", removed.value().result_id},
+              {"result_count", workspace->analysis_results().size()}}});
+      };
+    } else if (canonical_name == "result show" ||
+               canonical_name == "result hide") {
+      handler = [workspace, canonical_name](const Arguments &arguments,
+                                            TaskContext &) {
+        const auto id = size_argument(arguments, "id", true);
+        if (!id.has_value()) return Result<Response>::failure(id.error());
+        const auto changed = workspace->set_analysis_overlay_visible(
+            id.value(), canonical_name == "result show");
+        if (!changed.has_value())
+          return Result<Response>::failure(changed.error());
+        return Result<Response>::success(analysis_result_response(
+            changed.value(),
+            workspace->analysis_source_status(changed.value())));
+      };
+    } else if (canonical_name == "result export") {
+      handler = [workspace](const Arguments &arguments, TaskContext &context) {
+        if (context.cancellation.is_cancelled())
+          return Result<Response>::failure(
+              operation::Error{operation::ErrorCode::cancelled,
+                               "analysis result export cancelled", {}});
+        const auto id = size_argument(arguments, "id", true);
+        if (!id.has_value()) return Result<Response>::failure(id.error());
+        const auto record = workspace->analysis_result(id.value());
+        if (!record.has_value())
+          return Result<Response>::failure(record.error());
+        const auto format = arguments.at("output-format") == "csv"
+                                ? operation::OutputFormat::csv
+                                : operation::OutputFormat::json;
+        const auto exported = export_analysis_result(
+            record.value(), workspace->analysis_source_status(record.value()),
+            arguments.at("path"), format,
+            arguments.at("overwrite") == "true");
+        if (!exported.has_value())
+          return Result<Response>::failure(exported.error());
+        if (context.report_progress)
+          context.report_progress({1.0, "analysis result exported"});
+        return Result<Response>::success(
+            {"analysis result exported",
+             {{"byte_count", exported.value().byte_count},
+              {"format", exported.value().format},
+              {"path", exported.value().path.string()},
+              {"result_id", exported.value().result_id}}});
+      };
+    } else if (canonical_name == "view get") {
       handler = [workspace](const Arguments &, TaskContext &) {
         return Result<Response>::success(
             {"Current camera view",
@@ -1701,11 +2187,11 @@ command::Registry make_default_registry(
       };
     } else if (canonical_name == "object activate") {
       handler = [workspace](const Arguments &arguments, TaskContext &) {
-        const auto id = size_argument(arguments, "id", true);
+        const auto id = uint64_argument(arguments, "id", true);
         if (!id.has_value())
           return Result<Response>::failure(id.error());
         const auto activated =
-            workspace->activate_object(static_cast<std::uint64_t>(id.value()));
+            workspace->activate_object(id.value());
         if (!activated.has_value()) {
           return Result<Response>::failure(activated.error());
         }
@@ -1715,18 +2201,152 @@ command::Registry make_default_registry(
       };
     } else if (canonical_name == "object visibility") {
       handler = [workspace](const Arguments &arguments, TaskContext &) {
-        const auto id = size_argument(arguments, "id", true);
+        const auto id = uint64_argument(arguments, "id", true);
         if (!id.has_value())
           return Result<Response>::failure(id.error());
         const auto changed = workspace->set_object_visibility(
-            static_cast<std::uint64_t>(id.value()),
-            arguments.at("visible") == "true");
+            id.value(), arguments.at("visible") == "true");
         if (!changed.has_value()) {
           return Result<Response>::failure(changed.error());
         }
         return Result<Response>::success(
             {changed.value().visible ? "object shown" : "object hidden",
              object_fields(changed.value())});
+      };
+    } else if (canonical_name == "object rename") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const auto changed = workspace->rename_object(arguments.at("object"),
+                                                      arguments.at("name"));
+        if (!changed.has_value())
+          return Result<Response>::failure(changed.error());
+        return Result<Response>::success(
+            {"renamed object " + changed.value().name,
+             object_lifecycle_fields(changed.value())});
+      };
+    } else if (canonical_name == "object delete") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const auto changed = workspace->delete_object(arguments.at("object"));
+        if (!changed.has_value())
+          return Result<Response>::failure(changed.error());
+        return Result<Response>::success(
+            {"deleted object " + changed.value().name,
+             object_lifecycle_fields(changed.value())});
+      };
+    } else if (canonical_name == "object reorder") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const auto position = size_argument(arguments, "position", true);
+        if (!position.has_value())
+          return Result<Response>::failure(position.error());
+        const auto changed = workspace->reorder_object(
+            arguments.at("object"), position.value() - 1U);
+        if (!changed.has_value())
+          return Result<Response>::failure(changed.error());
+        return Result<Response>::success(
+            {"reordered object " + changed.value().name,
+             object_lifecycle_fields(changed.value())});
+      };
+    } else if (canonical_name == "object topology-retain") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const auto ids = atom_id_list_argument(arguments, "atom-ids");
+        if (!ids.has_value())
+          return Result<Response>::failure(ids.error());
+        const auto version =
+            uint64_argument(arguments, "expected-version", true);
+        if (!version.has_value())
+          return Result<Response>::failure(version.error());
+        const auto changed =
+            workspace->retain_active_atoms(ids.value(), version.value());
+        if (!changed.has_value())
+          return Result<Response>::failure(changed.error());
+        command::Value::Array ordered;
+        ordered.reserve(changed.value().ordered_atom_ids.size());
+        for (const auto id : changed.value().ordered_atom_ids)
+          ordered.emplace_back(id);
+        return Result<Response>::success(
+            {"updated topology snapshot",
+             {{"atom_count", changed.value().atom_count},
+              {"invalidated_measurement_count",
+               changed.value().invalidated_measurement_count},
+              {"object_id", changed.value().object_id},
+              {"ordered_atom_ids", std::move(ordered)},
+              {"previous_atom_count", changed.value().previous_atom_count},
+              {"previous_version", changed.value().previous_version},
+              {"removed_atom_count", changed.value().removed_atom_count},
+              {"removed_bond_count", changed.value().removed_bond_count},
+              {"removed_setting_override_count",
+               changed.value().removed_setting_override_count},
+              {"topology_version", changed.value().topology_version}}});
+      };
+    } else if (canonical_name == "load batch") {
+      handler = [workspace](const Arguments &arguments, TaskContext &context) {
+        const auto provider =
+            requested_provider(arguments, io::FormatDirection::read);
+        if (!provider.has_value())
+          return Result<Response>::failure(provider.error());
+        if (provider.value().origin != io::FormatProviderOrigin::native_builtin) {
+          return Result<Response>::failure(operation::Error{
+              operation::ErrorCode::unsupported,
+              "atomic batch load currently requires the native provider",
+              "set --provider native"});
+        }
+        const auto paths = batch_values(arguments.at("paths"), "paths");
+        if (!paths.has_value())
+          return Result<Response>::failure(paths.error());
+        std::vector<std::string> names;
+        if (const auto found = arguments.find("names");
+            found != arguments.end()) {
+          auto parsed = batch_values(found->second, "names");
+          if (!parsed.has_value())
+            return Result<Response>::failure(parsed.error());
+          names = std::move(parsed.value());
+          if (names.size() != paths.value().size()) {
+            return Result<Response>::failure(operation::Error{
+                operation::ErrorCode::invalid_argument,
+                "--names count must equal --paths count",
+                "omit --names or provide one name for every input"});
+          }
+        }
+        std::vector<StructureLoadRequest> requests;
+        requests.reserve(paths.value().size());
+        for (std::size_t index = 0; index < paths.value().size(); ++index) {
+          requests.push_back(
+              {paths.value()[index],
+               names.empty() ? std::nullopt
+                             : std::optional<std::string>{names[index]},
+               structure_format(arguments)});
+        }
+        auto loaded = workspace->load_structure_batch(requests, context);
+        if (!loaded.has_value())
+          return Result<Response>::failure(loaded.error());
+        command::Value::Array formats;
+        for (const auto format : loaded.value().formats)
+          formats.emplace_back(std::string{io::to_string(format)});
+        command::Value::Array object_ids;
+        command::Value::Array loaded_objects;
+        for (const auto &object : loaded.value().objects) {
+          object_ids.emplace_back(object.object_id);
+          loaded_objects.emplace_back(command::Value::Object{
+              {"atom_count", static_cast<std::uint64_t>(object.atom_count)},
+              {"frame_count", static_cast<std::uint64_t>(object.frame_count)},
+              {"object_id", object.object_id},
+              {"object_name", object.object_name},
+              {"source_record_index",
+               static_cast<std::uint64_t>(object.source_record_index)}});
+        }
+        return Result<Response>::success(
+            {"atomically loaded " +
+                 std::to_string(loaded.value().objects.size()) +
+                 " structure(s)",
+             {{"active_object_id", loaded.value().object_id},
+              {"active_object_name", loaded.value().object_name},
+              {"formats", std::move(formats)},
+              {"input_count",
+               static_cast<std::uint64_t>(loaded.value().input_count)},
+              {"object_ids", std::move(object_ids)},
+              {"objects", std::move(loaded_objects)},
+              {"provider", provider_value(provider.value())},
+              {"structure_count",
+               static_cast<std::uint64_t>(loaded.value().objects.size())}}});
       };
     } else if (canonical_name == "load") {
       handler = [workspace, molfile_registry,
@@ -1924,31 +2544,177 @@ command::Registry make_default_registry(
               {"expression", arguments.at("expression")},
               {"name", arguments.at("name")}}});
       };
-    } else if (canonical_name == "show") {
-      handler = [workspace](const Arguments &arguments, TaskContext &) {
+    } else if (canonical_name == "setting list") {
+      handler = [workspace](const Arguments &, TaskContext &) {
+        command::Table table;
+        table.columns = {"id", "name", "type", "default", "minimum",
+                         "maximum", "unit", "maximum_scope"};
+        for (const auto &definition :
+             render::p0_render_setting_definitions()) {
+          table.rows.push_back(
+              {definition.stable_id, definition.name,
+               std::string{render_setting_type_name(definition.value_type)},
+               render_setting_value(definition.default_value),
+               definition.minimum.has_value()
+                   ? command::Value{*definition.minimum}
+                   : command::Value{nullptr},
+               definition.maximum.has_value()
+                   ? command::Value{*definition.maximum}
+                   : command::Value{nullptr},
+               definition.unit,
+               std::string{render_setting_scope_name(
+                   definition.maximum_scope)}});
+        }
+        return Result<Response>::success(
+            {"listed " + std::to_string(table.rows.size()) +
+                 " P0 render settings",
+             {{"catalog_revision",
+               std::string{render::kRenderSettingCatalogRevision}},
+              {"definition_count",
+               static_cast<std::uint64_t>(table.rows.size())},
+              {"override_count", static_cast<std::uint64_t>(
+                                     workspace->render_settings()
+                                         .override_count())}},
+             std::move(table)});
+      };
+    } else if (canonical_name == "setting set" ||
+               canonical_name == "setting get" ||
+               canonical_name == "setting unset" ||
+               canonical_name == "setting reset") {
+      handler = [workspace, canonical_name](const Arguments &arguments,
+                                             TaskContext &) {
+        const auto target = render_setting_target(arguments, *workspace);
+        if (!target.has_value())
+          return Result<Response>::failure(target.error());
+        const auto requested_scope =
+            std::string{render_setting_scope_name(target.value().scope.level)};
+        if (canonical_name == "setting reset") {
+          const auto removed =
+              workspace->reset_render_setting_scope(target.value().scope);
+          if (!removed.has_value())
+            return Result<Response>::failure(removed.error());
+          return Result<Response>::success(
+              {"render setting scope reset",
+               {{"catalog_revision",
+                 std::string{render::kRenderSettingCatalogRevision}},
+                {"override_count", static_cast<std::uint64_t>(
+                                       workspace->render_settings()
+                                           .override_count())},
+                {"removed_count",
+                 static_cast<std::uint64_t>(removed.value())},
+                {"scope", requested_scope}}});
+        }
+        const auto &name = arguments.at("name");
+        const auto *definition = workspace->render_settings().definition(name);
+        if (definition == nullptr) {
+          return Result<Response>::failure(operation::Error{
+              operation::ErrorCode::invalid_argument,
+              "unknown render setting: " + name,
+              "use setting list to inspect available names"});
+        }
+        bool removed{};
+        if (canonical_name == "setting set") {
+          const auto value =
+              parse_render_setting_value(*definition, arguments.at("value"));
+          if (!value.has_value())
+            return Result<Response>::failure(value.error());
+          if (const auto error = workspace->set_render_setting(
+                  name, target.value().scope, value.value());
+              error.has_value())
+            return Result<Response>::failure(*error);
+        } else if (canonical_name == "setting unset") {
+          const auto result =
+              workspace->unset_render_setting(name, target.value().scope);
+          if (!result.has_value())
+            return Result<Response>::failure(result.error());
+          removed = result.value();
+        }
+        const auto resolved = workspace->resolve_render_setting(
+            name, target.value().context);
+        if (!resolved.has_value())
+          return Result<Response>::failure(resolved.error());
+        command::Value source_scope{nullptr};
+        if (resolved.value().source_scope.has_value()) {
+          source_scope = std::string{render_setting_scope_name(
+              resolved.value().source_scope->level)};
+        }
+        return Result<Response>::success(
+            {canonical_name == "setting get"
+                 ? "render setting resolved"
+             : canonical_name == "setting unset"
+                 ? "render setting override removed"
+                 : "render setting override applied",
+             {{"catalog_revision",
+               std::string{render::kRenderSettingCatalogRevision}},
+              {"name", name},
+              {"override_count", static_cast<std::uint64_t>(
+                                     workspace->render_settings()
+                                         .override_count())},
+              {"removed", removed},
+              {"requested_scope", requested_scope},
+              {"source_scope", std::move(source_scope)},
+              {"type",
+               std::string{render_setting_type_name(definition->value_type)}},
+              {"value", render_setting_value(resolved.value().value)}}});
+      };
+    } else if (canonical_name == "show" || canonical_name == "hide" ||
+               canonical_name == "as" || canonical_name == "toggle") {
+      handler = [workspace, canonical_name](const Arguments &arguments,
+                                             TaskContext &) {
         const auto replace_argument = arguments.find("replace");
         const auto replace = replace_argument != arguments.end() &&
                              replace_argument->second == "true";
-        const auto shown =
-            workspace->show(representation_kind(arguments.at("representation")),
-                            arguments.at("selection"), replace);
-        if (!shown.has_value())
-          return Result<Response>::failure(shown.error());
+        auto mutation = RepresentationVisibilityMutation::show;
+        if (canonical_name == "hide")
+          mutation = RepresentationVisibilityMutation::hide;
+        else if (canonical_name == "as" || replace)
+          mutation = RepresentationVisibilityMutation::exclusive;
+        else if (canonical_name == "toggle")
+          mutation = RepresentationVisibilityMutation::toggle;
+        const auto kinds =
+            representation_kinds(arguments.at("representation"));
+        const auto changed = workspace->mutate_representation_visibility(
+            kinds, arguments.at("selection"), mutation);
+        if (!changed.has_value())
+          return Result<Response>::failure(changed.error());
+        std::size_t primitive_count{};
+        for (const auto &representation :
+             workspace->active_object()->representations) {
+          if (std::find(kinds.begin(), kinds.end(), representation.kind) ==
+              kinds.end())
+            continue;
+          primitive_count += representation.packet.lines.size() +
+                             representation.packet.cylinders.size() +
+                             representation.packet.spheres.size() +
+                             representation.packet.mesh_triangles.size();
+        }
         return Result<Response>::success(
-            {"representation created",
-             {{"object_id", shown.value().object_id},
+            {"representation visibility updated",
+             {{"affected_atom_count",
+               static_cast<std::uint64_t>(
+                   changed.value().affected_atom_count)},
+              {"object_id", changed.value().object_id},
+              {"operation", canonical_name == "show" && replace
+                                ? std::string{"as"}
+                                : canonical_name},
               {"primitive_count",
-               static_cast<std::uint64_t>(shown.value().primitive_count)},
+               static_cast<std::uint64_t>(primitive_count)},
               {"representation", arguments.at("representation")},
-              {"replace", replace},
-              {"representation_index",
-               static_cast<std::uint64_t>(shown.value().representation_index)},
-              {"selected_atom_count",
-               static_cast<std::uint64_t>(shown.value().selected_atom_count)},
-              {"selection", arguments.at("selection")}}});
+              {"representation_count",
+               static_cast<std::uint64_t>(
+                   changed.value().representation_count)},
+              {"resolved_representations",
+               resolved_representation_names(kinds)},
+              {"selection", arguments.at("selection")},
+              {"visible_membership_count",
+               static_cast<std::uint64_t>(
+                   changed.value().visible_atom_count)}}});
       };
     } else if (canonical_name == "analyze center") {
       handler = [workspace](const Arguments &arguments, TaskContext &) {
+        if (const auto error = validate_result_name(*workspace, arguments);
+            error.has_value())
+          return Result<Response>::failure(*error);
         const auto mode = arguments.at("mode") == "com"
                               ? analysis::CenterMode::center_of_mass
                               : analysis::CenterMode::centroid;
@@ -1987,11 +2753,43 @@ command::Registry make_default_registry(
           fields.emplace("mass_unit", center.mass_unit.value_or("unspecified"));
           fields.emplace("total_mass", center.total_mass.value());
         }
-        return Result<Response>::success(
-            {arguments.at("mode") + " calculated", std::move(fields)});
+        Response response{arguments.at("mode") + " calculated",
+                          std::move(fields)};
+        command::Table export_table;
+        export_table.columns = {"component", "value", "unit"};
+        export_table.rows = {
+            {"x", precise(component(center.position.x), precision),
+             std::string{length_unit_name(target_unit)}},
+            {"y", precise(component(center.position.y), precision),
+             std::string{length_unit_name(target_unit)}},
+            {"z", precise(component(center.position.z), precision),
+             std::string{length_unit_name(target_unit)}}};
+        AnalysisResultDraft draft;
+        draft.name = requested_result_name(arguments);
+        draft.kind = AnalysisResultKind::center;
+        draft.provenance.canonical_command = "analyze center";
+        draft.provenance.canonical_arguments = arguments;
+        draft.provenance.algorithm =
+            mode == analysis::CenterMode::center_of_mass
+                ? "compensated weighted center"
+                : "compensated arithmetic center";
+        draft.provenance.algorithm_version = "molshredder-center-v1";
+        draft.provenance.coordinate_unit = length_unit_name(target_unit);
+        draft.provenance.pbc_policy = "not_applicable";
+        draft.provenance.missing_data_policy = "error";
+        draft.response = response;
+        draft.export_table = std::move(export_table);
+        draft.overlay = PointAnalysisOverlay{
+            center.position,
+            arguments.at("mode") + " result in " +
+                std::string{length_unit_name(target_unit)}};
+        return persist_analysis_response(*workspace, std::move(draft));
       };
     } else if (canonical_name == "measure distance") {
       handler = [workspace](const Arguments &arguments, TaskContext &) {
+        if (const auto error = validate_result_name(*workspace, arguments);
+            error.has_value())
+          return Result<Response>::failure(*error);
         if (arguments.at("mode") != "atom") {
           return Result<Response>::failure(operation::Error{
               operation::ErrorCode::unsupported,
@@ -2016,9 +2814,9 @@ command::Registry make_default_registry(
               convert_length(value, distance.coordinate_unit, target_unit),
               precision);
         };
-        return Result<Response>::success(
-            {"distance measured",
-             {{"displacement",
+        Response response{
+            "distance measured",
+            {{"displacement",
                command::Value::Array{component(distance.displacement.x),
                                      component(distance.displacement.y),
                                      component(distance.displacement.z)}},
@@ -2033,7 +2831,38 @@ command::Registry make_default_registry(
               {"second_atom_index",
                static_cast<std::uint64_t>(distance.second.value + 1U)},
               {"to", measured.value().to_expression},
-              {"unit", std::string{length_unit_name(target_unit)}}}});
+              {"unit", std::string{length_unit_name(target_unit)}}}};
+        const auto label = std::to_string(component(distance.distance)) + " " +
+                           std::string{length_unit_name(target_unit)};
+        const auto overlay =
+            workspace->distance_analysis_overlay(measured.value(), label);
+        if (!overlay.has_value())
+          return Result<Response>::failure(overlay.error());
+        command::Table export_table;
+        export_table.columns = {"first_atom_index", "second_atom_index",
+                                "distance", "unit", "pbc"};
+        export_table.rows = {{distance.first.value + 1U,
+                              distance.second.value + 1U,
+                              precise(component(distance.distance), precision),
+                              std::string{length_unit_name(target_unit)},
+                              arguments.at("pbc")}};
+        AnalysisResultDraft draft;
+        draft.name = requested_result_name(arguments);
+        draft.kind = AnalysisResultKind::distance;
+        draft.provenance.canonical_command = "measure distance";
+        draft.provenance.canonical_arguments = arguments;
+        draft.provenance.algorithm =
+            boundary == analysis::DistanceBoundary::minimum_image
+                ? "exact triclinic closest-lattice distance"
+                : "Euclidean atom distance";
+        draft.provenance.algorithm_version = "molshredder-distance-v1";
+        draft.provenance.coordinate_unit = length_unit_name(target_unit);
+        draft.provenance.pbc_policy = arguments.at("pbc");
+        draft.provenance.missing_data_policy = "error";
+        draft.response = response;
+        draft.export_table = std::move(export_table);
+        draft.overlay = overlay.value();
+        return persist_analysis_response(*workspace, std::move(draft));
       };
     } else if (canonical_name == "analyze secondary-structure") {
       handler = [workspace](const Arguments &arguments, TaskContext &) {
@@ -2114,6 +2943,9 @@ command::Registry make_default_registry(
       };
     } else if (canonical_name == "analyze contacts") {
       handler = [workspace](const Arguments &arguments, TaskContext &) {
+        if (const auto error = validate_result_name(*workspace, arguments);
+            error.has_value())
+          return Result<Response>::failure(*error);
         const auto parsed_cutoff = number_argument(arguments, "cutoff");
         if (!parsed_cutoff.has_value())
           return Result<Response>::failure(parsed_cutoff.error());
@@ -2156,9 +2988,9 @@ command::Registry make_default_registry(
                std::string{length_unit_name(target_unit)},
                arguments.at("pbc")});
         }
-        return Result<Response>::success(
-            {"contacts calculated",
-             {{"cutoff", precise(parsed_cutoff.value(), precision)},
+        Response response{
+            "contacts calculated",
+            {{"cutoff", precise(parsed_cutoff.value(), precision)},
               {"exclude_bonded", arguments.at("exclude-bonded") == "true"},
               {"first", analyzed.value().first_expression},
               {"object_id", analyzed.value().object_id},
@@ -2167,7 +2999,23 @@ command::Registry make_default_registry(
               {"precision", precision},
               {"second", analyzed.value().second_expression},
               {"unit", std::string{length_unit_name(target_unit)}}},
-             std::move(table)});
+            table};
+        AnalysisResultDraft draft;
+        draft.name = requested_result_name(arguments);
+        draft.kind = AnalysisResultKind::contacts;
+        draft.provenance.canonical_command = "analyze contacts";
+        draft.provenance.canonical_arguments = arguments;
+        draft.provenance.algorithm =
+            boundary == analysis::DistanceBoundary::minimum_image
+                ? "wrapped fractional cell list with exact closest lattice"
+                : "Cartesian cell list";
+        draft.provenance.algorithm_version = "molshredder-contacts-v1";
+        draft.provenance.coordinate_unit = length_unit_name(target_unit);
+        draft.provenance.pbc_policy = arguments.at("pbc");
+        draft.provenance.missing_data_policy = "error";
+        draft.response = std::move(response);
+        draft.export_table = std::move(table);
+        return persist_analysis_response(*workspace, std::move(draft));
       };
     } else if (canonical_name == "analyze hbonds") {
       handler = [workspace](const Arguments &arguments, TaskContext &) {
@@ -2370,6 +3218,9 @@ command::Registry make_default_registry(
       };
     } else if (canonical_name == "analyze trajectory rmsd") {
       handler = [workspace](const Arguments &arguments, TaskContext &context) {
+        if (const auto error = validate_result_name(*workspace, arguments);
+            error.has_value())
+          return Result<Response>::failure(*error);
         const auto range = series_range(arguments, *workspace);
         const auto reference = size_argument(arguments, "reference");
         if (!range.has_value())
@@ -2443,8 +3294,27 @@ command::Registry make_default_registry(
             {"stride", range.value().stride},
             {"unit", std::string{length_unit_name(target_unit)}}};
         add_weight_provenance(fields, analyzed.value().weights);
-        return Result<Response>::success({"trajectory RMSD calculated",
-                                          std::move(fields), std::move(table)});
+        Response response{"trajectory RMSD calculated", std::move(fields),
+                          table};
+        AnalysisResultDraft draft;
+        draft.name = requested_result_name(arguments);
+        draft.kind = AnalysisResultKind::rmsd_series;
+        draft.provenance.canonical_command = "analyze trajectory rmsd";
+        draft.provenance.canonical_arguments = arguments;
+        draft.provenance.algorithm =
+            arguments.at("fit") == "rigid"
+                ? "Horn quaternion rigid fit and weighted RMSD"
+                : "weighted RMSD without fit";
+        draft.provenance.algorithm_version = "molshredder-rmsd-series-v1";
+        draft.provenance.coordinate_unit = length_unit_name(target_unit);
+        draft.provenance.pbc_policy = "raw";
+        draft.provenance.missing_data_policy = arguments.at("missing");
+        draft.provenance.frame_first = range.value().first;
+        draft.provenance.frame_last = range.value().last;
+        draft.provenance.frame_stride = range.value().stride;
+        draft.response = std::move(response);
+        draft.export_table = std::move(table);
+        return persist_analysis_response(*workspace, std::move(draft));
       };
     } else if (canonical_name == "analyze trajectory rmsf") {
       handler = [workspace](const Arguments &arguments, TaskContext &context) {
@@ -2528,6 +3398,9 @@ command::Registry make_default_registry(
       };
     } else if (canonical_name == "analyze trajectory contacts") {
       handler = [workspace](const Arguments &arguments, TaskContext &context) {
+        if (const auto error = validate_result_name(*workspace, arguments);
+            error.has_value())
+          return Result<Response>::failure(*error);
         const auto range = series_range(arguments, *workspace);
         const auto cutoff = number_argument(arguments, "cutoff");
         if (!range.has_value())
@@ -2569,9 +3442,9 @@ command::Registry make_default_registry(
                                   precise(row.mean_distance, precision),
                                   std::string{length_unit_name(target_unit)}});
         }
-        return Result<Response>::success(
-            {"trajectory contacts calculated",
-             {{"cutoff", precise(cutoff.value(), precision)},
+        Response response{
+            "trajectory contacts calculated",
+            {{"cutoff", precise(cutoff.value(), precision)},
               {"exclude_bonded", arguments.at("exclude-bonded") == "true"},
               {"first_frame", range.value().first},
               {"frame_count", analyzed.value().series.frame_count},
@@ -2585,7 +3458,27 @@ command::Registry make_default_registry(
               {"selection2", analyzed.value().second_expression},
               {"stride", range.value().stride},
               {"unit", std::string{length_unit_name(target_unit)}}},
-             std::move(table)});
+            table};
+        AnalysisResultDraft draft;
+        draft.name = requested_result_name(arguments);
+        draft.kind = AnalysisResultKind::contact_series;
+        draft.provenance.canonical_command = "analyze trajectory contacts";
+        draft.provenance.canonical_arguments = arguments;
+        draft.provenance.algorithm =
+            boundary == analysis::DistanceBoundary::minimum_image
+                ? "per-frame wrapped fractional cell list with exact closest lattice"
+                : "per-frame Cartesian cell list";
+        draft.provenance.algorithm_version =
+            "molshredder-contact-series-v1";
+        draft.provenance.coordinate_unit = length_unit_name(target_unit);
+        draft.provenance.pbc_policy = arguments.at("pbc");
+        draft.provenance.missing_data_policy = "error";
+        draft.provenance.frame_first = range.value().first;
+        draft.provenance.frame_last = range.value().last;
+        draft.provenance.frame_stride = range.value().stride;
+        draft.response = std::move(response);
+        draft.export_table = std::move(table);
+        return persist_analysis_response(*workspace, std::move(draft));
       };
     } else if (canonical_name == "analyze trajectory hbonds") {
       handler = [workspace](const Arguments &arguments, TaskContext &context) {
@@ -2676,6 +3569,38 @@ command::Registry make_default_registry(
         if (!prefetch_frames.has_value()) {
           return Result<Response>::failure(prefetch_frames.error());
         }
+        const auto mapping_policy =
+            trajectory_mapping_policy(arguments.at("mapping"));
+        const auto atom_map = atom_id_list_argument(arguments, "atom-map");
+        if (!atom_map.has_value())
+          return Result<Response>::failure(atom_map.error());
+        std::optional<std::uint64_t> expected_topology_version;
+        if (const auto found = arguments.find("expected-topology-version");
+            found != arguments.end()) {
+          const auto parsed =
+              uint64_argument(arguments, "expected-topology-version", true);
+          if (!parsed.has_value())
+            return Result<Response>::failure(parsed.error());
+          expected_topology_version = parsed.value();
+        }
+        if (mapping_policy == trajectory::AtomMappingPolicy::explicit_map) {
+          if (atom_map.value().empty() ||
+              !expected_topology_version.has_value()) {
+            return Result<Response>::failure(operation::Error{
+                operation::ErrorCode::invalid_argument,
+                "explicit trajectory mapping requires --atom-map and "
+                "--expected-topology-version",
+                "provide comma-separated target stable atom IDs in trajectory "
+                "source order and the current topology version"});
+          }
+        } else if (!atom_map.value().empty() ||
+                   expected_topology_version.has_value()) {
+          return Result<Response>::failure(operation::Error{
+              operation::ErrorCode::invalid_argument,
+              "--atom-map and --expected-topology-version require "
+              "--mapping explicit",
+              "remove explicit-map parameters or select explicit mapping"});
+        }
         constexpr std::size_t bytes_per_mib = 1024U * 1024U;
         if (cache_mib.value() >
             std::numeric_limits<std::size_t>::max() / bytes_per_mib) {
@@ -2697,7 +3622,8 @@ command::Registry make_default_registry(
                 ? std::nullopt
                 : std::optional<operation::LengthUnit>{length_unit(
                       arguments.at("coordinate-unit"))},
-            std::move(h5md_particle_group));
+            std::move(h5md_particle_group), mapping_policy, atom_map.value(),
+            expected_topology_version);
         if (!loaded.has_value()) {
           return Result<Response>::failure(loaded.error());
         }
@@ -2725,6 +3651,10 @@ command::Registry make_default_registry(
                            loaded.value().prefetch.frame_indices.size()));
         fields.emplace("prefetch_state", std::string{trajectory::to_string(
                                              loaded.value().prefetch.state)});
+        fields.emplace("atom_mapping",
+                       trajectory_mapping_value(loaded.value().mapping));
+        fields.emplace("semantics",
+                       trajectory_semantics_value(loaded.value().semantics));
         return Result<Response>::success(std::move(response));
       };
     } else if (canonical_name == "traj save") {

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <charconv>
 #include <cmath>
+#include <cstdint>
 #include <set>
 #include <utility>
 
@@ -16,6 +17,13 @@ using operation::ErrorCode;
 
 bool parses_integer(std::string_view text) {
   long long value{};
+  const auto result =
+      std::from_chars(text.data(), text.data() + text.size(), value);
+  return result.ec == std::errc{} && result.ptr == text.data() + text.size();
+}
+
+bool parses_unsigned_integer(std::string_view text) {
+  std::uint64_t value{};
   const auto result =
       std::from_chars(text.data(), text.data() + text.size(), value);
   return result.ec == std::errc{} && result.ptr == text.data() + text.size();
@@ -39,6 +47,8 @@ bool matches(ParameterType type, std::string_view value) {
       return true;
     case ParameterType::integer:
       return parses_integer(value);
+    case ParameterType::unsigned_integer:
+      return parses_unsigned_integer(value);
     case ParameterType::number:
       return parses_number(value);
     case ParameterType::boolean:

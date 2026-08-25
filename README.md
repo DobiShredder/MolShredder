@@ -49,6 +49,22 @@ cmake --build --preset desktop
 ctest --preset desktop --output-on-failure
 ```
 
+빈 prefix에 local staging install을 만들 수 있다. 이 단계는 개발용 설치 검증이며 서명된 installer는 아니다.
+
+```bash
+cmake --install build/desktop --prefix build/stage
+./build/stage/bin/molshredder system info --format json
+./build/stage/molshredder_desktop.app/Contents/MacOS/molshredder_desktop
+```
+
+현재 CMake staging layout은 Linux/Windows에서 각각 `bin/molshredder_desktop`과
+`bin/molshredder_desktop.exe`를 사용한다. 이 개발용 layout은 최종 installer 형식이 아니며 원격 platform
+checkpoint가 통과하기 전에는 지원 완료로 간주하지 않는다.
+
+Public repository의 `Cross-platform CI`는 수동 dispatch 시 세 OS에서 warnings-as-errors Qt Desktop 전체 suite,
+빈 prefix install, 실제 graphics backend와 설치본 daily workflow를 실행하도록 구성되어 있다. macOS는 Metal,
+Linux는 Xvfb 아래 Vulkan/OpenGL, Windows는 Direct3D 11/12를 명시적으로 확인한다.
+
 ## 실행
 
 ```bash
@@ -95,11 +111,20 @@ selection-based clipping도 같은 scope를 사용한다.
 CLI·Python은 `view move/turn`으로 동일한 typed operation을 호출한다.
 Projection mode와 degree FOV는 기본적으로 target-plane scale을 유지하는 `view projection`으로 전환하며,
 고급 사용자는 raw switch를 선택할 수 있다. 긴 Views workflow는 scroll할 수 있다.
-Portable stereo는 같은 panel 또는 `stereo set`에서 side-by-side/cross-eye/wall-eye/anaglyph, eye swap,
-separation과 angle scale을 제어하며 CLI·GUI·Python이 같은 operation을 사용한다. Anaglyph는 true/gray/color/
-half-color/optimized 합성을 제공하고, 나머지 미구현 compositor는 명시적으로 보고한다.
+Portable stereo는 같은 panel 또는 `stereo set`에서 side-by-side/cross-eye/wall-eye/anaglyph 및
+row/column/checkerboard interleave, eye swap, separation과 angle scale을 제어하며 CLI·GUI·Python이 같은
+operation을 사용한다. Anaglyph는 true/gray/color/half-color/optimized 합성을 제공하고, 미구현
+quad-buffer/OpenVR는 명시적으로 보고한다.
 같은 panel에서 7개 clipping mode와 현재 near/far range를 조절·조회할 수 있으며
 `view clip/get-clip`과 Python `invoke()`도 동일한 기능을 제공한다.
+상단 `Analyze`는 COM/centroid, atom distance, contacts와 trajectory RMSD를 계산하고 persistent result의
+provenance, overlay, JSON/CSV export와 lifecycle을 관리한다. CLI·Python은 같은 `analyze`, `measure`,
+`result` operation을 호출한다.
+Trajectory attach는 기본 `exact` identity 검증을 사용하며, 상단 mapping control에서 verified index order나
+stable-ID explicit map을 선택할 수 있다. Position/cell/time/velocity/force channel은 canonical unit과 drift
+contract를 통과한 뒤 Workspace에 commit된다. Desktop attach와 seek는 progress/cancel이 있는 bounded
+background task이며 rapid seek에서는 마지막 요청만 반영한다. CLI와 Python은 같은 kernel의 최종 결과를
+동기적으로 반환한다.
 
 명령과 desktop 실행 방법은 아래 문서를 참조한다.
 
@@ -112,13 +137,18 @@ half-color/optimized 합성을 제공하고, 나머지 미구현 compositor는 �
 
 - [지원 file format](docs/FORMAT_SUPPORT.md)
 - [Trajectory format과 runtime](docs/TRAJECTORY_FORMATS.md)
+- [Trajectory mapping과 channel/unit contract](docs/TRAJECTORY_ATTACHMENT.md)
 - [Volumetric data](docs/VOLUMETRIC_DATA.md)
 - [Selection language](docs/SELECTIONS.md)
 - [Analysis](docs/BASIC_ANALYSIS.md)
+- [Persistent analysis results](docs/ANALYSIS_RESULTS.md)
 - [Rendering](docs/RENDERING.md)
+- [Render setting service](docs/RENDER_SETTINGS.md)
 - [Data model](docs/DATA_MODEL.md)
+- [Bounded task execution](docs/TASK_EXECUTION.md)
 - [Dependency](docs/DEPENDENCIES.md)
 - [Build support configuration](docs/SUPPORT_CONFIGURATION.md)
+- [Evidence-gated capability support table](docs/CAPABILITY_SUPPORT.md)
 
 ## 라이선스
 

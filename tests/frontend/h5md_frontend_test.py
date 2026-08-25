@@ -29,7 +29,7 @@ def main() -> int:
                  "name": "h5md"}
     attach_args = {"path": str(trajectory), "file-format": "h5md",
                    "particle-group": "trajectory", "cache-mib": "1",
-                   "prefetch-frames": "0"}
+                   "prefetch-frames": "0", "mapping": "exact"}
     frame_args = {"frame": "1"}
     center_args = {"selection": "all", "mode": "centroid",
                    "precision": "6", "unit": "angstrom"}
@@ -43,6 +43,9 @@ def main() -> int:
             "Python PDB/H5MD workflow failed")
     require(python_results[1]["data"]["format"] == "h5md" and
             python_results[1]["data"]["frame_count"] == 2 and
+            python_results[1]["data"]["atom_mapping"]["policy"] == "exact" and
+            python_results[1]["data"]["atom_mapping"]["identity_strength"] ==
+            "available-identity-exact" and
             python_results[2]["data"]["source_step"] == 20 and
             python_results[2]["data"]["physical_time"] == 0.5 and
             python_results[3]["data"]["position"] == [12.0, 14.0, 16.0],
@@ -54,7 +57,7 @@ def main() -> int:
         f'--path "{topology}"\n'
         f'invoke "traj load" --cache-mib "1" --file-format "h5md" '
         f'--particle-group "trajectory" --path "{trajectory}" '
-        '--prefetch-frames "0"\n'
+        '--prefetch-frames "0" --mapping "exact"\n'
         'invoke "traj frame" --frame "1"\n'
         'invoke "analyze center" --mode "centroid" --precision "6" '
         '--selection "all" --unit "angstrom"\n'
@@ -77,7 +80,8 @@ def main() -> int:
         "'file-format': 'pdb'})['status'] == 'ok'\n"
         "assert molshredder.invoke('traj load', "
         f"{{'path': {str(trajectory)!r}, 'file-format': 'h5md', "
-        "'cache-mib': '1', 'prefetch-frames': '0'})['status'] == 'ok'\n"
+        "'cache-mib': '1', 'prefetch-frames': '0', "
+        "'mapping': 'exact'})['status'] == 'ok'\n"
     )
     shutdown = subprocess.run(
         [sys.executable, "-c", shutdown_script], text=True,

@@ -284,6 +284,37 @@ def main() -> int:
         "CLI, GUI adapter and Python anaglyph actions diverged",
     )
 
+    interleaved_arguments = {
+        "angle-scale": "2.1",
+        "anaglyph-mode": "optimized",
+        "enabled": "true",
+        "mode": "checkerboard",
+        "shift-percent": "2.5",
+        "swap-eyes": "true",
+    }
+    interleaved_python = molshredder.invoke(
+        "stereo set", interleaved_arguments
+    )
+    interleaved_cli = run_cli(
+        cli_path,
+        [
+            "stereo", "set", "--angle-scale", "2.1",
+            "--anaglyph-mode", "optimized", "--enabled", "true",
+            "--mode", "checkerboard", "--shift-percent", "2.5",
+            "--swap-eyes", "true",
+        ],
+        0,
+    )
+    interleaved_gui = run_gui(gui_probe_path, "interleaved")
+    require(
+        interleaved_python["data"]["stereo"]
+        == interleaved_cli["data"]["stereo"]
+        == interleaved_gui["data"]["stereo"]
+        and interleaved_python["data"]["stereo"]["mode"]
+        == "checkerboard",
+        "CLI, GUI adapter and Python interleaved actions diverged",
+    )
+
     reset_python = molshredder.invoke("view reset")
     reset_cli = run_cli(cli_path, ["view", "reset"], 0)
     reset_gui = run_gui(gui_probe_path, "view-reset")

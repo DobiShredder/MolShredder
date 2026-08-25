@@ -21,4 +21,6 @@ inline constexpr unsigned int kFoundationGrammarVersion = 1;
 
 [[nodiscard]] std::vector<Descriptor> trajectory_command_descriptors();
 
+[[nodiscard]] std::vector<Descriptor> analysis_result_command_descriptors();
+
 }  // namespace molshredder::command

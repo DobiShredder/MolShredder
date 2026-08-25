@@ -16,6 +16,8 @@
 #include "molshredder/analysis/principal_axes.hpp"
 #include "molshredder/analysis/secondary_structure.hpp"
 #include "molshredder/analysis/time_series.hpp"
+#include "molshredder/application/analysis_result.hpp"
+#include "molshredder/application/representation_visibility.hpp"
 #include "molshredder/io/structure_reader.hpp"
 #include "molshredder/io/structure_writer.hpp"
 #include "molshredder/io/trajectory_reader.hpp"
@@ -29,12 +31,14 @@
 #include "molshredder/operation/task_context.hpp"
 #include "molshredder/render/packet.hpp"
 #include "molshredder/render/representation.hpp"
+#include "molshredder/render/setting_store.hpp"
 #include "molshredder/render/volume_isosurface.hpp"
 #include "molshredder/scene/scene.hpp"
 #include "molshredder/scene/camera.hpp"
 #include "molshredder/scene/stereo.hpp"
 #include "molshredder/selection/named_selection.hpp"
 #include "molshredder/trajectory/frame_cache.hpp"
+#include "molshredder/trajectory/attachment.hpp"
 #include "molshredder/trajectory/playback.hpp"
 #include "molshredder/trajectory/prefetch_scheduler.hpp"
 
@@ -54,6 +58,8 @@ struct TrajectoryState {
   trajectory::PlaybackClock clock;
   std::shared_ptr<trajectory::PrefetchScheduler> prefetch;
   std::size_t prefetch_frame_count{4U};
+  trajectory::AtomMappingReport mapping;
+  trajectory::TrajectorySemanticReport semantics;
 };
 
 struct WorkspaceObject {
@@ -61,6 +67,7 @@ struct WorkspaceObject {
   scene::NodeId scene_node;
   std::shared_ptr<const model::MolecularSystem> system;
   selection::NamedSelections selections;
+  RepresentationVisibilityState representation_visibility;
   std::vector<RepresentationRecord> representations;
   std::optional<TrajectoryState> trajectory;
 };
@@ -232,6 +239,34 @@ struct TrajectoryLoadResult {
   std::size_t current_frame{};
   std::size_t prefetch_frame_count{};
   trajectory::PrefetchSnapshot prefetch;
+  trajectory::AtomMappingReport mapping;
+  trajectory::TrajectorySemanticReport semantics;
+};
+
+struct TrajectoryLoadPlan {
+  WorkspaceObject object;
+  std::shared_ptr<const scene::Scene> scene;
+  render::RenderSettingStore render_settings;
+  render::RenderSettingSnapshot render_setting_snapshot;
+  std::filesystem::path path;
+  io::TrajectoryFormat format{io::TrajectoryFormat::auto_detect};
+  std::size_t cache_budget_bytes{};
+  std::size_t prefetch_frame_count{};
+  std::optional<operation::LengthUnit> coordinate_unit;
+  std::optional<std::string> h5md_particle_group;
+  trajectory::AtomMappingPolicy mapping_policy{
+      trajectory::AtomMappingPolicy::exact};
+  std::vector<model::AtomId> source_to_target_atom_ids;
+  std::optional<std::uint64_t> expected_topology_version;
+};
+
+struct TrajectoryLoadCandidate {
+  TrajectoryLoadPlan plan;
+  std::shared_ptr<const model::MolecularSystem> system;
+  std::vector<RepresentationRecord> representations;
+  TrajectoryState trajectory;
+  std::shared_ptr<const scene::Scene> scene;
+  TrajectoryLoadResult result;
 };
 
 struct TrajectoryFrameResult {
@@ -249,6 +284,21 @@ struct TrajectoryFrameResult {
   trajectory::PrefetchSnapshot prefetch;
 };
 
+// Immutable owner-thread snapshot used to decode and rebuild a seek candidate
+// without touching live Workspace state from a worker.
+struct TrajectoryFramePlan {
+  WorkspaceObject object;
+  render::RenderSettingStore render_settings;
+  render::RenderSettingSnapshot render_setting_snapshot;
+  std::size_t frame_index{};
+};
+
+struct TrajectoryFrameCandidate {
+  TrajectoryFramePlan plan;
+  std::shared_ptr<const model::CoordinateFrame> frame;
+  std::vector<RepresentationRecord> representations;
+};
+
 struct LoadedObjectResult {
   std::uint64_t object_id{};
   std::string object_name;
@@ -263,6 +313,28 @@ struct LoadResult {
   std::size_t atom_count{};
   std::size_t frame_count{};
   io::StructureFormat format{io::StructureFormat::auto_detect};
+  std::vector<LoadedObjectResult> objects;
+};
+
+struct StructureLoadRequest {
+  std::filesystem::path path;
+  std::optional<std::string> name;
+  io::StructureFormat format{io::StructureFormat::auto_detect};
+};
+
+struct StructureDocumentLoadRequest {
+  io::StructureDocument document;
+  std::filesystem::path source_path;
+  std::optional<std::string> name;
+};
+
+struct BatchLoadResult {
+  std::uint64_t object_id{};
+  std::string object_name;
+  std::size_t atom_count{};
+  std::size_t frame_count{};
+  std::size_t input_count{};
+  std::vector<io::StructureFormat> formats;
   std::vector<LoadedObjectResult> objects;
 };
 
@@ -298,11 +370,49 @@ struct WorkspaceObjectInfo {
   bool has_trajectory{};
 };
 
+struct ObjectLifecycleResult {
+  std::uint64_t object_id{};
+  std::uint64_t scene_node_id{};
+  std::string name;
+  std::size_t old_position{};
+  std::size_t new_position{};
+  std::size_t object_count{};
+  bool deleted{};
+  std::optional<std::uint64_t> active_object_id;
+  std::vector<std::uint64_t> ordered_object_ids;
+  std::size_t removed_measurement_count{};
+  std::size_t removed_setting_override_count{};
+};
+
+struct TopologyMutationResult {
+  std::uint64_t object_id{};
+  std::uint64_t previous_version{};
+  std::uint64_t topology_version{};
+  std::size_t previous_atom_count{};
+  std::size_t atom_count{};
+  std::size_t removed_atom_count{};
+  std::size_t removed_bond_count{};
+  std::size_t invalidated_measurement_count{};
+  std::size_t removed_setting_override_count{};
+  std::vector<std::uint64_t> ordered_atom_ids;
+};
+
 struct ShowResult {
   std::uint64_t object_id{};
   std::size_t representation_index{};
   std::size_t primitive_count{};
   std::size_t selected_atom_count{};
+};
+
+struct RepresentationVisibilityResult {
+  std::uint64_t object_id{};
+  render::RepresentationKind kind{render::RepresentationKind::lines};
+  RepresentationVisibilityMutation mutation{
+      RepresentationVisibilityMutation::show};
+  std::size_t affected_atom_count{};
+  std::size_t visible_atom_count{};
+  std::size_t representation_count{};
+  std::vector<render::RepresentationKind> representation_kinds;
 };
 
 struct CenterAnalysisResult {
@@ -454,6 +564,12 @@ public:
   load_structure_document(io::StructureDocument document,
                           const std::filesystem::path &source_path,
                           std::optional<std::string> name = std::nullopt);
+  [[nodiscard]] operation::Result<BatchLoadResult>
+  load_structure_batch(std::span<const StructureLoadRequest> requests,
+                       operation::TaskContext &context);
+  [[nodiscard]] operation::Result<BatchLoadResult>
+  load_structure_documents(std::vector<StructureDocumentLoadRequest> requests,
+                           operation::TaskContext &context);
   [[nodiscard]] operation::Result<VolumeLoadResult>
   load_volume(const std::filesystem::path &path,
               std::optional<std::string> name, io::VolumeFormat format,
@@ -477,13 +593,59 @@ public:
   activate_object(std::uint64_t object_id);
   [[nodiscard]] operation::Result<WorkspaceObjectInfo>
   set_object_visibility(std::uint64_t object_id, bool visible);
+  [[nodiscard]] operation::Result<ObjectLifecycleResult>
+  rename_object(std::string_view object_reference, std::string name);
+  [[nodiscard]] operation::Result<ObjectLifecycleResult>
+  delete_object(std::string_view object_reference);
+  [[nodiscard]] operation::Result<ObjectLifecycleResult>
+  reorder_object(std::string_view object_reference,
+                 std::size_t new_position);
+  [[nodiscard]] operation::Result<TopologyMutationResult>
+  retain_active_atoms(std::span<const model::AtomId> ordered_atom_ids,
+                      std::uint64_t expected_topology_version);
   [[nodiscard]] std::optional<operation::Error>
   set_named_selection(std::string name, std::string expression, bool dynamic);
   [[nodiscard]] operation::Result<ShowResult>
   show(render::RepresentationKind kind, std::string selection_expression,
        bool replace_existing = false);
+  [[nodiscard]] operation::Result<RepresentationVisibilityResult>
+  mutate_representation_visibility(
+      render::RepresentationKind kind, std::string selection_expression,
+      RepresentationVisibilityMutation mutation);
+  [[nodiscard]] operation::Result<RepresentationVisibilityResult>
+  mutate_representation_visibility(
+      std::span<const render::RepresentationKind> kinds,
+      std::string selection_expression,
+      RepresentationVisibilityMutation mutation);
+  [[nodiscard]] operation::Result<RepresentationVisibilitySnapshot>
+  representation_visibility_snapshot() const;
+  [[nodiscard]] operation::Result<RepresentationVisibilitySessionSnapshot>
+  representation_visibility_session_snapshot() const;
+  [[nodiscard]] operation::Result<RepresentationVisibilityResult>
+  restore_representation_visibility(
+      const RepresentationVisibilitySnapshot &snapshot);
+  [[nodiscard]] operation::Result<RepresentationVisibilityResult>
+  restore_representation_visibility_session(
+      const RepresentationVisibilitySessionSnapshot &snapshot);
   [[nodiscard]] operation::Result<CenterAnalysisResult>
   analyze_center(std::string selection_expression, analysis::CenterMode mode);
+  [[nodiscard]] operation::Result<PersistentAnalysisResult>
+  store_analysis_result(AnalysisResultDraft draft);
+  [[nodiscard]] std::optional<operation::Error> validate_analysis_result_name(
+      const std::optional<std::string> &name) const;
+  [[nodiscard]] operation::Result<PersistentAnalysisResult>
+  analysis_result(std::uint64_t result_id) const;
+  [[nodiscard]] std::span<const PersistentAnalysisResult>
+  analysis_results() const noexcept { return analysis_results_.records(); }
+  [[nodiscard]] AnalysisSourceStatus
+  analysis_source_status(const PersistentAnalysisResult &record) const noexcept;
+  [[nodiscard]] operation::Result<PersistentAnalysisResult>
+  delete_analysis_result(std::uint64_t result_id);
+  [[nodiscard]] operation::Result<PersistentAnalysisResult>
+  set_analysis_overlay_visible(std::uint64_t result_id, bool visible);
+  [[nodiscard]] AnalysisResultStoreSnapshot analysis_result_snapshot() const;
+  [[nodiscard]] std::optional<operation::Error>
+  restore_analysis_results(const AnalysisResultStoreSnapshot &snapshot);
   [[nodiscard]] operation::Result<SpatialExtent>
   selection_extent(std::string_view selection_expression,
                    CameraStateScope state_scope = {},
@@ -540,6 +702,9 @@ public:
   [[nodiscard]] operation::Result<DistanceMeasurementRecord> measure_distance(
       std::string from_expression, std::string to_expression,
       analysis::DistanceBoundary boundary = analysis::DistanceBoundary::raw);
+  [[nodiscard]] operation::Result<DistanceAnalysisOverlay>
+  distance_analysis_overlay(const DistanceMeasurementRecord &record,
+                            std::string label) const;
   [[nodiscard]] operation::Result<ContactAnalysisResult> analyze_contacts(
       std::string first_expression, std::string second_expression,
       double cutoff, analysis::DistanceBoundary boundary, bool same_selection,
@@ -606,7 +771,24 @@ public:
       const std::filesystem::path &path, io::TrajectoryFormat format,
       std::size_t cache_budget_bytes, std::size_t prefetch_frame_count = 4U,
       std::optional<operation::LengthUnit> coordinate_unit = std::nullopt,
-      std::optional<std::string> h5md_particle_group = std::nullopt);
+      std::optional<std::string> h5md_particle_group = std::nullopt,
+      trajectory::AtomMappingPolicy mapping_policy =
+          trajectory::AtomMappingPolicy::index_order,
+      std::span<const model::AtomId> source_to_target_atom_ids = {},
+      std::optional<std::uint64_t> expected_topology_version = std::nullopt);
+  [[nodiscard]] operation::Result<TrajectoryLoadPlan> plan_trajectory_load(
+      const std::filesystem::path &path, io::TrajectoryFormat format,
+      std::size_t cache_budget_bytes, std::size_t prefetch_frame_count,
+      std::optional<operation::LengthUnit> coordinate_unit,
+      std::optional<std::string> h5md_particle_group,
+      trajectory::AtomMappingPolicy mapping_policy,
+      std::span<const model::AtomId> source_to_target_atom_ids,
+      std::optional<std::uint64_t> expected_topology_version) const;
+  [[nodiscard]] static operation::Result<TrajectoryLoadCandidate>
+  build_trajectory_load_candidate(TrajectoryLoadPlan plan,
+                                  operation::TaskContext &context);
+  [[nodiscard]] operation::Result<TrajectoryLoadResult>
+  commit_trajectory_load(TrajectoryLoadCandidate candidate);
   [[nodiscard]] operation::Result<TrajectorySaveResult>
   save_active_trajectory_frame(const std::filesystem::path &path,
                                io::TrajectoryFormat format,
@@ -614,6 +796,13 @@ public:
                                operation::TaskContext &context) const;
   [[nodiscard]] operation::Result<TrajectoryFrameResult>
   set_trajectory_frame(std::size_t frame_index);
+  [[nodiscard]] operation::Result<TrajectoryFramePlan>
+  plan_trajectory_frame(std::size_t frame_index) const;
+  [[nodiscard]] static operation::Result<TrajectoryFrameCandidate>
+  build_trajectory_frame_candidate(TrajectoryFramePlan plan,
+                                   operation::TaskContext &context);
+  [[nodiscard]] operation::Result<TrajectoryFrameResult>
+  commit_trajectory_frame(TrajectoryFrameCandidate candidate);
   [[nodiscard]] operation::Result<TrajectoryFrameResult>
   play_trajectory(trajectory::PlaybackMode mode,
                   trajectory::PlaybackDirection direction,
@@ -668,8 +857,30 @@ public:
   measurements() const noexcept {
     return measurements_;
   }
+  [[nodiscard]] const render::RenderSettingStore &render_settings() const
+      noexcept {
+    return render_settings_;
+  }
+  [[nodiscard]] std::optional<operation::Error>
+  set_render_setting(std::string_view name,
+                     const render::RenderSettingScope &scope,
+                     render::RenderSettingValue value);
+  [[nodiscard]] operation::Result<bool>
+  unset_render_setting(std::string_view name,
+                       const render::RenderSettingScope &scope);
+  [[nodiscard]] operation::Result<std::size_t>
+  reset_render_setting_scope(const render::RenderSettingScope &scope);
+  [[nodiscard]] operation::Result<render::ResolvedRenderSetting>
+  resolve_render_setting(std::string_view name,
+                         const render::RenderSettingContext &context) const;
+  [[nodiscard]] render::RenderSettingSnapshot
+  render_setting_snapshot() const;
+  [[nodiscard]] std::optional<operation::Error>
+  restore_render_settings(const render::RenderSettingSnapshot &snapshot);
 
 private:
+  [[nodiscard]] std::optional<operation::Error>
+  commit_render_settings(render::RenderSettingStore candidate);
   [[nodiscard]] WorkspaceObject *mutable_active_object() noexcept;
   [[nodiscard]] WorkspaceVolume *mutable_active_volume() noexcept;
   [[nodiscard]] operation::Result<std::size_t>
@@ -685,9 +896,11 @@ private:
   std::optional<std::size_t> active_volume_index_;
   std::shared_ptr<const scene::Scene> scene_;
   std::vector<DistanceMeasurementRecord> measurements_;
+  AnalysisResultStore analysis_results_;
   std::optional<scene::Camera> camera_;
   scene::StereoParameters stereo_;
   std::map<std::string, scene::CameraParameters, std::less<>> named_views_;
+  render::RenderSettingStore render_settings_;
 };
 
 } // namespace molshredder::application

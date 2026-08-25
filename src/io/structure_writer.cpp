@@ -1195,6 +1195,7 @@ std::uint64_t mol_bond_type(model::BondOrder order) {
   case model::BondOrder::aromatic:
     return 4U;
   case model::BondOrder::amide:
+  case model::BondOrder::zero:
   case model::BondOrder::unknown:
     return 0U;
   }
@@ -1494,6 +1495,7 @@ std::string_view mol2_bond_type(model::BondOrder order) {
     return "ar";
   case model::BondOrder::amide:
     return "am";
+  case model::BondOrder::zero:
   case model::BondOrder::unknown:
     return {};
   }

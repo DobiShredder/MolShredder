@@ -8,6 +8,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <variant>
@@ -23,6 +24,50 @@ struct AtomIndex {
 
   friend bool operator==(const AtomIndex&, const AtomIndex&) = default;
   friend auto operator<=>(const AtomIndex&, const AtomIndex&) = default;
+};
+
+struct AtomId {
+  std::uint64_t value{};
+
+  friend bool operator==(const AtomId&, const AtomId&) = default;
+  friend auto operator<=>(const AtomId&, const AtomId&) = default;
+};
+
+struct BondId {
+  std::uint64_t value{};
+
+  friend bool operator==(const BondId&, const BondId&) = default;
+  friend auto operator<=>(const BondId&, const BondId&) = default;
+};
+
+inline constexpr unsigned int kTopologyReferenceSchemaVersion = 1U;
+
+struct TopologySnapshotReference {
+  unsigned int schema_version{kTopologyReferenceSchemaVersion};
+  std::uint64_t object_id{};
+  std::uint64_t topology_version{};
+};
+
+struct AtomReference {
+  TopologySnapshotReference snapshot;
+  AtomId atom_id;
+};
+
+struct BondReference {
+  TopologySnapshotReference snapshot;
+  BondId bond_id;
+};
+
+struct ResolvedAtomReference {
+  AtomIndex index;
+  std::uint64_t current_topology_version{};
+  bool remapped{};
+};
+
+struct ResolvedBondReference {
+  std::size_t index{};
+  std::uint64_t current_topology_version{};
+  bool remapped{};
 };
 
 struct ResidueIndex {
@@ -56,6 +101,7 @@ enum class BondOrder : std::uint8_t {
   triple,
   aromatic,
   amide,
+  zero,
 };
 
 struct Bond {
@@ -146,6 +192,16 @@ class Topology {
   [[nodiscard]] const std::vector<AtomRecord>& atoms() const noexcept {
     return atoms_;
   }
+  [[nodiscard]] const std::vector<AtomId>& atom_ids() const noexcept {
+    return atom_ids_;
+  }
+  [[nodiscard]] const std::vector<BondId>& bond_ids() const noexcept {
+    return bond_ids_;
+  }
+  [[nodiscard]] std::optional<AtomId> atom_id(AtomIndex index) const noexcept;
+  [[nodiscard]] std::optional<AtomIndex> atom_index(AtomId id) const noexcept;
+  [[nodiscard]] std::optional<BondId> bond_id(std::size_t index) const noexcept;
+  [[nodiscard]] std::optional<std::size_t> bond_index(BondId id) const noexcept;
   [[nodiscard]] const std::vector<ResidueRecord>& residues() const noexcept {
     return residues_;
   }
@@ -177,14 +233,18 @@ class Topology {
 
   std::uint64_t version_{};
   std::vector<AtomRecord> atoms_;
+  std::vector<AtomId> atom_ids_;
   std::vector<ResidueRecord> residues_;
   std::vector<Bond> bonds_;
+  std::vector<BondId> bond_ids_;
   std::vector<Angle> angles_;
   std::vector<Dihedral> dihedrals_;
   std::vector<Improper> impropers_;
   std::vector<CmapTerm> cmap_terms_;
   AtomPropertyTable properties_;
   std::map<std::string, std::string, std::less<>> source_metadata_;
+  std::uint64_t next_atom_id_{1U};
+  std::uint64_t next_bond_id_{1U};
 };
 
 class TopologyBuilder {
@@ -195,6 +255,11 @@ class TopologyBuilder {
       ResidueRecord residue);
 
   [[nodiscard]] operation::Result<AtomIndex> add_atom(AtomRecord atom);
+
+  // Retains the requested stable atom IDs in the supplied order. Connectivity
+  // containing removed atoms is discarded; surviving atom/bond IDs persist.
+  [[nodiscard]] std::optional<operation::Error>
+  retain_atoms(std::span<const AtomId> ordered_atom_ids);
 
   [[nodiscard]] std::optional<operation::Error> add_bond(Bond bond);
   [[nodiscard]] std::optional<operation::Error> add_angle(Angle angle);
@@ -218,8 +283,10 @@ class TopologyBuilder {
   [[nodiscard]] bool has_atom(AtomIndex atom) const noexcept;
 
   std::vector<AtomRecord> atoms_;
+  std::vector<AtomId> atom_ids_;
   std::vector<ResidueRecord> residues_;
   std::vector<Bond> bonds_;
+  std::vector<BondId> bond_ids_;
   std::vector<Angle> angles_;
   std::vector<Dihedral> dihedrals_;
   std::vector<Improper> impropers_;
@@ -227,7 +294,31 @@ class TopologyBuilder {
   std::map<std::string, AtomProperty, std::less<>> properties_;
   std::map<std::string, std::string, std::less<>> source_metadata_;
   std::uint64_t base_version_{};
+  std::uint64_t next_atom_id_{1U};
+  std::uint64_t next_bond_id_{1U};
 };
+
+struct TopologyRemap {
+  std::uint64_t source_version{};
+  std::uint64_t target_version{};
+  std::vector<std::optional<AtomIndex>> source_atoms;
+  std::vector<std::optional<std::size_t>> source_bonds;
+  std::vector<std::optional<AtomIndex>> target_atoms;
+  std::vector<std::optional<std::size_t>> target_bonds;
+};
+
+[[nodiscard]] TopologyRemap remap_topology(const Topology& source,
+                                           const Topology& target);
+
+[[nodiscard]] operation::Result<ResolvedAtomReference> resolve_atom_reference(
+    const AtomReference& reference, std::uint64_t object_id,
+    const Topology& topology);
+[[nodiscard]] operation::Result<ResolvedBondReference> resolve_bond_reference(
+    const BondReference& reference, std::uint64_t object_id,
+    const Topology& topology);
+[[nodiscard]] std::optional<operation::Error> validate_topology_snapshot(
+    const TopologySnapshotReference& reference, std::uint64_t object_id,
+    const Topology& topology);
 
 [[nodiscard]] std::size_t column_size(const AtomPropertyColumn& column);
 [[nodiscard]] PropertyKind property_kind(const AtomPropertyColumn& column);

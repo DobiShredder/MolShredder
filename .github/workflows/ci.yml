@@ -42,6 +42,7 @@ jobs:
           cmake -S . -B build/ci
           -DBUILD_TESTING=ON
           -DMOLSHREDDER_WARNINGS_AS_ERRORS=ON
+          -DMOLSHREDDER_BUILD_DESKTOP=ON
           -DCMAKE_BUILD_TYPE=Debug
           -DCMAKE_PREFIX_PATH="$MOLSHREDDER_CONDA_PREFIX"
           -DPython3_ROOT_DIR="$MOLSHREDDER_CONDA_PREFIX"
@@ -58,8 +59,23 @@ jobs:
           --output-on-failure --no-tests=error
           -R "^io\.molfile_provider$"
 
-      - name: Test
+      - name: Install Linux display and software graphics runtime
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends xvfb xauth libgl1-mesa-dri mesa-vulkan-drivers
+
+      - name: Test (macOS and Windows)
+        if: runner.os != 'Linux'
         run: >-
+          conda run --no-capture-output -n molshredder
+          ctest --test-dir build/ci -C Debug
+          --output-on-failure --no-tests=error
+
+      - name: Test (Linux/Xvfb)
+        if: runner.os == 'Linux'
+        run: >-
+          xvfb-run -a
           conda run --no-capture-output -n molshredder
           ctest --test-dir build/ci -C Debug
           --output-on-failure --no-tests=error
@@ -76,6 +92,7 @@ jobs:
           conda run --no-capture-output -n molshredder ./build/stage/bin/molshredder system version --format json
           conda run --no-capture-output -n molshredder ./build/stage/bin/molshredder system info --format json
           test -f build/stage/share/molshredder/molshredder-support.json
+          test -f build/stage/share/molshredder/schemas/capability-support-v1.schema.json
           script_path="$GITHUB_WORKSPACE/tests/automation/fixtures/success.py"
           structure_path="$GITHUB_WORKSPACE/tests/io/fixtures/synthetic_multimodel.pdb"
           script_arguments="$(conda run --no-capture-output -n molshredder python -c 'import json,sys; print(json.dumps(sys.argv[1:]))' "$structure_path" ci-installed-cli)"
@@ -103,6 +120,7 @@ jobs:
           conda run --no-capture-output -n molshredder .\build\stage\bin\molshredder.exe system version --format json
           conda run --no-capture-output -n molshredder .\build\stage\bin\molshredder.exe system info --format json
           if (-not (Test-Path .\build\stage\share\molshredder\molshredder-support.json)) { throw "support manifest missing" }
+          if (-not (Test-Path .\build\stage\share\molshredder\schemas\capability-support-v1.schema.json)) { throw "capability schema missing" }
           $scriptPath = (Resolve-Path .\tests\automation\fixtures\success.py).Path
           $structurePath = (Resolve-Path .\tests\io\fixtures\synthetic_multimodel.pdb).Path
           $scriptArguments = @($structurePath, "ci-installed-cli") | ConvertTo-Json -Compress
@@ -117,3 +135,54 @@ jobs:
           $env:MOLSHREDDER_STRUCTURE = (Resolve-Path .\tests\io\fixtures\synthetic_multimodel.pdb).Path
           conda run --no-capture-output -n molshredder python -c "import json, pathlib, molshredder; info=molshredder.invoke('system info'); manifest=json.loads(pathlib.Path('build/stage/share/molshredder/molshredder-support.json').read_text()); assert info['status'] == 'ok' and info['data']['features'] == manifest['features']"
           conda run --no-capture-output -n molshredder python -c "import os, molshredder; result=molshredder.run_script(os.environ['MOLSHREDDER_SCRIPT'], [os.environ['MOLSHREDDER_STRUCTURE'], 'ci-installed-python'], trusted=True); assert result['status'] == 'ok' and result['data']['stdout'] == 'script-argument=ci-installed-python\n'"
+
+      - name: Check installed Desktop Metal and daily workflow (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          desktop=./build/stage/molshredder_desktop.app/Contents/MacOS/molshredder_desktop
+          test -x "$desktop"
+          graphics_output="$(conda run --no-capture-output -n molshredder "$desktop" --smoke --graphics-info-smoke 2>&1)"
+          printf '%s\n' "$graphics_output"
+          case "$graphics_output" in
+            *'"api":"metal"'*) ;;
+            *) echo "Expected Metal graphics API" >&2; exit 1 ;;
+          esac
+          conda run --no-capture-output -n molshredder "$desktop" \
+            --daily-workflow-smoke \
+            --open="$GITHUB_WORKSPACE/tests/io/fixtures/synthetic_multimodel.pdb" \
+            --trajectory="$GITHUB_WORKSPACE/build/ci/desktop_trajectory.dcd" \
+            --representation=spheres
+
+      - name: Check installed Desktop Vulkan/OpenGL and daily workflow (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          desktop=./build/stage/bin/molshredder_desktop
+          test -x "$desktop"
+          graphics_output="$(xvfb-run -a conda run --no-capture-output -n molshredder "$desktop" --smoke --graphics-info-smoke 2>&1)"
+          printf '%s\n' "$graphics_output"
+          case "$graphics_output" in
+            *'"api":"vulkan"'*|*'"api":"opengl"'*) ;;
+            *) echo "Expected Vulkan or OpenGL graphics API" >&2; exit 1 ;;
+          esac
+          xvfb-run -a conda run --no-capture-output -n molshredder "$desktop" \
+            --daily-workflow-smoke \
+            --open="$GITHUB_WORKSPACE/tests/io/fixtures/synthetic_multimodel.pdb" \
+            --trajectory="$GITHUB_WORKSPACE/build/ci/desktop_trajectory.dcd" \
+            --representation=spheres
+
+      - name: Check installed Desktop D3D and daily workflow (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $desktop = ".\build\stage\bin\molshredder_desktop.exe"
+          if (-not (Test-Path $desktop)) { throw "installed Desktop executable missing" }
+          $graphicsOutput = conda run --no-capture-output -n molshredder $desktop --smoke --graphics-info-smoke 2>&1 | Out-String
+          if ($LASTEXITCODE -ne 0) { throw "installed Desktop graphics smoke failed" }
+          Write-Host $graphicsOutput
+          if ($graphicsOutput -notmatch '"api":"direct3d(11|12)"') { throw "Expected Direct3D graphics API" }
+          conda run --no-capture-output -n molshredder $desktop `
+            --daily-workflow-smoke `
+            --open="$env:GITHUB_WORKSPACE\tests\io\fixtures\synthetic_multimodel.pdb" `
+            --trajectory="$env:GITHUB_WORKSPACE\build\ci\desktop_trajectory.dcd" `
+            --representation=spheres
+          if ($LASTEXITCODE -ne 0) { throw "installed Desktop daily workflow failed" }

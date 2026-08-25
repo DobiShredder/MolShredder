@@ -173,6 +173,47 @@ int main() {
       passed &= expect(!missing.has_value() &&
                            missing.error().code == ErrorCode::not_found,
                        "out-of-range frame read must return stable not-found");
+      const auto remapped = RemappedCoordinateSource::create(
+          source.value(), {1U, std::nullopt, 0U});
+      const auto remapped_frame =
+          remapped.has_value()
+              ? remapped.value()->read_frame(0U)
+              : molshredder::operation::Result<
+                    std::shared_ptr<const CoordinateFrame>>::failure(
+                    remapped.error());
+      const auto *positions =
+          remapped_frame.has_value()
+              ? std::get_if<std::vector<Vec3f>>(
+                    &remapped_frame.value()->positions().values())
+              : nullptr;
+      const auto *forces =
+          remapped_frame.has_value()
+              ? std::get_if<std::vector<float>>(
+                    &remapped_frame.value()
+                         ->metadata()
+                         .atom_properties.at("force_magnitude")
+                         .values)
+              : nullptr;
+      passed &= expect(
+          remapped.has_value() && remapped.value()->atom_count() == 3U &&
+              remapped.value()->frame_count() == 2U &&
+              remapped_frame.has_value() && positions != nullptr &&
+              *positions == std::vector<Vec3f>{{1, 2, 3}, {0, 0, 0},
+                                                {0, 0, 0}} &&
+              remapped_frame.value()->presence() ==
+                  std::vector<std::uint8_t>{0U, 0U, 1U} &&
+              forces != nullptr &&
+              *forces == std::vector<float>{0.75F, 0.0F, 0.5F} &&
+              remapped_frame.value()->metadata().fields.at(
+                  "molshredder.coordinate_remap") == "stable-identity-v1",
+          "coordinate remap must reorder every atom channel and represent inserted/missing atoms with finite absent placeholders");
+      passed &= expect(
+          !RemappedCoordinateSource::create(source.value(), {0U, 0U})
+               .has_value() &&
+              !RemappedCoordinateSource::create(source.value(), {2U})
+                   .has_value() &&
+              !RemappedCoordinateSource::create(nullptr, {}).has_value(),
+          "duplicate, out-of-range and null coordinate remaps must fail");
     }
     const auto mismatched =
         InMemoryCoordinateSource::create(1, {float_frame.value()});

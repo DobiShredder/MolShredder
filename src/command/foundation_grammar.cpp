@@ -52,6 +52,16 @@ ParameterSpec unit() {
 
 ParameterSpec provider() { return defaulted_text("provider", "auto"); }
 
+ParameterSpec representation_mask() {
+  return required_text("representation",
+                       {"lines", "sticks", "spheres", "ribbon", "cartoon",
+                        "everything", "wire", "licorice"});
+}
+
+ParameterSpec representation_selection() {
+  return defaulted_text("selection", "all");
+}
+
 } // namespace
 
 std::vector<Descriptor> foundation_command_descriptors() {
@@ -79,20 +89,63 @@ std::vector<Descriptor> foundation_command_descriptors() {
                  UndoPolicy::undoable},
       Descriptor{"show",
                  "Show a molecular representation for a selection",
-                 {required_text("representation", {"lines", "sticks", "spheres",
-                                                   "ribbon", "cartoon"}),
-                  defaulted_text("selection", "all"),
+                 {representation_mask(), representation_selection(),
                   ParameterSpec{"replace",
                                 ParameterType::boolean,
                                 false,
                                 std::nullopt,
                                 {"false", "true"}}},
                  UndoPolicy::undoable},
+      Descriptor{"hide",
+                 "Hide a molecular representation for a selection",
+                 {representation_mask(), representation_selection()},
+                 UndoPolicy::undoable},
+      Descriptor{"as",
+                 "Exclusively show a molecular representation in a selection",
+                 {representation_mask(), representation_selection()},
+                 UndoPolicy::undoable},
+      Descriptor{"toggle",
+                 "Toggle a molecular representation for a selection",
+                 {representation_mask(), representation_selection()},
+                 UndoPolicy::undoable},
+      Descriptor{"setting set",
+                 "Set a typed render setting at an explicit scope",
+                 {required_text("name"), required_text("value"),
+                  defaulted_text("scope", "global",
+                                 {"global", "object", "state", "atom", "bond"}),
+                  defaulted_text("object", "current"),
+                  defaulted_text("state", "current"), optional_text("target")},
+                 UndoPolicy::undoable},
+      Descriptor{"setting get",
+                 "Resolve a render setting for an explicit context",
+                 {required_text("name"),
+                  defaulted_text("scope", "global",
+                                 {"global", "object", "state", "atom", "bond"}),
+                  defaulted_text("object", "current"),
+                  defaulted_text("state", "current"), optional_text("target")},
+                 UndoPolicy::not_applicable},
+      Descriptor{"setting unset",
+                 "Remove one exact render-setting override",
+                 {required_text("name"),
+                  defaulted_text("scope", "global",
+                                 {"global", "object", "state", "atom", "bond"}),
+                  defaulted_text("object", "current"),
+                  defaulted_text("state", "current"), optional_text("target")},
+                 UndoPolicy::undoable},
+      Descriptor{"setting reset",
+                 "Remove all render-setting overrides at one exact scope",
+                 {defaulted_text("scope", "global",
+                                 {"global", "object", "state", "atom", "bond"}),
+                  defaulted_text("object", "current"),
+                  defaulted_text("state", "current"), optional_text("target")},
+                 UndoPolicy::undoable},
+      Descriptor{"setting list", "List the P0 typed render-setting catalog", {},
+                 UndoPolicy::not_applicable},
       Descriptor{"analyze center",
                  "Calculate a geometric centroid or center of mass",
                  {defaulted_text("selection", "all"),
                   defaulted_text("mode", "centroid", {"centroid", "com"}),
-                  precision(), unit()},
+                  precision(), unit(), optional_text("result-name")},
                  UndoPolicy::not_applicable},
       Descriptor{
           "measure distance",
@@ -102,7 +155,7 @@ std::vector<Descriptor> foundation_command_descriptors() {
                           {"atom", "centroid", "com", "minimum", "maximum",
                            "mean", "closest"}),
            defaulted_text("pbc", "raw", {"raw", "minimum-image"}), precision(),
-           unit()},
+           unit(), optional_text("result-name")},
           UndoPolicy::undoable},
       Descriptor{"analyze contacts",
                  "Find non-bonded atom pairs within a distance cutoff",
@@ -114,7 +167,7 @@ std::vector<Descriptor> foundation_command_descriptors() {
                                 false,
                                 "true",
                                 {"false", "true"}},
-                  precision(), unit()},
+                  precision(), unit(), optional_text("result-name")},
                  UndoPolicy::not_applicable},
       Descriptor{
           "analyze hbonds",
@@ -154,6 +207,32 @@ std::vector<AliasSpec> foundation_command_aliases() {
   };
 }
 
+std::vector<Descriptor> analysis_result_command_descriptors() {
+  return {
+      Descriptor{"result list", "List persistent analysis results", {},
+                 UndoPolicy::not_applicable},
+      Descriptor{"result get", "Get one persistent analysis result",
+                 {ParameterSpec{"id", ParameterType::unsigned_integer, true}},
+                 UndoPolicy::not_applicable},
+      Descriptor{"result delete", "Delete one persistent analysis result",
+                 {ParameterSpec{"id", ParameterType::unsigned_integer, true}},
+                 UndoPolicy::undoable},
+      Descriptor{"result show", "Show one analysis-result viewport overlay",
+                 {ParameterSpec{"id", ParameterType::unsigned_integer, true}},
+                 UndoPolicy::undoable},
+      Descriptor{"result hide", "Hide one analysis-result viewport overlay",
+                 {ParameterSpec{"id", ParameterType::unsigned_integer, true}},
+                 UndoPolicy::undoable},
+      Descriptor{"result export", "Export one persistent analysis result",
+                 {ParameterSpec{"id", ParameterType::unsigned_integer, true},
+                  required_text("path"),
+                  defaulted_text("output-format", "json", {"json", "csv"}),
+                  ParameterSpec{"overwrite", ParameterType::boolean, false,
+                                "false", {"false", "true"}}},
+                 UndoPolicy::not_undoable},
+  };
+}
+
 std::vector<AliasSpec> view_command_aliases() {
   return {
       AliasSpec{"perspective", "view projection", {{"mode", "perspective"}}},
@@ -170,16 +249,37 @@ std::vector<Descriptor> object_command_descriptors() {
                  UndoPolicy::not_applicable},
       Descriptor{"object activate",
                  "Make one molecular object active",
-                 {ParameterSpec{"id", ParameterType::integer, true}},
+                 {ParameterSpec{"id", ParameterType::unsigned_integer, true}},
                  UndoPolicy::undoable},
       Descriptor{"object visibility",
                  "Show or hide a molecular object",
-                 {ParameterSpec{"id", ParameterType::integer, true},
+                 {ParameterSpec{"id", ParameterType::unsigned_integer, true},
                   ParameterSpec{"visible",
                                 ParameterType::boolean,
                                 true,
                                 std::nullopt,
                                 {"false", "true"}}},
+                 UndoPolicy::undoable},
+      Descriptor{"object rename",
+                 "Rename a molecular object without changing its identity",
+                 {ParameterSpec{"object", ParameterType::text, true},
+                  ParameterSpec{"name", ParameterType::text, true}},
+                 UndoPolicy::undoable},
+      Descriptor{"object delete",
+                 "Delete a molecular object and dependent workspace state",
+                 {ParameterSpec{"object", ParameterType::text, true}},
+                 UndoPolicy::undoable},
+      Descriptor{"object reorder",
+                 "Move a molecular object to a 1-based panel position",
+                 {ParameterSpec{"object", ParameterType::text, true},
+                  ParameterSpec{"position", ParameterType::integer, true}},
+                 UndoPolicy::undoable},
+      Descriptor{"object topology-retain",
+                 "Retain/reorder stable atom IDs in the active topology",
+                 {ParameterSpec{"atom-ids", ParameterType::text, true},
+                  ParameterSpec{"expected-version",
+                                ParameterType::unsigned_integer,
+                                true}},
                  UndoPolicy::undoable},
   };
 }
@@ -373,6 +473,16 @@ std::vector<Descriptor> file_command_descriptors() {
                          "false",
                          {"false", "true"}}},
           UndoPolicy::not_applicable},
+      Descriptor{
+          "load batch",
+          "Atomically load a semicolon-delimited structure file batch",
+          {required_text("paths"), optional_text("names"),
+           defaulted_text("file-format", "auto",
+                          {"auto", "pdb", "mmcif", "cif", "bcif", "pqr",
+                           "mol", "mol2", "psf", "prmtop", "gro", "g96",
+                           "vtf", "sdf", "xyz"}),
+           provider()},
+          UndoPolicy::undoable},
   };
 }
 
@@ -409,7 +519,7 @@ std::vector<Descriptor> trajectory_command_descriptors() {
            defaulted_text("fit", "rigid", {"none", "rigid"}),
            defaulted_text("weight", "uniform", {"uniform", "mass"}),
            defaulted_text("missing", "error", {"error", "skip"}), precision(),
-           unit()},
+           unit(), optional_text("result-name")},
           UndoPolicy::not_applicable},
       Descriptor{
           "analyze trajectory rmsf",
@@ -439,7 +549,7 @@ std::vector<Descriptor> trajectory_command_descriptors() {
                   ParameterSpec{"first", ParameterType::integer, false, "0"},
                   ParameterSpec{"last", ParameterType::integer, false},
                   ParameterSpec{"stride", ParameterType::integer, false, "1"},
-                  precision(), unit()},
+                  precision(), unit(), optional_text("result-name")},
                  UndoPolicy::not_applicable},
       Descriptor{
           "analyze trajectory hbonds",
@@ -466,6 +576,11 @@ std::vector<Descriptor> trajectory_command_descriptors() {
            defaulted_text("coordinate-unit", "auto",
                           {"auto", "angstrom", "nanometer"}),
            optional_text("particle-group"),
+           ParameterSpec{"mapping", ParameterType::text, true, std::nullopt,
+                         {"exact", "index", "explicit"}},
+           defaulted_text("atom-map", "none"),
+           ParameterSpec{"expected-topology-version",
+                         ParameterType::unsigned_integer, false},
            ParameterSpec{"cache-mib", ParameterType::integer, false, "256"},
            ParameterSpec{"prefetch-frames", ParameterType::integer, false,
                          "4"}},

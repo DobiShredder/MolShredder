@@ -33,6 +33,10 @@ class NamedSelections {
 
   [[nodiscard]] std::vector<NamedSelectionInfo> list() const;
 
+  [[nodiscard]] operation::Result<NamedSelections> remap(
+      const model::Topology& source, const model::Topology& target,
+      const model::TopologyRemap& remap) const;
+
  private:
   struct Entry {
     Expression expression;

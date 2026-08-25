@@ -1,5 +1,13 @@
 # Data model
 
+## Background candidate boundary
+
+Bounded worker는 mutable `Workspace`를 직접 소유하거나 변경하지 않는다. Background parse/analysis/mesh
+task는 memory reservation과 generation을 가진 candidate를 만들고 `ready_to_commit`에서 멈춘다. Workspace
+owner thread가 generation을 다시 확인한 뒤 commit closure를 실행한다. Structure multi-input load는 모든
+MolecularSystem, stable object ID, name과 Scene node candidate가 성공한 경우에만 object vector와 Scene을
+함께 publish한다. 자세한 lifecycle은 [Bounded task execution](TASK_EXECUTION.md)에 정의한다.
+
 이 문서는 MolShredder foundation data model의 현재 public contract를 설명한다. API의 기준은
 `include/molshredder/model/`이며 reader, trajectory cache와 renderer는 이 계약 위에 구현한다.
 
@@ -21,13 +29,21 @@ MolecularSystem
 
 `TopologyBuilder::build()`는 immutable snapshot을 만들며 첫 snapshot의 version은 1이다.
 `TopologyBuilder::from()`으로 snapshot을 편집하면 원본은 바뀌지 않고 새 snapshot의 version이
-증가한다. `AtomIndex`와 `ResidueIndex`는 snapshot 안에서 dense하고 안정적이다. 이후 atom 삭제나
-reordering API가 추가될 때에는 별도의 index-remapping contract가 필요하다. Input file의 atom
-serial은 stable index가 아니며 `AtomRecord::source_serial`에 provenance로만 보존한다.
+증가한다. `AtomIndex`와 `ResidueIndex`는 snapshot 안에서만 dense하다. Atom/bond에는 별도의
+non-zero 64-bit stable ID가 있고 insert/delete/reorder는 `TopologyRemap`으로 source/target ordinal을
+연결한다. Input file의 atom serial은 MolShredder stable ID가 아니며
+`AtomRecord::source_serial`에 provenance로만 보존한다. 상세 계약은
+[Persistent identity and numeric contract](IDENTITY_AND_NUMERIC_CONTRACT.md)에 둔다.
 
 `MolecularSystem`은 stable application ID와 이름을 topology/coordinate source에 묶는다. 두
 component의 atom count가 다르면 생성할 수 없다. Shared immutable ownership은 worker가 topology
 snapshot이나 decoded frame을 사용하는 동안 그 lifetime을 보장한다.
+
+Workspace의 `PersistentAnalysisResult`는 molecular object와 별도 lifetime을 가진 immutable calculation
+snapshot이다. Source object/topology snapshot reference, typed response/table, algorithm/unit/PBC/
+missing-data provenance와 optional overlay를 stable result ID에 묶는다. Object 삭제나 topology mutation은
+결과를 지우지 않고 source status만 stale로 바꾼다. 상세 계약은
+[Persistent analysis results](ANALYSIS_RESULTS.md)에 둔다.
 
 ## Topology와 property
 
@@ -71,6 +87,11 @@ angstrom이라고 가정하면 안 된다.
 살아 있는 동안 eviction 후에도 storage lifetime을 보장한다. 상세 budget/concurrency 계약은
 [Trajectory runtime](TRAJECTORY_RUNTIME.md)에 둔다.
 
+External trajectory는 `MolecularSystem`에 연결되기 전에 exact/index/explicit stable-ID mapping을 거치고,
+position/velocity/presence/frame atom property가 하나의 target order로 정규화된다. 이어지는 semantic source는
+coordinate/cell을 Å, time/velocity basis를 ps, supported force를 kJ mol^-1 Å^-1로 변환하고 frame별 channel/unit
+drift를 거부한다. 상세 계약은 [Trajectory attachment](TRAJECTORY_ATTACHMENT.md)에 둔다.
+
 PBC transform은 source frame을 변경하지 않고 새 immutable frame을 만든다. Position precision,
 velocity, presence와 metadata 보존 및 missing placeholder 정책은 [PBC contract](PBC.md)에 둔다.
 
@@ -82,9 +103,9 @@ connectivity, finite coordinate/time, presence/boolean domain과 unit-cell hande
 경계에서 검증한다. 유효하게 생성된 immutable object를 consumer가 다시 방어적으로 검사할
 필요는 없다.
 
-이 foundation은 topology editing, format-specific alternate conformation semantics, reactive
-topology, unit conversion policy와 GPU cache eviction을 아직 정의하지 않는다. 해당 기능은
-구현될 때 versioned API와 acceptance test를 추가한다.
+이 foundation은 stable-ID retain/delete/reorder snapshot transaction을 제공하지만 일반 editing UI,
+chemical mutation, format-specific alternate conformation semantics와 reactive topology는 아직
+정의하지 않는다. Unit conversion policy와 GPU cache eviction은 각 전용 계약에서 다룬다.
 
 현재 PDB/mmCIF field가 이 model에 매핑되는 방식은 [Structure format
 support](FORMAT_SUPPORT.md)에 기록한다.

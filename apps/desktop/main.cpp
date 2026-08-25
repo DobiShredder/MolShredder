@@ -9,12 +9,14 @@
 
 #include <QGuiApplication>
 #include <QEventLoop>
+#include <QFileInfo>
 #include <QMetaObject>
 #include <QPointer>
 #include <QQmlApplicationEngine>
 #include <QQuickWindow>
 #include <QSGRendererInterface>
 #include <QTimer>
+#include <QTemporaryDir>
 #include <QUrl>
 #include <rhi/qrhi.h>
 
@@ -118,6 +120,7 @@ int main(int argc, char *argv[]) {
   bool camera_smoke = false;
   bool picking_smoke = false;
   bool object_smoke = false;
+  bool batch_load_smoke = false;
   bool trajectory_smoke = false;
   bool amber_smoke = false;
   bool amber_mdcrd_smoke = false;
@@ -134,11 +137,17 @@ int main(int argc, char *argv[]) {
   bool named_view_smoke = false;
   bool stereo_smoke = false;
   bool anaglyph_smoke = false;
+  bool interleaved_smoke = false;
+  bool representation_visibility_smoke = false;
+  bool render_setting_smoke = false;
+  bool analysis_smoke = false;
+  bool daily_workflow_smoke = false;
   std::optional<QString> screenshot;
   std::vector<QString> open_paths;
   std::optional<QString> representation;
   std::optional<QString> trajectory;
   QString trajectory_coordinate_unit{QStringLiteral("angstrom")};
+  QString trajectory_mapping{QStringLiteral("index")};
   std::optional<QString> save_path;
   std::optional<QString> script_path;
   for (int index = 1; index < argc; ++index) {
@@ -151,6 +160,8 @@ int main(int argc, char *argv[]) {
       picking_smoke = true;
     } else if (argument == "--object-smoke") {
       object_smoke = true;
+    } else if (argument == "--batch-load-smoke") {
+      batch_load_smoke = true;
     } else if (argument == "--trajectory-smoke") {
       trajectory_smoke = true;
     } else if (argument == "--amber-smoke") {
@@ -183,6 +194,17 @@ int main(int argc, char *argv[]) {
       stereo_smoke = true;
     } else if (argument == "--anaglyph-smoke") {
       anaglyph_smoke = true;
+    } else if (argument == "--interleaved-smoke") {
+      interleaved_smoke = true;
+    } else if (argument == "--representation-visibility-smoke") {
+      representation_visibility_smoke = true;
+    } else if (argument == "--render-setting-smoke") {
+      render_setting_smoke = true;
+    } else if (argument == "--analysis-smoke") {
+      analysis_smoke = true;
+    } else if (argument == "--daily-workflow-smoke") {
+      daily_workflow_smoke = true;
+      smoke = true;
     } else if (argument.starts_with("--screenshot=")) {
       const auto path =
           argument.substr(std::string_view{"--screenshot="}.size());
@@ -209,6 +231,11 @@ int main(int argc, char *argv[]) {
       const auto value =
           argument.substr(std::string_view{"--trajectory-unit="}.size());
       trajectory_coordinate_unit =
+          QString::fromUtf8(value.data(), static_cast<qsizetype>(value.size()));
+    } else if (argument.starts_with("--trajectory-mapping=")) {
+      const auto value =
+          argument.substr(std::string_view{"--trajectory-mapping="}.size());
+      trajectory_mapping =
           QString::fromUtf8(value.data(), static_cast<qsizetype>(value.size()));
     } else if (argument.starts_with("--save=")) {
       const auto path = argument.substr(std::string_view{"--save="}.size());
@@ -240,6 +267,11 @@ int main(int argc, char *argv[]) {
       QStringLiteral("molecularViewport"));
   if (viewport == nullptr)
     return EXIT_FAILURE;
+  const auto seek_and_wait = [viewport](qulonglong frame) {
+    return viewport->seekTrajectory(frame) &&
+           viewport->waitForTrajectoryTask(5000) &&
+           viewport->trajectoryFrame() == frame;
+  };
   QPointer<molshredder::desktop::MolecularViewport> viewport_guard{viewport};
   QObject::connect(
       window, &QQuickWindow::sceneGraphInitialized, window,
@@ -336,17 +368,117 @@ int main(int argc, char *argv[]) {
     qCritical("%s", viewport->statusText().toUtf8().constData());
     return EXIT_FAILURE;
   }
-  for (const auto &open_path : open_paths) {
-    if (!viewport->loadStructure(QUrl::fromLocalFile(open_path))) {
-      qCritical("%s", viewport->statusText().toUtf8().constData());
+  if (batch_load_smoke) {
+    QVariantList urls;
+    for (const auto &open_path : open_paths)
+      urls.push_back(QUrl::fromLocalFile(open_path));
+    if (!viewport->loadStructures(urls) || viewport->objectItems().size() != 2) {
+      qCritical("MolShredder desktop atomic batch load smoke failed: %s",
+                viewport->statusText().toUtf8().constData());
       return EXIT_FAILURE;
+    }
+    qInfo("MolShredder desktop atomic batch load ready: inputs=2 objects=2 canonical=shared");
+  } else {
+    for (const auto &open_path : open_paths) {
+      if (!viewport->loadStructure(QUrl::fromLocalFile(open_path))) {
+        qCritical("%s", viewport->statusText().toUtf8().constData());
+        return EXIT_FAILURE;
+      }
     }
   }
   if (trajectory.has_value() &&
-      !viewport->loadTrajectory(QUrl::fromLocalFile(*trajectory),
-                                trajectory_coordinate_unit)) {
+      (!viewport->loadTrajectory(QUrl::fromLocalFile(*trajectory),
+                                 trajectory_coordinate_unit,
+                                 trajectory_mapping) ||
+       !viewport->waitForTrajectoryTask(10000))) {
     qCritical("%s", viewport->statusText().toUtf8().constData());
     return EXIT_FAILURE;
+  }
+  if (representation_visibility_smoke) {
+    const auto passed =
+        viewport->applyRepresentationVisibility(QStringLiteral("show"),
+                                                QStringLiteral("index 1")) &&
+        viewport->applyRepresentationVisibility(QStringLiteral("hide"),
+                                                QStringLiteral("index 1")) &&
+        viewport->applyRepresentationVisibility(QStringLiteral("as"),
+                                                QStringLiteral("index 2")) &&
+        viewport->applyRepresentationVisibility(QStringLiteral("toggle"),
+                                                QStringLiteral("index 2"));
+    if (!passed) {
+      qCritical("MolShredder desktop representation visibility smoke failed");
+      return EXIT_FAILURE;
+    }
+    qInfo("MolShredder desktop representation visibility ready: operations=4 canonical=shared");
+  }
+  if (render_setting_smoke) {
+    const auto passed =
+        viewport->applyRenderSetting(QStringLiteral("set"),
+                                     QStringLiteral("sphere_scale"),
+                                     QStringLiteral("2.5"),
+                                     QStringLiteral("atom"),
+                                     QStringLiteral("1")) &&
+        viewport->applyRenderSetting(QStringLiteral("set"),
+                                     QStringLiteral("sphere_transparency"),
+                                     QStringLiteral("0.5"),
+                                     QStringLiteral("atom"),
+                                     QStringLiteral("1")) &&
+        viewport->applyRenderSetting(QStringLiteral("set"),
+                                     QStringLiteral("sphere_color"),
+                                     QStringLiteral("oxygen"),
+                                     QStringLiteral("atom"),
+                                     QStringLiteral("1"));
+    const auto query = viewport->renderSettingJson(
+        QStringLiteral("sphere_scale"), QStringLiteral("atom"),
+        QStringLiteral("1"));
+    const auto &packet = viewport->renderPacket();
+    const auto geometry_passed =
+        !packet.spheres.empty() && packet.spheres.front().radius > 3.0 &&
+        packet.spheres.front().color.red > 0.9F &&
+        packet.spheres.front().color.alpha == 0.5F;
+    const auto opened = QMetaObject::invokeMethod(
+        window, "openRenderSettings", Qt::DirectConnection);
+    auto *overlay = window->findChild<QObject *>(
+        QStringLiteral("renderSettingsOverlay"));
+    auto *result = window->findChild<QObject *>(
+        QStringLiteral("renderSettingResult"));
+    if (!passed || !geometry_passed ||
+        !query.contains(QStringLiteral("\"value\":2.5")) ||
+        !query.contains(QStringLiteral("\"source_scope\":\"atom\"")) ||
+        !opened || overlay == nullptr || result == nullptr ||
+        !overlay->property("visible").toBool()) {
+      qCritical("MolShredder desktop render setting smoke failed");
+      return EXIT_FAILURE;
+    }
+    qInfo("MolShredder desktop render setting ready: typed=shared geometry=updated editor=visible");
+  }
+  if (analysis_smoke) {
+    const auto center = viewport->analyzeCenter(
+        QStringLiteral("all"), QStringLiteral("com"),
+        QStringLiteral("desktop-com"));
+    const auto distance = viewport->analyzeDistance(
+        QStringLiteral("index 1"), QStringLiteral("index 2"),
+        QStringLiteral("raw"), QStringLiteral("desktop-distance"));
+    const auto detail = viewport->analysisResultJson(2U);
+    const auto opened = QMetaObject::invokeMethod(
+        window, "openAnalyze", Qt::DirectConnection);
+    auto *overlay =
+        window->findChild<QObject *>(QStringLiteral("analysisOverlay"));
+    const auto before_hide = viewport->renderPacket();
+    const auto hidden = viewport->setAnalysisResultVisible(2U, false);
+    const auto &after_hide = viewport->renderPacket();
+    const auto passed =
+        center && distance && viewport->analysisItems().size() == 2U &&
+        viewport->analysisLabelItems().size() == 1U &&
+        before_hide.labels.size() == 2U && before_hide.lines.size() >= 8U &&
+        after_hide.labels.size() == 1U && hidden &&
+        detail.contains(QStringLiteral("molshredder-distance-v1")) &&
+        detail.contains(QStringLiteral("source_status")) && opened &&
+        overlay != nullptr && overlay->property("visible").toBool();
+    if (!passed) {
+      qCritical("MolShredder desktop analysis result smoke failed");
+      return EXIT_FAILURE;
+    }
+    qInfo("MolShredder desktop analysis ready: results=2 overlay=marker-dash-label canonical=shared panel=visible");
   }
   if (save_path.has_value() &&
       !viewport->saveStructure(QUrl::fromLocalFile(*save_path), save_all)) {
@@ -444,23 +576,32 @@ int main(int argc, char *argv[]) {
     const auto composed_spheres = viewport->renderPacket().spheres.size();
     if (before.size() != 2 || composed_spheres != 4U ||
         !viewport->activateObject(1U) ||
-        !viewport->setObjectVisible(2U, false)) {
+        !viewport->setObjectVisible(2U, false) ||
+        !viewport->renameObject(2U, QStringLiteral("renamed")) ||
+        !viewport->reorderObject(2U, 1U) || !viewport->deleteObject(1U)) {
       qCritical("MolShredder desktop object panel smoke failed");
       return EXIT_FAILURE;
     }
     const auto after = viewport->objectItems();
     const auto first = after[0].toMap();
-    const auto second = after[1].toMap();
-    if (!first.value(QStringLiteral("active")).toBool() ||
-        !first.value(QStringLiteral("visible")).toBool() ||
-        second.value(QStringLiteral("active")).toBool() ||
-        second.value(QStringLiteral("visible")).toBool() ||
-        viewport->renderPacket().spheres.size() != 1U) {
-      qCritical("MolShredder desktop object state smoke failed");
+    if (after.size() != 1 ||
+        first.value(QStringLiteral("id")).toULongLong() != 2U ||
+        first.value(QStringLiteral("name")).toString() !=
+            QStringLiteral("renamed") ||
+        !first.value(QStringLiteral("active")).toBool() ||
+        first.value(QStringLiteral("visible")).toBool() ||
+        viewport->renderPacket().spheres.size() != 0U) {
+      qCritical("MolShredder desktop object state smoke failed: count=%lld id=%llu name=%s active=%d visible=%d spheres=%llu",
+                static_cast<long long>(after.size()),
+                first.value(QStringLiteral("id")).toULongLong(),
+                first.value(QStringLiteral("name")).toString().toUtf8().constData(),
+                first.value(QStringLiteral("active")).toBool(),
+                first.value(QStringLiteral("visible")).toBool(),
+                static_cast<unsigned long long>(viewport->renderPacket().spheres.size()));
       return EXIT_FAILURE;
     }
-    qInfo("MolShredder desktop objects ready: objects=2 active=1 visible=1 "
-          "spheres=1");
+    qInfo("MolShredder desktop objects ready: objects=1 active=2 visible=0 "
+          "rename-delete-reorder=true spheres=0");
   }
   if (camera_smoke) {
     const auto *initial = viewport->camera();
@@ -650,6 +791,27 @@ int main(int argc, char *argv[]) {
     if (!screenshot.has_value())
       QTimer::singleShot(1000, &application, &QCoreApplication::quit);
   }
+  if (interleaved_smoke) {
+    const auto row_enabled = viewport->setStereo(
+        true, QStringLiteral("row_interleaved"), false, 2.0, 2.1,
+        QStringLiteral("optimized"));
+    const auto column_enabled = viewport->setStereo(
+        true, QStringLiteral("column_interleaved"), false, 2.0, 2.1,
+        QStringLiteral("optimized"));
+    const auto checkerboard_enabled = viewport->setStereo(
+        true, QStringLiteral("checkerboard"), false, 2.0, 2.1,
+        QStringLiteral("optimized"));
+    if (!row_enabled || !column_enabled || !checkerboard_enabled ||
+        !viewport->stereoEnabled() ||
+        viewport->stereoModeText() != QStringLiteral("checkerboard") ||
+        viewport->stereoSwapEyes()) {
+      qCritical("MolShredder desktop interleaved smoke failed");
+      return EXIT_FAILURE;
+    }
+    qInfo("MolShredder desktop interleaved ready: modes=3 final=checkerboard eyes=2 compositor=QRhi");
+    if (!screenshot.has_value())
+      QTimer::singleShot(1000, &application, &QCoreApplication::quit);
+  }
   if (picking_smoke) {
     const auto capture_requested = screenshot.has_value();
     QObject::connect(
@@ -674,20 +836,49 @@ int main(int argc, char *argv[]) {
     if (!viewport->hasTrajectory() || viewport->trajectoryFrameCount() != 4U ||
         !viewport->setPlaybackMode(QStringLiteral("loop")) ||
         !viewport->setPlaybackDirection(QStringLiteral("forward")) ||
-        !viewport->setTrajectoryFps(5.0) || !viewport->seekTrajectory(3U) ||
+        !viewport->setTrajectoryFps(5.0) || !seek_and_wait(3U) ||
         !viewport->setTrajectoryPlaying(true) ||
         !viewport->tickTrajectory(200.0) || viewport->trajectoryFrame() != 0U ||
         !viewport->setTrajectoryPlaying(false) ||
         !viewport->setPlaybackMode(QStringLiteral("rock")) ||
-        !viewport->seekTrajectory(3U) ||
+        !seek_and_wait(3U) ||
         !viewport->setPlaybackDirection(QStringLiteral("forward")) ||
         !viewport->setTrajectoryPlaying(true) ||
         !viewport->tickTrajectory(200.0) || viewport->trajectoryFrame() != 2U ||
         viewport->playbackDirection() != QStringLiteral("reverse") ||
         !viewport->setTrajectoryPlaying(false) ||
         !viewport->setPlaybackMode(QStringLiteral("loop")) ||
-        !viewport->setTrajectoryFps(30.0) || !viewport->seekTrajectory(0U)) {
+        !viewport->setTrajectoryFps(30.0) || !seek_and_wait(0U)) {
       qCritical("MolShredder desktop trajectory deterministic smoke failed");
+      return EXIT_FAILURE;
+    }
+    const auto *task_progress = window->findChild<QObject *>(
+        QStringLiteral("trajectoryTaskProgress"));
+    const auto *task_cancel = window->findChild<QObject *>(
+        QStringLiteral("trajectoryTaskCancelButton"));
+    if (!viewport->seekTrajectory(1U) || !viewport->seekTrajectory(2U) ||
+        !viewport->seekTrajectory(3U) ||
+        !viewport->waitForTrajectoryTask(5000) ||
+        viewport->trajectoryFrame() != 3U ||
+        viewport->packetUpdateMode() != QStringLiteral("incremental") ||
+        task_progress == nullptr || task_cancel == nullptr) {
+      qCritical("MolShredder desktop rapid latest-wins seek smoke failed");
+      return EXIT_FAILURE;
+    }
+    if (!viewport->setRepresentation(QStringLiteral("sticks")) ||
+        viewport->packetUpdateMode() != QStringLiteral("full") ||
+        !viewport->setRepresentation(QStringLiteral("spheres")) ||
+        !seek_and_wait(3U) ||
+        viewport->packetUpdateMode() != QStringLiteral("incremental")) {
+      qCritical("MolShredder desktop trajectory buffer fallback smoke failed");
+      return EXIT_FAILURE;
+    }
+    if (!viewport->seekTrajectory(0U)) return EXIT_FAILURE;
+    viewport->cancelTrajectoryTask();
+    if (viewport->trajectoryFrame() != 3U ||
+        viewport->trajectoryTaskStage() != QStringLiteral("cancelled") ||
+        !seek_and_wait(0U)) {
+      qCritical("MolShredder desktop trajectory cancellation smoke failed");
       return EXIT_FAILURE;
     }
     const auto observed_frame_change = std::make_shared<bool>(false);
@@ -719,6 +910,87 @@ int main(int argc, char *argv[]) {
       application.exit(EXIT_FAILURE);
     });
   }
+  if (daily_workflow_smoke) {
+    QTemporaryDir output_directory;
+    const auto initial_frame = viewport->trajectoryFrame();
+    const auto invalid_seek_preserved =
+        !viewport->seekTrajectory(viewport->trajectoryFrameCount()) &&
+        viewport->trajectoryFrame() == initial_frame;
+    const auto prepared_view =
+        output_directory.isValid() && viewport->hasTrajectory() &&
+        viewport->trajectoryFrameCount() == 4U &&
+        viewport->setRepresentation(QStringLiteral("sticks")) &&
+        viewport->applyRepresentationVisibility(QStringLiteral("as"),
+                                                QStringLiteral("index 1")) &&
+        viewport->applyRepresentationVisibility(QStringLiteral("show"),
+                                                QStringLiteral("all"));
+    const auto pick = viewport->renderPacket().pick_targets.begin();
+    if (prepared_view && pick != viewport->renderPacket().pick_targets.end())
+      viewport->deliverPickResult(viewport->pickRequestRevision(),
+                                  viewport->packetRevision(), pick->first);
+    const auto prepared =
+        prepared_view &&
+        viewport->selectionText() != QStringLiteral("No selection") &&
+        viewport->analyzeCenter(QStringLiteral("all"), QStringLiteral("com"),
+                                QStringLiteral("daily-com")) &&
+        viewport->analyzeDistance(QStringLiteral("index 1"),
+                                  QStringLiteral("index 3"),
+                                  QStringLiteral("raw"),
+                                  QStringLiteral("daily-distance"));
+    const auto results = viewport->analysisItems();
+    const auto center_id =
+        results.size() > 0 ? results[0].toMap().value(QStringLiteral("id"))
+                                 .toULongLong()
+                           : 0U;
+    const auto distance_id =
+        results.size() > 1 ? results[1].toMap().value(QStringLiteral("id"))
+                                 .toULongLong()
+                           : 0U;
+    const auto center_path = output_directory.filePath(QStringLiteral("com.json"));
+    const auto distance_path =
+        output_directory.filePath(QStringLiteral("distance.csv"));
+    const auto structure_path =
+        output_directory.filePath(QStringLiteral("selected-frame.pdb"));
+    const auto exported =
+        center_id != 0U && distance_id != 0U &&
+        viewport->exportAnalysisResult(
+            center_id, QUrl::fromLocalFile(center_path), QStringLiteral("json")) &&
+        viewport->exportAnalysisResult(distance_id,
+                                       QUrl::fromLocalFile(distance_path),
+                                       QStringLiteral("csv")) &&
+        viewport->saveStructure(QUrl::fromLocalFile(structure_path), false);
+    const auto played =
+        viewport->seekTrajectory(1U) && viewport->seekTrajectory(2U) &&
+        viewport->seekTrajectory(3U) &&
+        viewport->waitForTrajectoryTask(5000) &&
+        viewport->trajectoryFrame() == 3U &&
+        viewport->setPlaybackMode(QStringLiteral("loop")) &&
+        viewport->setPlaybackDirection(QStringLiteral("forward")) &&
+        viewport->setTrajectoryFps(5.0) &&
+        viewport->setTrajectoryPlaying(true) &&
+        viewport->tickTrajectory(200.0) &&
+        viewport->trajectoryFrame() == 0U &&
+        viewport->setTrajectoryPlaying(false);
+    const auto before_cancel = viewport->trajectoryFrame();
+    const auto cancelled = viewport->seekTrajectory(1U);
+    viewport->cancelTrajectoryTask();
+    const auto cancellation_preserved =
+        cancelled && viewport->trajectoryFrame() == before_cancel &&
+        viewport->trajectoryTaskStage() == QStringLiteral("cancelled");
+    const auto outputs_exist = QFileInfo{center_path}.size() > 0 &&
+                               QFileInfo{distance_path}.size() > 0 &&
+                               QFileInfo{structure_path}.size() > 0;
+    if (!invalid_seek_preserved || !prepared || results.size() != 2 ||
+        !exported || !played || !cancellation_preserved || !outputs_exist) {
+      qCritical("MolShredder desktop daily workflow smoke failed: invalid=%d prepared=%d results=%lld exported=%d played=%d cancelled=%d outputs=%d status=%s",
+                invalid_seek_preserved, prepared,
+                static_cast<long long>(results.size()), exported, played,
+                cancellation_preserved, outputs_exist,
+                viewport->statusText().toUtf8().constData());
+      return EXIT_FAILURE;
+    }
+    qInfo("MolShredder desktop daily workflow ready: open=1 representation=sticks selection=1 analysis=2 trajectory=4 exports=3 cancellation=preserved");
+  }
   if (amber_smoke) {
     if (!viewport->hasTrajectory() || viewport->trajectoryFrameCount() != 1U ||
         viewport->atomCount() != 4U ||
@@ -746,7 +1018,7 @@ int main(int argc, char *argv[]) {
         viewport->atomCount() != 4U ||
         viewport->representation() != QStringLiteral("sticks") ||
         viewport->renderPacket().cylinders.size() != 6U ||
-        !viewport->seekTrajectory(1U) || viewport->trajectoryFrame() != 1U) {
+        !seek_and_wait(1U)) {
       qCritical("MolShredder desktop Amber NetCDF smoke failed");
       return EXIT_FAILURE;
     }
@@ -757,7 +1029,10 @@ int main(int argc, char *argv[]) {
     if (!viewport->hasTrajectory() || viewport->trajectoryFrameCount() != 2U ||
         viewport->atomCount() != 3U ||
         viewport->representation() != QStringLiteral("sticks") ||
-        !viewport->seekTrajectory(1U) || viewport->trajectoryFrame() != 1U) {
+        !seek_and_wait(1U) ||
+        viewport->trajectoryMappingText() != trajectory_mapping ||
+        window->findChild<QObject *>(
+            QStringLiteral("trajectoryMappingButton")) == nullptr) {
       qCritical("MolShredder desktop H5MD trajectory smoke failed");
       return EXIT_FAILURE;
     }
@@ -768,7 +1043,8 @@ int main(int argc, char *argv[]) {
     if (!viewport->hasTrajectory() || viewport->trajectoryFrameCount() != 2U ||
         viewport->atomCount() != 3U ||
         viewport->representation() != QStringLiteral("sticks") ||
-        !viewport->seekTrajectory(1U) || viewport->trajectoryFrame() != 1U) {
+        !seek_and_wait(1U) ||
+        viewport->trajectoryMappingText() != trajectory_mapping) {
       qCritical("MolShredder desktop LAMMPS trajectory smoke failed");
       return EXIT_FAILURE;
     }
@@ -779,7 +1055,7 @@ int main(int argc, char *argv[]) {
     if (!viewport->hasTrajectory() || viewport->trajectoryFrameCount() != 2U ||
         viewport->atomCount() != 3U ||
         viewport->representation() != QStringLiteral("sticks") ||
-        !viewport->seekTrajectory(1U) || viewport->trajectoryFrame() != 1U) {
+        !seek_and_wait(1U)) {
       qCritical("MolShredder desktop BINPOS trajectory smoke failed");
       return EXIT_FAILURE;
     }
@@ -797,7 +1073,8 @@ int main(int argc, char *argv[]) {
     });
   } else if (smoke && !picking_smoke && !trajectory_smoke && !script_smoke &&
              !script_cancel_smoke && !graphics_info_smoke &&
-             !system_info_panel_smoke && !stereo_smoke && !anaglyph_smoke) {
+             !system_info_panel_smoke && !stereo_smoke && !anaglyph_smoke &&
+             !interleaved_smoke) {
     QTimer::singleShot(1500, &application, &QCoreApplication::quit);
   }
   return application.exec();
