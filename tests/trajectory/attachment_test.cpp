@@ -30,8 +30,9 @@ double numeric(const molshredder::model::AtomProperty& property,
         if constexpr (std::is_same_v<Values, std::vector<float>> ||
                       std::is_same_v<Values, std::vector<double>>) {
           return values[index];
+        } else {
+          return 0.0;
         }
-        return 0.0;
       },
       property.values);
 }
@@ -136,9 +137,12 @@ int main() {
                            "full-identity-exact" &&
                        exact.value().compared_axes.size() == 8U,
                    "exact mapping must compare the complete identity tuple");
-  const std::array serial_identities{
-      trajectory::TrajectoryAtomIdentity{.source_serial = 11},
-      trajectory::TrajectoryAtomIdentity{.source_serial = 12}};
+  const auto serial_identity = [](std::int64_t source_serial) {
+    trajectory::TrajectoryAtomIdentity identity{};
+    identity.source_serial = source_serial;
+    return identity;
+  };
+  const std::array serial_identities{serial_identity(11), serial_identity(12)};
   const auto serial_exact = trajectory::resolve_atom_mapping(
       {trajectory::AtomMappingPolicy::exact, topology.get(), 2U,
        serial_identities, {}});

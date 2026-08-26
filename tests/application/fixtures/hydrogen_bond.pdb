@@ -1,0 +1,6 @@
+HEADER    HYDROGEN BOND TEST
+ATOM      1  N   DON A   1       0.000   0.000   0.000  1.00  0.00           N
+ATOM      2  H   DON A   1       1.000   0.000   0.000  1.00  0.00           H
+ATOM      3  O   ACC B   2       2.800   0.000   0.000  1.00  0.00           O
+CONECT    1    2
+END

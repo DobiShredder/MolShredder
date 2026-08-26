@@ -1,0 +1,5 @@
+HEADER    LAMMPS ID MAPPING FIXTURE
+ATOM     10  C   MOL A   1       0.000   0.000   0.000  1.00  0.00           C
+ATOM     20  O   MOL A   1       1.000   0.000   0.000  1.00  0.00           O
+ATOM     30  H   MOL A   1       0.000   1.000   0.000  1.00  0.00           H
+END

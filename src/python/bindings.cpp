@@ -48,7 +48,7 @@ py::object to_python(const command::Value& value) {
         } else if constexpr (std::is_same_v<Item, command::Value::Array>) {
           py::list result;
           for (const auto& nested : item) result.append(to_python(nested));
-          return std::move(result);
+          return result;
         } else {
           return object_to_python(item);
         }

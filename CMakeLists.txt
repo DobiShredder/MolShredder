@@ -180,7 +180,9 @@ endif()
 
 function(molshredder_enable_warnings target_name)
   if(MSVC)
-    target_compile_options(${target_name} PRIVATE /W4 /permissive-)
+    target_compile_options(
+      ${target_name} PRIVATE /W4 /permissive- /external:anglebrackets /external:W0
+    )
     if(MOLSHREDDER_WARNINGS_AS_ERRORS)
       target_compile_options(${target_name} PRIVATE /WX)
     endif()
@@ -196,6 +198,24 @@ function(molshredder_enable_warnings target_name)
 endfunction()
 
 if(BUILD_TESTING)
+  foreach(
+    required_pdb_fixture
+    IN ITEMS
+      tests/io/fixtures/synthetic_multimodel.pdb
+      tests/io/fixtures/pick_single_atom.pdb
+      tests/io/fixtures/lammps_topology.pdb
+      tests/io/fixtures/1ubq.pdb
+      tests/application/fixtures/pbc_distance.pdb
+      tests/application/fixtures/hydrogen_bond.pdb
+  )
+    if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${required_pdb_fixture}")
+      message(
+        FATAL_ERROR
+        "Required test fixture is missing from the source tree: ${required_pdb_fixture}"
+      )
+    endif()
+  endforeach()
+
   add_executable(
     molshredder_bcif_fixture_generator
     tests/support/bcif_fixture_generator.cpp
