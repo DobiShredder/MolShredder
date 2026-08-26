@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
 #include <cstdlib>
 #include <memory>
 #include <optional>
@@ -114,8 +115,27 @@ graphics_runtime_info(QQuickWindow &window) {
 }  // namespace
 
 int main(int argc, char *argv[]) {
+  const auto redirected_render_requested = [&] {
+    for (int index = 1; index < argc; ++index) {
+      if (std::string_view{argv[index]}.starts_with(
+              "--redirected-render-smoke="))
+        return true;
+    }
+    return false;
+  }();
+  if (redirected_render_requested) {
+    std::fprintf(stderr,
+                 "MolShredder redirected renderer stage: process-entry\n");
+    std::fflush(stderr);
+  }
   molshredder::python::link_embedded_module();
   QGuiApplication application{argc, argv};
+  if (redirected_render_requested) {
+    std::fprintf(
+        stderr,
+        "MolShredder redirected renderer stage: gui-application-ready\n");
+    std::fflush(stderr);
+  }
   QCoreApplication::setApplicationName(QStringLiteral("MolShredder"));
   QCoreApplication::setOrganizationName(QStringLiteral("MolShredder"));
 

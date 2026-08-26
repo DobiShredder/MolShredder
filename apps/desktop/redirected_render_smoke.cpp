@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdio>
 #include <cstdlib>
 #include <memory>
 #include <optional>
@@ -19,6 +20,11 @@
 
 namespace molshredder::desktop {
 namespace {
+
+void report_stage(const char *stage) {
+  std::fprintf(stderr, "MolShredder redirected renderer stage: %s\n", stage);
+  std::fflush(stderr);
+}
 
 std::optional<QSGRendererInterface::GraphicsApi>
 graphics_api(const QString &backend) {
@@ -106,6 +112,7 @@ render_and_readback(QQuickRenderControl &render_control, QRhi &rhi,
 } // namespace
 
 int run_redirected_render_smoke(const RedirectedRenderSmokeOptions &options) {
+  report_stage("options-ready");
   const auto api = graphics_api(options.backend);
   if (!api.has_value()) {
     qCritical("Unsupported redirected renderer backend: %s",
@@ -117,6 +124,7 @@ int run_redirected_render_smoke(const RedirectedRenderSmokeOptions &options) {
   constexpr QSize output_size{320, 240};
   QQuickRenderControl render_control;
   QQuickWindow window{&render_control};
+  report_stage("render-control-window-ready");
   window.setColor(Qt::black);
   window.setGeometry(0, 0, output_size.width(), output_size.height());
   window.contentItem()->setSize(output_size);
@@ -153,11 +161,13 @@ int run_redirected_render_smoke(const RedirectedRenderSmokeOptions &options) {
     return EXIT_FAILURE;
   }
 
+  report_stage("scene-data-ready");
   if (!render_control.initialize()) {
     qCritical("MolShredder redirected renderer initialization failed: backend=%s",
               qUtf8Printable(options.backend));
     return EXIT_FAILURE;
   }
+  report_stage("render-control-initialized");
   auto *rhi = render_control.rhi();
   if (rhi == nullptr) {
     qCritical("MolShredder redirected renderer did not expose QRhi: backend=%s",
@@ -194,6 +204,7 @@ int run_redirected_render_smoke(const RedirectedRenderSmokeOptions &options) {
   }
   window.setRenderTarget(
       QQuickRenderTarget::fromRhiRenderTarget(render_target.get()));
+  report_stage("render-target-ready");
   const auto fail_after_target = [&render_control] {
     render_control.invalidate();
     return EXIT_FAILURE;
@@ -203,6 +214,7 @@ int run_redirected_render_smoke(const RedirectedRenderSmokeOptions &options) {
                                          output_size);
   const auto second = render_and_readback(render_control, *rhi, *color_texture,
                                           output_size);
+  report_stage("determinism-frames-ready");
   if (!first.has_value() || !second.has_value() ||
       !has_pixel_variation(first.value()) || first.value() != second.value()) {
     qCritical("MolShredder redirected renderer deterministic readback failed: first=%d second=%d variation=%d equal=%d",
@@ -218,6 +230,7 @@ int run_redirected_render_smoke(const RedirectedRenderSmokeOptions &options) {
                   static_cast<double>(output_size.height()) * 0.5);
   const auto pick_frame = render_and_readback(render_control, *rhi,
                                               *color_texture, output_size);
+  report_stage("pick-frame-ready");
   QCoreApplication::processEvents();
   if (!pick_frame.has_value() || viewport.lastPickId() == 0U ||
       viewport.selectionText() == selection_before_pick) {
