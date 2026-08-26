@@ -16,7 +16,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-14, ubuntu-latest, windows-latest]
+        include:
+          - os: macos-14
+            configuration: Debug
+          - os: ubuntu-latest
+            configuration: Debug
+          - os: windows-latest
+            configuration: RelWithDebInfo
 
     steps:
       - name: Check out source
@@ -51,19 +57,19 @@ jobs:
           -DBUILD_TESTING=ON
           -DMOLSHREDDER_WARNINGS_AS_ERRORS=ON
           -DMOLSHREDDER_BUILD_DESKTOP=ON
-          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_BUILD_TYPE=${{ matrix.configuration }}
           -DCMAKE_PREFIX_PATH="$MOLSHREDDER_CONDA_PREFIX"
           -DPython3_ROOT_DIR="$MOLSHREDDER_CONDA_PREFIX"
 
       - name: Build
         run: >-
           conda run --no-capture-output -n molshredder
-          cmake --build build/ci --config Debug --parallel
+          cmake --build build/ci --config ${{ matrix.configuration }} --parallel
 
       - name: Test required molfile ABI loader gate
         run: >-
           conda run --no-capture-output -n molshredder
-          ctest --test-dir build/ci -C Debug
+          ctest --test-dir build/ci -C ${{ matrix.configuration }}
           --output-on-failure --no-tests=error
           -R "^io\.molfile_provider$"
 
@@ -71,7 +77,7 @@ jobs:
         if: runner.os == 'macOS'
         run: >-
           conda run --no-capture-output -n molshredder
-          ctest --test-dir build/ci -C Debug
+          ctest --test-dir build/ci -C ${{ matrix.configuration }}
           --output-on-failure --no-tests=error
 
       - name: Test (Windows non-Desktop)
@@ -79,7 +85,7 @@ jobs:
         shell: pwsh
         timeout-minutes: 5
         run: |
-          conda run --no-capture-output -n molshredder ctest --test-dir build/ci -C Debug --output-on-failure --no-tests=error -E "^desktop\."
+          conda run --no-capture-output -n molshredder ctest --test-dir build/ci -C ${{ matrix.configuration }} --output-on-failure --no-tests=error -E "^desktop\."
           if ($LASTEXITCODE -ne 0) { throw "Windows non-Desktop test suite failed" }
 
       - name: Test (Linux/Xvfb)
@@ -87,13 +93,13 @@ jobs:
         run: >-
           xvfb-run -a
           conda run --no-capture-output -n molshredder
-          ctest --test-dir build/ci -C Debug
+          ctest --test-dir build/ci -C ${{ matrix.configuration }}
           --output-on-failure --no-tests=error
 
       - name: Install staging
         run: >-
           conda run --no-capture-output -n molshredder
-          cmake --install build/ci --config Debug
+          cmake --install build/ci --config ${{ matrix.configuration }}
           --prefix "$GITHUB_WORKSPACE/build/stage"
 
       - name: Smoke installed executable (Unix)
