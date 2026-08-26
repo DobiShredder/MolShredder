@@ -520,7 +520,7 @@ public:
     build_cylinder_geometry(cylinder_vertices_, cylinder_indices_);
   }
 
-  void initialize(QRhiCommandBuffer *command_buffer) override {
+  void initialize(QRhiCommandBuffer *) override {
     if (rhi_ != rhi()) {
       rhi_ = rhi();
       reset_gpu_resources();
@@ -545,8 +545,9 @@ public:
         !stereo_composite_pipeline_) {
       create_pipelines();
     }
-    if (geometry_dirty_)
-      upload_geometry(command_buffer);
+    // synchronize() can replace the CPU packet later in this frame. Defer the
+    // upload to render() so no submitted update batch references buffers that
+    // another upload deletes before the frame is submitted.
   }
 
   void synchronize(QQuickRhiItem *item) override {
