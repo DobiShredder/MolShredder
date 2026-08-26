@@ -74,19 +74,40 @@ jobs:
           ctest --test-dir build/ci -C Debug
           --output-on-failure --no-tests=error
 
-      - name: Test (Windows D3D11)
+      - name: Test (Windows non-Desktop)
         if: runner.os == 'Windows'
         shell: pwsh
-        timeout-minutes: 15
+        timeout-minutes: 5
         run: |
-          # The offscreen QPA plugin does not provide the native window/surface
-          # contract required by Qt Quick's D3D11 QRhi path. GitHub's Windows
-          # runner has a Windows window station, so exercise that platform
-          # plugin explicitly while keeping the renderer deterministic.
+          conda run --no-capture-output -n molshredder ctest --test-dir build/ci -C Debug --output-on-failure --no-tests=error -E "^desktop\."
+          if ($LASTEXITCODE -ne 0) { throw "Windows non-Desktop test suite failed" }
+
+      - name: Preflight Windows Desktop D3D11 WARP
+        if: runner.os == 'Windows'
+        shell: pwsh
+        timeout-minutes: 2
+        run: |
           $env:QT_QPA_PLATFORM = "windows"
           $env:QSG_RHI_BACKEND = "d3d11"
-          conda run --no-capture-output -n molshredder ctest --test-dir build/ci -C Debug --output-on-failure --no-tests=error
-          if ($LASTEXITCODE -ne 0) { throw "Windows test suite failed" }
+          $env:QSG_RHI_PREFER_SOFTWARE_RENDERER = "1"
+          $env:QSG_RENDER_LOOP = "basic"
+          $env:QSG_NO_VSYNC = "1"
+          $env:QSG_INFO = "1"
+          conda run --no-capture-output -n molshredder ctest --test-dir build/ci -C Debug --output-on-failure --no-tests=error -R "^desktop\.localization_english_smoke$"
+          if ($LASTEXITCODE -ne 0) { throw "Windows Desktop D3D11 WARP preflight failed" }
+
+      - name: Test (Windows Desktop D3D11 WARP)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        timeout-minutes: 8
+        run: |
+          $env:QT_QPA_PLATFORM = "windows"
+          $env:QSG_RHI_BACKEND = "d3d11"
+          $env:QSG_RHI_PREFER_SOFTWARE_RENDERER = "1"
+          $env:QSG_RENDER_LOOP = "basic"
+          $env:QSG_NO_VSYNC = "1"
+          conda run --no-capture-output -n molshredder ctest --test-dir build/ci -C Debug --output-on-failure --no-tests=error -R "^desktop\."
+          if ($LASTEXITCODE -ne 0) { throw "Windows Desktop D3D11 WARP suite failed" }
 
       - name: Test (Linux/Xvfb)
         if: runner.os == 'Linux'
@@ -193,6 +214,9 @@ jobs:
         run: |
           $env:QT_QPA_PLATFORM = "windows"
           $env:QSG_RHI_BACKEND = "d3d11"
+          $env:QSG_RHI_PREFER_SOFTWARE_RENDERER = "1"
+          $env:QSG_RENDER_LOOP = "basic"
+          $env:QSG_NO_VSYNC = "1"
           $desktop = ".\build\stage\bin\molshredder_desktop.exe"
           if (-not (Test-Path $desktop)) { throw "installed Desktop executable missing" }
           $graphicsOutput = conda run --no-capture-output -n molshredder $desktop --smoke --graphics-info-smoke 2>&1 | Out-String

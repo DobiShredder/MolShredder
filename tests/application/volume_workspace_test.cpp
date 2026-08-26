@@ -92,6 +92,22 @@ int main(int argc, char **argv) {
   passed &= expect(listed.succeeded(),
                    "volume list must share the GUI/CLI/Python registry");
 
+  const auto formats =
+      actions.trigger({"format list", {{"family", "volume"}}}, context);
+  const auto *format_response =
+      std::get_if<command::Response>(&formats.envelope.payload);
+  const auto *format_count = format_response == nullptr
+                                 ? nullptr
+                                 : std::get_if<std::uint64_t>(
+                                       &format_response->fields.at(
+                                            "format_count")
+                                            .data);
+  passed &= expect(
+      format_response != nullptr && format_count != nullptr &&
+          *format_count == 2U && format_response->table.has_value() &&
+          format_response->table->rows.size() == *format_count,
+      "format capability count must be captured before moving its table");
+
   const auto isosurface = actions.trigger(
       {"volume isosurface",
        {{"level", "2.5"}, {"color", "orange"}, {"opacity", "0.5"}}},

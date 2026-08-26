@@ -1989,12 +1989,16 @@ command::Registry make_default_registry(
               {"streaming", capability.streaming},
               {"write", capability.writable}});
         }
+        // Capture this before moving the table into the response. Function
+        // argument evaluation order is not portable; MSVC may evaluate the
+        // moved table argument before the summary/field initializers.
+        const auto format_count = table.rows.size();
         return Result<Response>::success(
-            {"listed " + std::to_string(table.rows.size()) + " formats",
+            {"listed " + std::to_string(format_count) + " formats",
              {{"capability_schema_version", io::kFormatCapabilitySchemaVersion},
              {"direction", arguments.at("direction")},
              {"family", arguments.at("family")},
-             {"format_count", static_cast<std::uint64_t>(table.rows.size())},
+             {"format_count", static_cast<std::uint64_t>(format_count)},
               {"formats", std::move(formats)},
               {"provider", provider_value(selected_provider.value())}},
              std::move(table)});
