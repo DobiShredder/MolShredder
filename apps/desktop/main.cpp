@@ -335,6 +335,16 @@ int main(int argc, char *argv[]) {
       QStringLiteral("molecularViewport"));
   if (viewport == nullptr)
     return EXIT_FAILURE;
+  // Automated exits can stop the GUI event loop while the native window and
+  // its QRhi scene graph are still live. Release them while QGuiApplication is
+  // still active so QQuickRhiItemRenderer and its backend resources are
+  // destroyed on Qt's designated rendering thread. This is particularly
+  // important for the Windows D3D11 render loops.
+  QObject::connect(&application, &QCoreApplication::aboutToQuit, window,
+                   [window] {
+                     window->hide();
+                     window->releaseResources();
+                   });
   const auto seek_and_wait = [viewport](qulonglong frame) {
     return viewport->seekTrajectory(frame) &&
            viewport->waitForTrajectoryTask(5000) &&
