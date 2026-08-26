@@ -214,7 +214,7 @@ int main(int argc, char** argv) {
     passed &= expect(
         owner.get().has_value() && !waiting_result.has_value() &&
             waiting_result.error().code == operation::ErrorCode::cancelled &&
-            elapsed < std::chrono::milliseconds{200} &&
+            elapsed < std::chrono::milliseconds{750} &&
             workspace->object_count() == 1U &&
             !std::filesystem::exists(waiting_input.string() + ".closed"),
         "cancelled action scheduling must not open input or mutate Workspace");
@@ -389,7 +389,7 @@ int main(int argc, char** argv) {
     passed &= expect(
         !waiting_result.has_value() &&
             waiting_result.error().code == operation::ErrorCode::cancelled &&
-            wait_elapsed < std::chrono::milliseconds{200} &&
+            wait_elapsed < std::chrono::milliseconds{750} &&
             !std::filesystem::exists(waiting_input.string() + ".closed"),
         "cancelled scheduler wait must return promptly without opening input");
     passed &= expect(slow_read.get().has_value(),

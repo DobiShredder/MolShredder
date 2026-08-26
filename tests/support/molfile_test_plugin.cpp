@@ -119,7 +119,7 @@ int read_next_timestep(void* handle, int atom_count, abi18::Timestep* step) {
     marker << "active\n";
   }
   std::this_thread::sleep_for(
-      slow ? std::chrono::milliseconds{300} : std::chrono::milliseconds{15});
+      slow ? std::chrono::milliseconds{1000} : std::chrono::milliseconds{15});
   if (slow) {
     std::error_code ignored;
     std::filesystem::remove(state->path.string() + ".active", ignored);

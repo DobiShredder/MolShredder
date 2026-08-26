@@ -416,6 +416,14 @@ int main(int argc, char *argv[]) {
     qCritical("%s", viewport->statusText().toUtf8().constData());
     return EXIT_FAILURE;
   }
+  if (camera_smoke || analysis_smoke) {
+    // QML object creation is synchronous, but the first layout pass is not.
+    // Exercise viewport-dependent actions only after Qt has assigned its size;
+    // otherwise a fast headless runner can observe a zero-height viewport.
+    QEventLoop layout_wait;
+    QTimer::singleShot(50, &layout_wait, &QEventLoop::quit);
+    layout_wait.exec();
+  }
   if (representation_visibility_smoke) {
     const auto passed =
         viewport->applyRepresentationVisibility(QStringLiteral("show"),

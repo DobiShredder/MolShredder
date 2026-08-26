@@ -680,6 +680,12 @@ if(MOLSHREDDER_BUILD_DESKTOP)
     molshredder_desktop PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE
   )
   molshredder_enable_warnings(molshredder_desktop)
+  if(MSVC)
+    # Qt 6.8 inline headers currently trigger C4702 under MSVC. Keep /WX for
+    # MolShredder diagnostics while suppressing that third-party-only warning
+    # on the Qt-facing Desktop target.
+    target_compile_options(molshredder_desktop PRIVATE /wd4702)
+  endif()
   set_source_files_properties(
     apps/desktop/Main.qml PROPERTIES QT_RESOURCE_ALIAS Main.qml
   )

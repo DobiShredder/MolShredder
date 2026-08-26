@@ -88,6 +88,7 @@ struct LineInstanceGpu {
 
 struct PickReadbackState {
   QRhiReadbackResult result;
+  bool completed{};
 };
 
 static_assert(sizeof(MeshVertexGpu) == 40U);
@@ -1698,13 +1699,21 @@ private:
     draw_pick_lines(command_buffer);
     command_buffer->endPass();
 
+    std::erase_if(pending_pick_readbacks_, [](const auto &state) {
+      return state->completed;
+    });
     auto state = std::make_shared<PickReadbackState>();
+    pending_pick_readbacks_.push_back(state);
     const auto viewport = viewport_item_;
     const auto source_ids = pick_source_ids_;
     const auto request_revision = pick_request_revision_;
     const auto packet_revision = pick_packet_revision_;
-    state->result.completed = [state, viewport, source_ids, request_revision,
-                               packet_revision] {
+    const std::weak_ptr<PickReadbackState> weak_state{state};
+    state->result.completed = [weak_state, viewport, source_ids,
+                               request_revision, packet_revision] {
+      const auto state = weak_state.lock();
+      if (!state)
+        return;
       const auto gpu_id = decoded_pick_color(state->result.data);
       const auto source_id =
           source_ids && gpu_id < source_ids->size()
@@ -1721,7 +1730,7 @@ private:
             },
             Qt::QueuedConnection);
       }
-      state->result.completed = {};
+      state->completed = true;
     };
     auto *updates = rhi_->nextResourceUpdateBatch();
     QRhiTextureCopyDescription copy;
@@ -1776,6 +1785,7 @@ private:
   std::unique_ptr<QRhiRenderBuffer> pick_depth_buffer_;
   std::unique_ptr<QRhiRenderPassDescriptor> pick_render_pass_;
   std::unique_ptr<QRhiTextureRenderTarget> pick_render_target_;
+  std::vector<std::shared_ptr<PickReadbackState>> pending_pick_readbacks_;
   std::vector<MeshVertexGpu> mesh_vertices_;
   std::vector<std::uint32_t> mesh_indices_;
   std::vector<PickMeshVertexGpu> pick_mesh_vertices_;
