@@ -15,6 +15,11 @@ endif()
 
 find_package(Threads REQUIRED)
 set(HDF5_USE_STATIC_LIBRARIES OFF)
+if(WIN32 AND DEFINED ENV{CONDA_PREFIX} AND NOT DEFINED HDF5_ROOT)
+  # Windows conda packages use <prefix>/Library/{include,lib}, while
+  # FindHDF5 expects include/lib directly below HDF5_ROOT.
+  set(HDF5_ROOT "$ENV{CONDA_PREFIX}/Library")
+endif()
 find_package(HDF5 1.14 REQUIRED COMPONENTS C)
 find_package(netCDF 4.9 REQUIRED CONFIG)
 
@@ -625,6 +630,12 @@ target_link_libraries(
   molshredder PRIVATE MolShredder::Cli molshredder_embedded_python
 )
 set_target_properties(molshredder PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
+if(MSVC)
+  # The executable and Python extension both have the output basename
+  # "molshredder". Give their linker PDBs distinct names so parallel Ninja
+  # links do not race on build/<preset>/molshredder.pdb.
+  set_target_properties(molshredder PROPERTIES PDB_NAME molshredder_cli)
+endif()
 molshredder_enable_warnings(molshredder)
 
 pybind11_add_module(molshredder_python MODULE src/python/module.cpp)
@@ -635,6 +646,11 @@ set_target_properties(
     CXX_EXTENSIONS OFF
     INSTALL_RPATH_USE_LINK_PATH TRUE
 )
+if(MSVC)
+  set_target_properties(
+    molshredder_python PROPERTIES PDB_NAME molshredder_python
+  )
+endif()
 target_compile_features(molshredder_python PRIVATE cxx_std_20)
 target_include_directories(
   molshredder_python PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/python"
@@ -1347,6 +1363,15 @@ if(MOLSHREDDER_BUILD_DESKTOP)
           PROPERTY FAIL_REGULAR_EXPRESSION
             "qrc:/.*(TypeError|ReferenceError)|QQmlApplicationEngine failed"
         )
+        if(WIN32 AND TARGET Qt6::QWindowsIntegrationPlugin)
+          set_property(
+            TEST "${MOLSHREDDER_DESKTOP_TEST}"
+            APPEND
+            PROPERTY ENVIRONMENT
+              "QT_PLUGIN_PATH=$<TARGET_FILE_DIR:Qt6::QWindowsIntegrationPlugin>/.."
+              "QT_QPA_PLATFORM_PLUGIN_PATH=$<TARGET_FILE_DIR:Qt6::QWindowsIntegrationPlugin>"
+          )
+        endif()
       endif()
     endforeach()
   endif()

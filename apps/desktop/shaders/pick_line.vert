@@ -4,8 +4,6 @@ layout(location = 0) in vec2 corner;
 layout(location = 1) in vec3 instanceStart;
 layout(location = 2) in float instanceWidthPixels;
 layout(location = 3) in vec3 instanceEnd;
-layout(location = 4) in vec4 instanceStartColor;
-layout(location = 5) in vec4 instanceEndColor;
 layout(location = 6) in vec4 instancePickColor;
 
 layout(location = 0) out vec4 pickColor;

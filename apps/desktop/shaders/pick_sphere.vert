@@ -1,10 +1,8 @@
 #version 440
 
 layout(location = 0) in vec3 unitPosition;
-layout(location = 1) in vec3 unitNormal;
 layout(location = 2) in vec3 instanceCenter;
 layout(location = 3) in float instanceRadius;
-layout(location = 4) in vec4 instanceColor;
 layout(location = 5) in vec4 instancePickColor;
 
 layout(location = 0) out vec4 pickColor;
