@@ -24,6 +24,7 @@
 #include "embedded_module.hpp"
 #include "localization_controller.hpp"
 #include "molshredder/io/structure_reader.hpp"
+#include "redirected_render_smoke.hpp"
 #include "viewport_item.hpp"
 
 namespace {
@@ -144,6 +145,7 @@ int main(int argc, char *argv[]) {
   bool render_setting_smoke = false;
   bool analysis_smoke = false;
   bool daily_workflow_smoke = false;
+  std::optional<QString> redirected_render_smoke;
   std::optional<QString> screenshot;
   std::vector<QString> open_paths;
   std::optional<QString> representation;
@@ -208,6 +210,11 @@ int main(int argc, char *argv[]) {
     } else if (argument == "--daily-workflow-smoke") {
       daily_workflow_smoke = true;
       smoke = true;
+    } else if (argument.starts_with("--redirected-render-smoke=")) {
+      const auto value =
+          argument.substr(std::string_view{"--redirected-render-smoke="}.size());
+      redirected_render_smoke =
+          QString::fromUtf8(value.data(), static_cast<qsizetype>(value.size()));
     } else if (argument.starts_with("--screenshot=")) {
       const auto path =
           argument.substr(std::string_view{"--screenshot="}.size());
@@ -254,6 +261,15 @@ int main(int argc, char *argv[]) {
           QString::fromUtf8(value.data(), static_cast<qsizetype>(value.size()));
     }
   }
+
+  if (redirected_render_smoke.has_value())
+    return molshredder::desktop::run_redirected_render_smoke(
+        {.backend = redirected_render_smoke.value(),
+         .open_paths = open_paths,
+         .representation = representation,
+         .trajectory = trajectory,
+         .trajectory_coordinate_unit = trajectory_coordinate_unit,
+         .trajectory_mapping = trajectory_mapping});
 
   // Keep regression output deterministic regardless of the runner locale or
   // a developer's persisted preference. Localization smoke tests opt in to

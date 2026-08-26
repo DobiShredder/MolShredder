@@ -91,6 +91,9 @@ public:
   [[nodiscard]] const QString &selectionText() const noexcept {
     return selection_text_;
   }
+  [[nodiscard]] std::uint64_t lastPickId() const noexcept {
+    return last_pick_id_;
+  }
   [[nodiscard]] QVariantList objectItems() const;
   [[nodiscard]] bool hasTrajectory() const noexcept { return has_trajectory_; }
   [[nodiscard]] qulonglong trajectoryFrame() const noexcept {
@@ -357,6 +360,7 @@ private:
   int camera_animation_hand_{1};
   QPointF pick_position_;
   std::uint64_t pick_request_revision_{};
+  std::uint64_t last_pick_id_{};
   QTimer playback_timer_;
   QElapsedTimer playback_elapsed_;
   bool has_trajectory_{};

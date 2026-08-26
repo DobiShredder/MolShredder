@@ -72,9 +72,16 @@ selection으로 저장한다. Apple M5 Metal의 centered atom fixture가 실제 
 
 Qt의 public `QQuickRhiItem`은 Vulkan, Metal, D3D11/12와 OpenGL을 지원하지만 QRhi 계열은 제한된
 compatibility guarantee와 `Qt::GuiPrivate` link를 요구한다. 따라서 Qt를 6.8.3으로 고정하고
-minor upgrade마다 compile/render regression을 수행한다. 현재 offscreen texture item의 추가 render
-pass와 direct underlay의 trade-off는 아직 미검증이다. Sphere/stick/line instancing과 click ID readback의
-macOS Metal 경로는 검증됐으므로 남은 backend 항목은 Windows/Linux, hover/highlight/multi-selection과
+minor upgrade마다 compile/render regression을 수행한다. `--redirected-render-smoke=<backend>`는
+`QQuickRenderControl`과 표시되지 않는 `QQuickWindow`를 사용해 제품 `MolecularViewportRenderer`를
+native window 없이 QRhi texture로 구동한다. 두 연속 frame의 320×240 RGBA8 readback이 byte-exact하고
+pixel variation이 있으며 centered pick이 0이 아닌 GPU ID를 반환해야 성공한다. CI fixture는 3-atom PDB를
+canonical load path로 열고 spheres representation을 적용한 뒤 4-frame DCD를 background attach하고 frame 1로
+seek한다. 따라서 성공 marker는 `atoms=3 frames=4 frame=1`과 atom GPU pick까지 포함한다. 이 경로는 Metal에서
+product pipeline과 installed bundle resource를 검증했으며 Windows hosted runner에서는 D3D11 WARP로 실행하도록
+연결돼 있다. Redirected smoke는 실제 on-screen window, `Main.qml`, file dialog, keyboard/mouse
+event delivery나 physical display presentation을 검증하지 않으므로 interactive platform checkpoint를
+대체하지 않는다. 남은 backend 항목은 Windows/Linux remote evidence, hover/highlight/multi-selection과
 large-instance benchmark다.
 
 Desktop adapter는 synthetic packet 전용이 아니다. Qt file dialog 또는 `--open` path를 registry의
@@ -87,6 +94,7 @@ projection을 `render()`에서 갱신해 animation이 없어도 첫 frame이 완
 공식 참고 문서:
 
 - [Qt QQuickRhiItem](https://doc.qt.io/qt-6/qquickrhiitem.html)
+- [Qt QQuickRenderControl](https://doc.qt.io/qt-6.8/qquickrendercontrol.html)
 - [Qt Quick scene graph renderer](https://doc.qt.io/qt-6.8/qtquick-visualcanvas-scenegraph-renderer.html)
 - [Qt RHI texture item example](https://doc.qt.io/qt-6/qtquick-scenegraph-rhitextureitem-example.html)
 

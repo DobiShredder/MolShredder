@@ -655,6 +655,8 @@ if(MOLSHREDDER_BUILD_DESKTOP)
     apps/desktop/localization_controller.cpp
     apps/desktop/localization_controller.hpp
     apps/desktop/main.cpp
+    apps/desktop/redirected_render_smoke.cpp
+    apps/desktop/redirected_render_smoke.hpp
     apps/desktop/viewport_item.cpp
     apps/desktop/viewport_item.hpp
   )
@@ -767,6 +769,13 @@ if(MOLSHREDDER_BUILD_DESKTOP)
         PASS_REGULAR_EXPRESSION
           "MolShredder localization ready: language=ko title=MolShredder 분자 뷰어"
     )
+    if(WIN32)
+      set(MOLSHREDDER_REDIRECTED_RENDER_BACKEND d3d11)
+    elseif(APPLE)
+      set(MOLSHREDDER_REDIRECTED_RENDER_BACKEND metal)
+    else()
+      set(MOLSHREDDER_REDIRECTED_RENDER_BACKEND opengl)
+    endif()
     add_executable(
       molshredder_dcd_fixture_generator
       tests/support/dcd_fixture_generator.cpp
@@ -789,6 +798,29 @@ if(MOLSHREDDER_BUILD_DESKTOP)
       desktop.trajectory_fixture_setup
       PROPERTIES FIXTURES_SETUP desktop_trajectory_fixture
     )
+    add_test(
+      NAME renderer.redirected_smoke
+      COMMAND
+        molshredder_desktop
+        "--redirected-render-smoke=${MOLSHREDDER_REDIRECTED_RENDER_BACKEND}"
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/synthetic_multimodel.pdb"
+        "--trajectory=${MOLSHREDDER_DESKTOP_DCD_FIXTURE}"
+        "--representation=spheres"
+    )
+    set_tests_properties(
+      renderer.redirected_smoke
+      PROPERTIES
+        FIXTURES_REQUIRED desktop_trajectory_fixture
+        TIMEOUT 20
+        PASS_REGULAR_EXPRESSION
+          "MolShredder redirected renderer ready: requested=${MOLSHREDDER_REDIRECTED_RENDER_BACKEND} .*atoms=3 frames=4 frame=1 variation=true deterministic=true picking=true"
+    )
+    if(WIN32)
+      set_tests_properties(
+        renderer.redirected_smoke
+        PROPERTIES ENVIRONMENT "QSG_RHI_PREFER_SOFTWARE_RENDERER=1"
+      )
+    endif()
     add_test(NAME desktop.gpu_smoke COMMAND molshredder_desktop --smoke)
     set_tests_properties(
       desktop.gpu_smoke

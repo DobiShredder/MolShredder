@@ -3860,6 +3860,7 @@ void MolecularViewport::deliverPickResult(std::uint64_t request_revision,
       packet_revision != packet_revision_) {
     return;
   }
+  last_pick_id_ = pick_id;
   const auto found = packet_.pick_targets.find(pick_id);
   const std::optional<render::PickTarget> target =
       found == packet_.pick_targets.end()
