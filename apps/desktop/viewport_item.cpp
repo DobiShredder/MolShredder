@@ -1866,6 +1866,10 @@ MolecularViewport::MolecularViewport(QQuickItem *parent)
 
 MolecularViewport::~MolecularViewport() {
   cancelTrajectoryTask();
+  // Join trajectory workers while every viewport member they can reference is
+  // still alive. Relying on reverse member destruction would tear down the
+  // polling timer and task state before the scheduler joins its workers.
+  trajectory_task_scheduler_.reset();
   script_cancellation_.request_cancel();
   if (script_worker_.joinable())
     script_worker_.join();
@@ -2814,25 +2818,6 @@ bool MolecularViewport::loadTrajectory(const QUrl &url,
       [generation_token](std::uint64_t value) {
         return value == generation_token->load();
       };
-  QPointer<MolecularViewport> guard{this};
-  request.report_progress =
-      [guard, generation](const operation::ProgressUpdate &update) {
-        if (guard.isNull()) return;
-        const auto fraction = update.fraction;
-        const auto stage = QString::fromUtf8(
-            update.stage.data(), static_cast<qsizetype>(update.stage.size()));
-        QMetaObject::invokeMethod(
-            guard.data(),
-            [guard, generation, fraction, stage] {
-              if (guard.isNull() ||
-                  guard->trajectory_task_generation_->load() != generation)
-                return;
-              guard->trajectory_task_progress_ = fraction;
-              guard->trajectory_task_stage_ = stage;
-              emit guard->trajectoryTaskChanged();
-            },
-            Qt::QueuedConnection);
-      };
   auto scheduled = application::schedule_trajectory_load(
       workspace_, trajectory_task_scheduler_, std::move(request));
   if (!scheduled.has_value()) {
@@ -2884,25 +2869,6 @@ bool MolecularViewport::seekTrajectory(qulonglong frame) {
   request.generation_is_current =
       [generation_token](std::uint64_t value) {
         return value == generation_token->load();
-      };
-  QPointer<MolecularViewport> guard{this};
-  request.report_progress =
-      [guard, generation](const operation::ProgressUpdate &update) {
-        if (guard.isNull()) return;
-        const auto fraction = update.fraction;
-        const auto stage = QString::fromUtf8(
-            update.stage.data(), static_cast<qsizetype>(update.stage.size()));
-        QMetaObject::invokeMethod(
-            guard.data(),
-            [guard, generation, fraction, stage] {
-              if (guard.isNull() ||
-                  guard->trajectory_task_generation_->load() != generation)
-                return;
-              guard->trajectory_task_progress_ = fraction;
-              guard->trajectory_task_stage_ = stage;
-              emit guard->trajectoryTaskChanged();
-            },
-            Qt::QueuedConnection);
       };
   auto scheduled = application::schedule_trajectory_frame(
       workspace_, trajectory_task_scheduler_, std::move(request));
