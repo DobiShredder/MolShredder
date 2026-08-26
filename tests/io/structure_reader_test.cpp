@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
@@ -662,6 +663,22 @@ int main(int argc, char **argv) {
   const auto cif_text = read_text(argv[2]);
   const auto cif = io::read_structure(
       cif_text, {io::StructureFormat::auto_detect, "synthetic.cif"});
+  std::string cif_crlf;
+  cif_crlf.reserve(cif_text.size() +
+                   static_cast<std::size_t>(std::count(cif_text.begin(),
+                                                       cif_text.end(), '\n')));
+  for (const auto character : cif_text) {
+    if (character == '\n')
+      cif_crlf.push_back('\r');
+    cif_crlf.push_back(character);
+  }
+  const auto windows_cif = io::read_structure(
+      cif_crlf, {io::StructureFormat::mmcif, "synthetic-crlf.cif"});
+  passed &= expect(
+      windows_cif.has_value() &&
+          windows_cif.value().structures.front().metadata.at("_struct.title") ==
+              "Synthetic structure\nwith multiline metadata",
+      "mmCIF semicolon text fields must normalize CRLF input");
   if (!cif.has_value()) {
     std::cerr << cif.error().message << '\n';
   }

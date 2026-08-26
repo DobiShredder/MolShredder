@@ -6,6 +6,8 @@ import pathlib
 import subprocess
 import sys
 
+from console_script import portable_console_script
+
 
 def require(condition: bool, message: str) -> None:
     if not condition:
@@ -38,7 +40,9 @@ def run_gui(probe: pathlib.Path, scenario: str) -> dict:
 def run_console(executable: pathlib.Path, commands: list[str]) -> dict:
     completed = subprocess.run(
         [str(executable), "console"],
-        input="format json\n" + "\n".join(commands) + "\nexit\n",
+        input=portable_console_script(
+            "format json\n" + "\n".join(commands) + "\nexit\n"
+        ),
         check=True,
         capture_output=True,
         text=True,
@@ -389,9 +393,16 @@ def main() -> int:
         turn_python == turn_cli == turn_gui,
         "CLI, GUI adapter and Python camera turn actions diverged",
     )
+    expected_orientation = [0.7071067811865476, 0.0, 0.0, 0.7071067811865475]
     require(
-        turn_python["data"]["camera"]["orientation"]
-        == [0.7071067811865476, 0.0, 0.0, 0.7071067811865475],
+        all(
+            abs(actual - expected) <= 1.0e-15
+            for actual, expected in zip(
+                turn_python["data"]["camera"]["orientation"],
+                expected_orientation,
+                strict=True,
+            )
+        ),
         "positive Z turn did not produce the expected local-axis orientation",
     )
 

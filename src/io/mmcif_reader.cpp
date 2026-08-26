@@ -89,7 +89,8 @@ Result<std::vector<Token>> tokenize(std::string_view content,
       advance(current);
       std::string value;
       while (position < content.size() && content[position] != '\n') {
-        value.push_back(content[position]);
+        if (content[position] != '\r')
+          value.push_back(content[position]);
         advance(content[position]);
       }
       if (position < content.size()) {
@@ -114,7 +115,8 @@ Result<std::vector<Token>> tokenize(std::string_view content,
           value.push_back('\n');
         }
         while (position < content.size() && content[position] != '\n') {
-          value.push_back(content[position]);
+          if (content[position] != '\r')
+            value.push_back(content[position]);
           advance(content[position]);
         }
         if (position < content.size()) {

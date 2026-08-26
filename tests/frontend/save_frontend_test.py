@@ -46,7 +46,7 @@ def main() -> int:
     writable = molshredder.invoke(
         "format list", {"family": "structure", "direction": "write"}
     )
-    require(writable["status"] == "ok" and
+    writable_contract = (writable["status"] == "ok" and
             writable["data"]["capability_schema_version"] == 3 and
             writable["data"]["format_count"] == 10 and
             writable["data"]["provider"]["id"] == "native" and
@@ -69,7 +69,10 @@ def main() -> int:
             "velocity" in writable["data"]["formats"][7]["channels"] and
             "source_step" in writable["data"]["formats"][8]["channels"] and
             writable["data"]["formats"][9]["channels"] ==
-            ["element", "atomic_number", "coordinates", "frame_comment"],
+            ["element", "atomic_number", "coordinates", "frame_comment"])
+    if not writable_contract:
+        print(json.dumps(writable, indent=2), file=sys.stderr)
+    require(writable_contract,
             "native capability registry does not expose chemistry write truth")
     readable = molshredder.invoke("format list", {"direction": "read"})
     xtc_capability = next(item for item in readable["data"]["formats"]

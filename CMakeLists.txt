@@ -731,6 +731,12 @@ if(MOLSHREDDER_BUILD_DESKTOP)
     RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
   )
   if(BUILD_TESTING)
+    if(WIN32)
+      # The Windows CI test build must remain attached to CTest's console so
+      # deterministic qInfo/qCritical smoke evidence can be captured. Release
+      # builds keep the normal GUI subsystem selected by qt_add_executable.
+      set_target_properties(molshredder_desktop PROPERTIES WIN32_EXECUTABLE FALSE)
+    endif()
     add_test(
       NAME frontend.localization_catalog
       COMMAND

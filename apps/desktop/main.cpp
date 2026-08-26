@@ -922,7 +922,7 @@ int main(int argc, char *argv[]) {
     if (!viewport->setTrajectoryPlaying(true))
       return EXIT_FAILURE;
     QTimer::singleShot(
-        300, &application, [viewport, observed_frame_change, &application] {
+        750, &application, [viewport, observed_frame_change, &application] {
           const auto passed = *observed_frame_change &&
                               viewport->trajectoryFrame() < 4U &&
                               viewport->setTrajectoryPlaying(false);

@@ -219,6 +219,12 @@ int main(int argc, char *argv[]) {
                        missing_path.error().message ==
                            "missing required parameter: path",
                    "load must require an explicit path");
+  const auto windows_path = registry.normalize(
+      Invocation{"load", {{"path", "D:\\data\\model.pdb"}}});
+  passed &= expect(
+      windows_path.has_value() &&
+          windows_path.value().arguments.at("path") == "D:/data/model.pdb",
+      "canonical filesystem arguments must use portable separators");
   const auto setting_set = registry.normalize(
       Invocation{"setting set", {{"name", "line_width"}, {"value", "2.5"}}});
   passed &= expect(

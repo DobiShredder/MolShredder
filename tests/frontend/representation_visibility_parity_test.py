@@ -6,6 +6,8 @@ import pathlib
 import subprocess
 import sys
 
+from console_script import portable_console_script
+
 
 def require(condition: bool, message: str) -> None:
     if not condition:
@@ -15,7 +17,9 @@ def require(condition: bool, message: str) -> None:
 def run_console(executable: pathlib.Path, commands: list[str]) -> dict:
     completed = subprocess.run(
         [str(executable), "console"],
-        input="format json\n" + "\n".join(commands) + "\nexit\n",
+        input=portable_console_script(
+            "format json\n" + "\n".join(commands) + "\nexit\n"
+        ),
         check=True,
         capture_output=True,
         text=True,

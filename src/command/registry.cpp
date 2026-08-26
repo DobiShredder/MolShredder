@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <charconv>
+#include <cctype>
 #include "molshredder/core/parse_number.hpp"
 #include <cmath>
 #include <cstdint>
@@ -15,6 +16,38 @@ namespace {
 
 using operation::Error;
 using operation::ErrorCode;
+
+bool is_path_parameter(std::string_view name) {
+  return name == "path" || name == "paths" || name == "plugin-path" ||
+         name == "atom-map" || name == "working-directory";
+}
+
+bool contains_windows_absolute_path(std::string_view value) {
+  for (std::size_t index = 0; index < value.size(); ++index) {
+    const auto at_segment_start = index == 0U || value[index - 1U] == ';';
+    if (!at_segment_start)
+      continue;
+    if (index + 2U < value.size() &&
+        std::isalpha(static_cast<unsigned char>(value[index])) != 0 &&
+        value[index + 1U] == ':' &&
+        (value[index + 2U] == '\\' || value[index + 2U] == '/')) {
+      return true;
+    }
+    if (index + 1U < value.size() && value[index] == '\\' &&
+        value[index + 1U] == '\\') {
+      return true;
+    }
+  }
+  return false;
+}
+
+void normalize_path_separators(Arguments &arguments) {
+  for (auto &[name, value] : arguments) {
+    if (!is_path_parameter(name) || !contains_windows_absolute_path(value))
+      continue;
+    std::replace(value.begin(), value.end(), '\\', '/');
+  }
+}
 
 bool parses_integer(std::string_view text) {
   long long value{};
@@ -256,6 +289,7 @@ operation::Result<Invocation> Registry::normalize(
               {}});
   }
   auto normalized = expanded.value();
+  normalize_path_separators(normalized.arguments);
   for (const auto& parameter : entry->second.descriptor.parameters) {
     if (!normalized.arguments.contains(parameter.name) &&
         parameter.default_value.has_value()) {

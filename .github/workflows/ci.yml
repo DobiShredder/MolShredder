@@ -67,12 +67,21 @@ jobs:
           --output-on-failure --no-tests=error
           -R "^io\.molfile_provider$"
 
-      - name: Test (macOS and Windows)
-        if: runner.os != 'Linux'
+      - name: Test (macOS)
+        if: runner.os == 'macOS'
         run: >-
           conda run --no-capture-output -n molshredder
           ctest --test-dir build/ci -C Debug
           --output-on-failure --no-tests=error
+
+      - name: Test (Windows offscreen D3D11)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:QT_QPA_PLATFORM = "offscreen"
+          $env:QSG_RHI_BACKEND = "d3d11"
+          conda run --no-capture-output -n molshredder ctest --test-dir build/ci -C Debug --output-on-failure --no-tests=error
+          if ($LASTEXITCODE -ne 0) { throw "Windows test suite failed" }
 
       - name: Test (Linux/Xvfb)
         if: runner.os == 'Linux'
@@ -176,6 +185,8 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          $env:QT_QPA_PLATFORM = "offscreen"
+          $env:QSG_RHI_BACKEND = "d3d11"
           $desktop = ".\build\stage\bin\molshredder_desktop.exe"
           if (-not (Test-Path $desktop)) { throw "installed Desktop executable missing" }
           $graphicsOutput = conda run --no-capture-output -n molshredder $desktop --smoke --graphics-info-smoke 2>&1 | Out-String
