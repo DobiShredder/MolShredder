@@ -79,7 +79,9 @@ pixel variation이 있으며 centered pick이 0이 아닌 GPU ID를 반환해야
 canonical load path로 열고 spheres representation을 적용한 뒤 4-frame DCD를 background attach하고 frame 1로
 seek한다. 따라서 성공 marker는 `atoms=3 frames=4 frame=1`과 atom GPU pick까지 포함한다. 이 경로는 Metal에서
 product pipeline과 installed bundle resource를 검증했으며 Windows hosted runner에서는 D3D11 WARP로 실행하도록
-연결돼 있다. Redirected smoke는 실제 on-screen window, `Main.qml`, file dialog, keyboard/mouse
+연결돼 있다. Hosted Windows는 offscreen QPA가 software adaptation으로 내려가지 않도록
+`QT_QUICK_BACKEND=rhi`를 명시하고 WARP device를 요청한다. Redirected smoke는 실제 on-screen window,
+`Main.qml`, file dialog, keyboard/mouse
 event delivery나 physical display presentation을 검증하지 않으므로 interactive platform checkpoint를
 대체하지 않는다. 남은 backend 항목은 Windows/Linux remote evidence, hover/highlight/multi-selection과
 large-instance benchmark다.

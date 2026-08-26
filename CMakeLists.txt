@@ -818,7 +818,9 @@ if(MOLSHREDDER_BUILD_DESKTOP)
     if(WIN32)
       set_tests_properties(
         renderer.redirected_smoke
-        PROPERTIES ENVIRONMENT "QSG_RHI_PREFER_SOFTWARE_RENDERER=1"
+        PROPERTIES
+          ENVIRONMENT
+            "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=rhi;QSG_RHI_PREFER_SOFTWARE_RENDERER=1"
       )
     endif()
     add_test(NAME desktop.gpu_smoke COMMAND molshredder_desktop --smoke)
