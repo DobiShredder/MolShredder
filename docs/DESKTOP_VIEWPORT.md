@@ -256,6 +256,10 @@ visually checked for geometry, depth and solid shading.
 Separate startup smoke tests load a synthetic multi-model PDB as sticks and a
 PDBx/mmCIF as spheres. They verify registry-backed load/show, packet replacement
 and core camera orbit/pan/dolly/reset before the Metal render loop exits.
+An additional protein-scale startup smoke loads the unmodified RCSB PDB 1UBQ
+fixture as spheres and requires all 660 coordinate records (602 protein atoms and
+58 waters) to reach the Desktop camera/render packet path. Its source, CC0 data
+license, citation and SHA-256 are recorded in `tests/io/fixtures/README.md`.
 A single-atom PDB smoke renders a centered sphere, reads back its GPU ID,
 resolves `AtomIndex(0)`, and verifies the shared Workspace receives
 `picked = index 1`. The lower-right selection badge was also checked in an

@@ -1,5 +1,12 @@
 # Third-party notices
 
+## RCSB PDB 1UBQ test data
+
+The unmodified `tests/io/fixtures/1ubq.pdb` structure data is distributed under
+the CC0 1.0 Universal Public Domain Dedication according to the wwPDB/RCSB PDB
+usage policy. The fixture README records its download URL, checksum and original
+structure citation.
+
 ## VMD molfile plugin ABI declarations
 
 MolShredder's narrow ABI 18 adapter declares the binary interface prefix from

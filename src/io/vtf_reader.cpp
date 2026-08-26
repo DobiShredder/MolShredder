@@ -678,7 +678,7 @@ Result<StructureDocument> read_vtf(std::string_view content,
     b_factors.push_back(atom.b_factor);
     masses.push_back(atom.mass);
   }
-  for (const auto [first, second] : bonds) {
+  for (const auto& [first, second] : bonds) {
     if (const auto error =
             builder.add_bond({{first}, {second}, model::BondOrder::unknown});
         error.has_value()) {

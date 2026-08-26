@@ -24,6 +24,7 @@ compile_commands.json
 *.dylib
 *.so
 *.pdb
+!tests/io/fixtures/1ubq.pdb
 
 # Python
 __pycache__/

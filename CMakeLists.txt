@@ -202,6 +202,12 @@ if(BUILD_TESTING)
   )
   target_compile_features(molshredder_bcif_fixture_generator PRIVATE cxx_std_20)
   target_link_libraries(molshredder_bcif_fixture_generator PRIVATE msgpack-cxx)
+  target_include_directories(
+    molshredder_bcif_fixture_generator
+    SYSTEM PRIVATE
+      "${msgpack-cxx_SOURCE_DIR}/include"
+      "${msgpack-cxx_BINARY_DIR}/include"
+  )
   molshredder_enable_warnings(molshredder_bcif_fixture_generator)
   set(MOLSHREDDER_BCIF_FIXTURE "${CMAKE_CURRENT_BINARY_DIR}/structure.bcif")
   set(MOLSHREDDER_BCIF_OLD_FIXTURE
@@ -479,6 +485,10 @@ target_include_directories(
   molshredder_core
   PRIVATE
     "${MOLSHREDDER_SUPPORT_GENERATED_DIR}"
+)
+target_include_directories(
+  molshredder_core
+  SYSTEM PRIVATE
     "${msgpack-cxx_SOURCE_DIR}/include"
     "${msgpack-cxx_BINARY_DIR}/include"
 )
@@ -882,6 +892,20 @@ if(MOLSHREDDER_BUILD_DESKTOP)
       PROPERTIES
         TIMEOUT 10
         PASS_REGULAR_EXPRESSION "MolShredder desktop camera ready: representation=sticks atoms=3"
+    )
+    add_test(
+      NAME desktop.protein_structure_open_smoke
+      COMMAND
+        molshredder_desktop --smoke
+        "--camera-smoke"
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb"
+        "--representation=spheres"
+    )
+    set_tests_properties(
+      desktop.protein_structure_open_smoke
+      PROPERTIES
+        TIMEOUT 15
+        PASS_REGULAR_EXPRESSION "MolShredder desktop camera ready: representation=spheres atoms=660"
     )
     add_test(
       NAME desktop.python_script_smoke
@@ -1523,6 +1547,7 @@ if(BUILD_TESTING)
       molshredder_structure_reader_tests
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/synthetic_multimodel.pdb"
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/synthetic_multimodel.cif"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb"
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/electrostatics.pqr"
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/chemistry.sdf"
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/chemistry.mol2"

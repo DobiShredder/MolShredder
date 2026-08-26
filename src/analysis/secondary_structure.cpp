@@ -32,7 +32,8 @@ model::Vec3d coordinate(const model::CoordinateFrame& frame,std::size_t index){
 }
 std::optional<double> dihedral(model::Vec3d a,model::Vec3d b,model::Vec3d c,model::Vec3d d){
   const auto b0=sub(a,b),b1=sub(c,b),b2=sub(d,c); const auto axis=normalized(b1);
-  if(!axis.has_value())return{}; const auto v=sub(b0,mul(*axis,dot(b0,*axis)));
+  if(!axis.has_value())return{};
+  const auto v=sub(b0,mul(*axis,dot(b0,*axis)));
   const auto w=sub(b2,mul(*axis,dot(b2,*axis))); const auto nv=normalized(v),nw=normalized(w);
   if(!nv.has_value()||!nw.has_value())return{};
   return std::atan2(dot(cross(*axis,*nv),*nw),dot(*nv,*nw))*180.0/kPi;
@@ -128,7 +129,8 @@ operation::Result<std::vector<BackboneGeometry>> calculate_backbone_geometry(
   std::vector<BackboneGeometry> result(topology.residue_count());
   for(std::size_t r=0;r<result.size();++r)result[r].atoms.residue=model::ResidueIndex{r};
   for(std::size_t i=0;i<topology.atom_count();++i){
-    if(!frame.atom_present(i))continue; const auto& atom=topology.atoms()[i]; auto& out=result[atom.residue.value].atoms;
+    if(!frame.atom_present(i))continue;
+    const auto& atom=topology.atoms()[i]; auto& out=result[atom.residue.value].atoms;
     const auto set=[&](std::optional<model::AtomIndex>& target){if(!target.has_value())target=model::AtomIndex{i};};
     if(atom.name=="N")set(out.n);else if(atom.name=="CA")set(out.ca);else if(atom.name=="C")set(out.c);
     else if(atom.name=="O"||atom.name=="OXT")set(out.o);else if(atom.atomic_number==1U &&
@@ -220,7 +222,8 @@ operation::Result<SecondaryStructureResult> assign_secondary_structure(
       }
     }
     for(const auto acceptor:candidates){
-      if(donor==acceptor)continue; const auto& a=geometry.value()[acceptor].atoms; if(!a.o||!a.c)continue;
+      if(donor==acceptor)continue;
+      const auto& a=geometry.value()[acceptor].atoms; if(!a.o||!a.c)continue;
       if(norm(sub(point(d.n->value),point(a.o->value)))>search_distance)continue;
       const auto energy=stride_method_hbond_energy_v0(point(d.n->value),*h,
         point(a.o->value),point(a.c->value));
@@ -284,7 +287,8 @@ operation::Result<SecondaryStructureResult> assign_secondary_structure(
     assign(result.residues,bridge.second,extended?SecondaryStructureState::extended_strand:SecondaryStructureState::beta_bridge);
   }
   for(const auto& [donor,acceptor]:accepted){
-    if(donor<=acceptor)continue;const auto span=donor-acceptor;if(span<3||span>5)continue;
+    if(donor<=acceptor)continue;
+    const auto span=donor-acceptor;if(span<3||span>5)continue;
     for(std::size_t r=acceptor+1;r<donor;++r)assign(result.residues,r,SecondaryStructureState::turn);
   }
   std::sort(result.hydrogen_bonds.begin(),result.hydrogen_bonds.end(),[](const auto& a,const auto& b){

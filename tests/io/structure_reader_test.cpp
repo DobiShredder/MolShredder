@@ -43,14 +43,14 @@ int main(int argc, char **argv) {
   using model::BooleanColumn;
   using operation::ErrorCode;
 
-  if (argc != 10) {
-    std::cerr << "expected PDB, mmCIF, PQR, SDF, MOL2, GRO, G96, PSF and "
-                 "PRMTOP fixture paths\n";
+  if (argc != 11) {
+    std::cerr << "expected synthetic PDB, mmCIF, 1UBQ PDB, PQR, SDF, MOL2, "
+                 "GRO, G96, PSF and PRMTOP fixture paths\n";
     return 2;
   }
   bool passed = true;
 
-  const auto mol2_text = read_text(argv[5]);
+  const auto mol2_text = read_text(argv[6]);
   const auto mol2 = io::read_structure(
       mol2_text, {io::StructureFormat::auto_detect, "chemistry.mol2"});
   passed &= expect(mol2.has_value() &&
@@ -104,7 +104,7 @@ int main(int argc, char **argv) {
         "provenance");
   }
 
-  const auto gro_text = read_text(argv[6]);
+  const auto gro_text = read_text(argv[7]);
   const auto gro = io::read_structure(
       gro_text, {io::StructureFormat::auto_detect, "trajectory.gro"});
   passed &= expect(
@@ -191,7 +191,7 @@ int main(int argc, char **argv) {
                                           "ended before") != std::string::npos,
              "malicious GRO count must fail without count-sized allocation");
 
-  const auto g96_text = read_text(argv[7]);
+  const auto g96_text = read_text(argv[8]);
   const auto g96 = io::read_structure(
       g96_text, {io::StructureFormat::auto_detect, "trajectory.g96"});
   passed &= expect(
@@ -279,7 +279,7 @@ int main(int argc, char **argv) {
                            std::string::npos,
                    "G96 block truncation must fail with block provenance");
 
-  const auto psf_text = read_text(argv[8]);
+  const auto psf_text = read_text(argv[9]);
   const auto psf = io::read_structure(
       psf_text, {io::StructureFormat::auto_detect, "topology.psf"});
   passed &= expect(
@@ -350,7 +350,7 @@ int main(int argc, char **argv) {
           drude_fields.error().message.find("requires") != std::string::npos,
       "unmodeled PSF Drude/CHEQ atom fields must not be silently ignored");
 
-  const auto prmtop_text = read_text(argv[9]);
+  const auto prmtop_text = read_text(argv[10]);
   const auto prmtop = io::read_structure(
       prmtop_text, {io::StructureFormat::auto_detect, "topology.prmtop"});
   passed &= expect(
@@ -438,13 +438,13 @@ int main(int argc, char **argv) {
                                                  "counts") != std::string::npos,
                    "MOL2 declared counts must fail before large allocation");
 
-  const auto sdf = io::read_structure_file(argv[4]);
+  const auto sdf = io::read_structure_file(argv[5]);
   passed &= expect(sdf.has_value() &&
                        sdf.value().format == io::StructureFormat::sdf &&
                        sdf.value().structures.size() == 2U,
                    "SDF extension must load every V2000 record in order");
   const auto sdf_auto = io::read_structure(
-      read_text(argv[4]), {io::StructureFormat::auto_detect, "chemistry.sdf"});
+      read_text(argv[5]), {io::StructureFormat::auto_detect, "chemistry.sdf"});
   passed &=
       expect(sdf_auto.has_value() &&
                  sdf_auto.value().format == io::StructureFormat::sdf &&
@@ -479,7 +479,25 @@ int main(int argc, char **argv) {
         "SDF multiline data fields and format provenance must load");
   }
 
-  const auto pqr = io::read_structure_file(argv[3]);
+  const auto protein = io::read_structure_file(argv[3]);
+  passed &= expect(protein.has_value() &&
+                       protein.value().format == io::StructureFormat::pdb &&
+                       protein.value().structures.size() == 1U,
+                   "RCSB 1UBQ protein fixture must load as one PDB structure");
+  if (protein.has_value()) {
+    const auto &structure = protein.value().structures.front();
+    const auto frame = structure.coordinates->read_frame(0U);
+    passed &= expect(
+        structure.name == "1UBQ" && structure.topology->atom_count() == 660U &&
+            structure.topology->residue_count() == 134U &&
+            structure.topology->residues().front().name == "MET" &&
+            structure.topology->residues().front().chain_id == "A" &&
+            structure.topology->residues().back().name == "HOH" &&
+            frame.has_value() && frame.value()->atom_count() == 660U,
+        "1UBQ protein, chain, solvent and coordinate identity must be retained");
+  }
+
+  const auto pqr = io::read_structure_file(argv[4]);
   passed &= expect(pqr.has_value() &&
                        pqr.value().format == io::StructureFormat::pqr &&
                        pqr.value().structures.size() == 1U,

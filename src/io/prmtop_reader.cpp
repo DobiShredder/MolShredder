@@ -411,19 +411,19 @@ operation::Result<StructureDocument> read_prmtop(std::string_view content,
     return Result<StructureDocument>::failure(residue_names_raw.error());
   if (!residue_pointers_raw.has_value())
     return Result<StructureDocument>::failure(residue_pointers_raw.error());
-  auto atom_names = require_count(std::move(atom_names_raw.value()), atom_count,
+  auto atom_names = require_count(atom_names_raw.value(), atom_count,
                                   *atom_name_section, source_name);
-  auto charges = require_count(std::move(charges_raw.value()), atom_count,
+  auto charges = require_count(charges_raw.value(), atom_count,
                                *charge_section, source_name);
-  auto masses = require_count(std::move(masses_raw.value()), atom_count,
+  auto masses = require_count(masses_raw.value(), atom_count,
                               *mass_section, source_name);
-  auto atom_types = require_count(std::move(atom_types_raw.value()), atom_count,
+  auto atom_types = require_count(atom_types_raw.value(), atom_count,
                                   *type_section, source_name);
   auto residue_names =
-      require_count(std::move(residue_names_raw.value()), residue_count,
+      require_count(residue_names_raw.value(), residue_count,
                     *residue_label_section, source_name);
   auto residue_pointers =
-      require_count(std::move(residue_pointers_raw.value()), residue_count,
+      require_count(residue_pointers_raw.value(), residue_count,
                     *residue_pointer_section, source_name);
   if (!atom_names.has_value())
     return Result<StructureDocument>::failure(atom_names.error());

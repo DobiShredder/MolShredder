@@ -98,9 +98,12 @@ operation::Result<ContactResult> find_contacts(const ContactRequest& request) {
 
   const auto key_for = [&](model::Vec3d p) {
     if (cell != nullptr) return Key{
-      std::min(counts[0]-1, static_cast<std::int64_t>(std::floor(p.x*counts[0]))),
-      std::min(counts[1]-1, static_cast<std::int64_t>(std::floor(p.y*counts[1]))),
-      std::min(counts[2]-1, static_cast<std::int64_t>(std::floor(p.z*counts[2])))};
+      std::min(counts[0]-1, static_cast<std::int64_t>(std::floor(
+                               p.x * static_cast<double>(counts[0])))),
+      std::min(counts[1]-1, static_cast<std::int64_t>(std::floor(
+                               p.y * static_cast<double>(counts[1])))),
+      std::min(counts[2]-1, static_cast<std::int64_t>(std::floor(
+                               p.z * static_cast<double>(counts[2]))))};
     return Key{static_cast<std::int64_t>(std::floor(p.x/request.cutoff)),
                static_cast<std::int64_t>(std::floor(p.y/request.cutoff)),
                static_cast<std::int64_t>(std::floor(p.z/request.cutoff))};
