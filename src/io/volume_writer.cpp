@@ -6,6 +6,7 @@
 #include <bit>
 #include <cctype>
 #include <charconv>
+#include "molshredder/core/parse_number.hpp"
 #include <cmath>
 #include <cstdio>
 #include <cstdint>
@@ -102,7 +103,7 @@ mrc_space_group(const model::VolumeMetadata &metadata) {
   if (found == metadata.fields.end())
     return operation::Result<std::int32_t>::success(0);
   std::int32_t value{};
-  const auto parsed = std::from_chars(
+  const auto parsed = molshredder::core::from_chars(
       found->second.data(), found->second.data() + found->second.size(), value);
   if (parsed.ec != std::errc{} ||
       parsed.ptr != found->second.data() + found->second.size() || value < 0) {

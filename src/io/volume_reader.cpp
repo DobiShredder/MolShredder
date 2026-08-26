@@ -4,6 +4,7 @@
 #include <array>
 #include <cctype>
 #include <charconv>
+#include "molshredder/core/parse_number.hpp"
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -93,7 +94,7 @@ operation::Result<std::size_t> positive_size(std::string_view text,
                                              std::size_t line_number) {
   unsigned long long value{};
   const auto parsed =
-      std::from_chars(text.data(), text.data() + text.size(), value);
+      molshredder::core::from_chars(text.data(), text.data() + text.size(), value);
   if (parsed.ec != std::errc{} || parsed.ptr != text.data() + text.size() ||
       value == 0U || value > std::numeric_limits<std::size_t>::max()) {
     return operation::Result<std::size_t>::failure(
@@ -109,7 +110,7 @@ operation::Result<double> finite_number(std::string_view text,
                                         std::size_t line_number) {
   double value{};
   const auto parsed =
-      std::from_chars(text.data(), text.data() + text.size(), value);
+      molshredder::core::from_chars(text.data(), text.data() + text.size(), value);
   if (parsed.ec != std::errc{} || parsed.ptr != text.data() + text.size() ||
       !std::isfinite(value)) {
     return operation::Result<double>::failure(

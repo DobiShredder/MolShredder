@@ -6,6 +6,7 @@
 #include <bit>
 #include <cctype>
 #include <charconv>
+#include "molshredder/core/parse_number.hpp"
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
@@ -145,7 +146,7 @@ operation::Result<double> metadata_number(const model::FrameMetadata &metadata,
     return operation::Result<double>::failure(
         invalid("missing frame metadata field: " + std::string{name}));
   double value{};
-  const auto parsed = std::from_chars(found->second.data(),
+  const auto parsed = molshredder::core::from_chars(found->second.data(),
                                       found->second.data() + found->second.size(),
                                       value);
   if (parsed.ec != std::errc{} ||
@@ -231,7 +232,7 @@ trr_step(const model::FrameMetadata &metadata) {
   const auto signed_value = metadata.fields.find("trr.signed_step");
   if (signed_value != metadata.fields.end()) {
     std::int32_t parsed{};
-    const auto result = std::from_chars(
+    const auto result = molshredder::core::from_chars(
         signed_value->second.data(),
         signed_value->second.data() + signed_value->second.size(), parsed);
     if (result.ec != std::errc{} ||
@@ -281,9 +282,10 @@ operation::Result<double> force_component(const model::AtomProperty &property,
             return operation::Result<double>::failure(
                 invalid("TRR force property contains a non-finite value"));
           return operation::Result<double>::success(value);
+        } else {
+          return operation::Result<double>::failure(
+              invalid("TRR force properties must be float32 or float64"));
         }
-        return operation::Result<double>::failure(
-            invalid("TRR force properties must be float32 or float64"));
       },
       property.values);
 }
@@ -315,7 +317,7 @@ write_dcd(const model::CoordinateFrame &frame, TrajectoryWriteOptions options,
   bool synthesized_step = false;
   if (const auto found = metadata.fields.find("dcd.signed_step");
       found != metadata.fields.end()) {
-    const auto parsed = std::from_chars(
+    const auto parsed = molshredder::core::from_chars(
         found->second.data(), found->second.data() + found->second.size(), step);
     if (parsed.ec != std::errc{} ||
         parsed.ptr != found->second.data() + found->second.size()) {
@@ -337,7 +339,7 @@ write_dcd(const model::CoordinateFrame &frame, TrajectoryWriteOptions options,
   bool synthesized_delta = true;
   if (const auto found = metadata.fields.find("dcd.raw_delta");
       found != metadata.fields.end()) {
-    const auto parsed = std::from_chars(
+    const auto parsed = molshredder::core::from_chars(
         found->second.data(), found->second.data() + found->second.size(),
         delta);
     if (parsed.ec != std::errc{} ||
@@ -840,7 +842,7 @@ write_trr_precision(const model::CoordinateFrame &frame,
   std::int32_t nre{};
   if (const auto found = metadata.fields.find("trr.nre");
       found != metadata.fields.end()) {
-    const auto parsed = std::from_chars(
+    const auto parsed = molshredder::core::from_chars(
         found->second.data(), found->second.data() + found->second.size(), nre);
     if (parsed.ec != std::errc{} ||
         parsed.ptr != found->second.data() + found->second.size()) {

@@ -1,5 +1,14 @@
 # Desktop viewport prototype
 
+## Language
+
+Desktop은 영어와 한국어 Qt Linguist catalog를 application resource에 포함한다. OS locale을 기본으로 사용하며
+toolbar 또는 `--language=en|ko|system`으로 전환한다. 선택한 toolbar 언어는 application setting에 저장되고
+runtime 전환 시 QML binding을 다시 번역한다. Operation ID, command, JSON field와 scientific provenance는
+재현성을 위해 번역하지 않는다. 현재 typed operation에서 오는 일부 동적 status/error detail은 영어이며
+완전한 frontend message mapping은 후속 UX 단계다. Catalog 추가 및 검증 절차는
+[Localization](LOCALIZATION.md)에 둔다.
+
 ## Multi-file open
 
 Open dialog은 여러 molecular structure를 동시에 선택할 수 있다. Desktop은 file stem으로 충돌 없는

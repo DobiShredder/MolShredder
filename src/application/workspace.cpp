@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <charconv>
+#include "molshredder/core/parse_number.hpp"
 #include <cctype>
 #include <cmath>
 #include <cstdint>
@@ -23,7 +24,7 @@
 namespace molshredder::application {
 namespace {
 
-static_assert(std::is_nothrow_move_constructible_v<WorkspaceObject>);
+static_assert(std::is_move_constructible_v<WorkspaceObject>);
 
 using scene::operator+;
 using scene::operator-;
@@ -583,7 +584,7 @@ Workspace::object_index_by_reference(std::string_view reference) const {
   }
 
   std::uint64_t requested_id{};
-  const auto parsed = std::from_chars(reference.data(),
+  const auto parsed = molshredder::core::from_chars(reference.data(),
                                       reference.data() + reference.size(),
                                       requested_id);
   if (parsed.ec == std::errc{} &&
@@ -3229,7 +3230,7 @@ Workspace::build_trajectory_load_candidate(TrajectoryLoadPlan plan,
   if (angle != source_metadata.end()) {
     double value{};
     const auto parsed =
-        std::from_chars(angle->second.data(),
+        molshredder::core::from_chars(angle->second.data(),
                         angle->second.data() + angle->second.size(), value);
     if (parsed.ec == std::errc{} &&
         parsed.ptr == angle->second.data() + angle->second.size() &&

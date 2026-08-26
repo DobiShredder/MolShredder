@@ -4,6 +4,7 @@
 #include <bit>
 #include <cctype>
 #include <charconv>
+#include "molshredder/core/parse_number.hpp"
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -708,11 +709,11 @@ std::pair<unsigned, unsigned> parse_version(std::string_view version) {
   unsigned major{};
   unsigned minor{};
   const auto major_result =
-      std::from_chars(version.data(), version.data() + first_dot, major);
-  const auto minor_result = std::from_chars(version.data() + first_dot + 1U,
+      molshredder::core::from_chars(version.data(), version.data() + first_dot, major);
+  const auto minor_result = molshredder::core::from_chars(version.data() + first_dot + 1U,
                                             version.data() + second_dot, minor);
   unsigned patch{};
-  const auto patch_result = std::from_chars(
+  const auto patch_result = molshredder::core::from_chars(
       version.data() + second_dot + 1U, version.data() + version.size(), patch);
   if (major_result.ec != std::errc{} || minor_result.ec != std::errc{} ||
       patch_result.ec != std::errc{} ||

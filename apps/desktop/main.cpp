@@ -13,6 +13,7 @@
 #include <QMetaObject>
 #include <QPointer>
 #include <QQmlApplicationEngine>
+#include <QQmlContext>
 #include <QQuickWindow>
 #include <QSGRendererInterface>
 #include <QTimer>
@@ -21,6 +22,7 @@
 #include <rhi/qrhi.h>
 
 #include "embedded_module.hpp"
+#include "localization_controller.hpp"
 #include "molshredder/io/structure_reader.hpp"
 #include "viewport_item.hpp"
 
@@ -150,6 +152,7 @@ int main(int argc, char *argv[]) {
   QString trajectory_mapping{QStringLiteral("index")};
   std::optional<QString> save_path;
   std::optional<QString> script_path;
+  QString language;
   for (int index = 1; index < argc; ++index) {
     const std::string_view argument{argv[index]};
     if (argument == "--smoke") {
@@ -245,10 +248,26 @@ int main(int argc, char *argv[]) {
       const auto path = argument.substr(std::string_view{"--script="}.size());
       script_path =
           QString::fromUtf8(path.data(), static_cast<qsizetype>(path.size()));
+    } else if (argument.starts_with("--language=")) {
+      const auto value = argument.substr(std::string_view{"--language="}.size());
+      language =
+          QString::fromUtf8(value.data(), static_cast<qsizetype>(value.size()));
     }
   }
 
+  // Keep regression output deterministic regardless of the runner locale or
+  // a developer's persisted preference. Localization smoke tests opt in to
+  // their language explicitly.
+  if (smoke && language.isEmpty()) language = QStringLiteral("en");
+  molshredder::desktop::LocalizationController localization;
+  if (!localization.applyInitialLanguage(language)) {
+    qCritical("Unsupported UI language. Use en, ko, or system.");
+    return EXIT_FAILURE;
+  }
   QQmlApplicationEngine engine;
+  localization.setEngine(&engine);
+  engine.rootContext()->setContextProperty(QStringLiteral("localization"),
+                                           &localization);
   engine.load(QUrl{QStringLiteral("qrc:/Main.qml")});
   if (engine.rootObjects().isEmpty())
     return EXIT_FAILURE;
@@ -256,6 +275,9 @@ int main(int argc, char *argv[]) {
       qobject_cast<QQuickWindow *>(engine.rootObjects().constFirst());
   if (window == nullptr)
     return EXIT_FAILURE;
+  qInfo("MolShredder localization ready: language=%s title=%s",
+        qUtf8Printable(localization.currentLanguage()),
+        qUtf8Printable(window->title()));
   QObject::connect(
       window, &QQuickWindow::sceneGraphInitialized, window,
       [window] {

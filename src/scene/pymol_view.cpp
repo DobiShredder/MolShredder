@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <charconv>
+#include "molshredder/core/parse_number.hpp"
+#include "molshredder/core/parse_number.hpp"
 #include <cmath>
 #include <cstddef>
 #include <iomanip>
@@ -49,7 +51,7 @@ operation::Result<double> parse_number(std::string_view token) {
   double value{};
   const auto* first = token.data();
   const auto* last = first + token.size();
-  const auto parsed = std::from_chars(first, last, value);
+  const auto parsed = molshredder::core::from_chars(first, last, value);
   if (parsed.ec != std::errc{} || parsed.ptr != last ||
       !std::isfinite(value)) {
     return operation::Result<double>::failure(

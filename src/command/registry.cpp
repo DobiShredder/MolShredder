@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <charconv>
+#include "molshredder/core/parse_number.hpp"
 #include <cmath>
 #include <cstdint>
 #include <set>
@@ -18,21 +19,21 @@ using operation::ErrorCode;
 bool parses_integer(std::string_view text) {
   long long value{};
   const auto result =
-      std::from_chars(text.data(), text.data() + text.size(), value);
+      molshredder::core::from_chars(text.data(), text.data() + text.size(), value);
   return result.ec == std::errc{} && result.ptr == text.data() + text.size();
 }
 
 bool parses_unsigned_integer(std::string_view text) {
   std::uint64_t value{};
   const auto result =
-      std::from_chars(text.data(), text.data() + text.size(), value);
+      molshredder::core::from_chars(text.data(), text.data() + text.size(), value);
   return result.ec == std::errc{} && result.ptr == text.data() + text.size();
 }
 
 bool parses_number(std::string_view text) {
   double value{};
   const auto result =
-      std::from_chars(text.data(), text.data() + text.size(), value);
+      molshredder::core::from_chars(text.data(), text.data() + text.size(), value);
   return result.ec == std::errc{} && result.ptr == text.data() + text.size() &&
          std::isfinite(value);
 }

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <charconv>
+#include "molshredder/core/parse_number.hpp"
 #include <cstdint>
 #include <map>
 #include <optional>
@@ -288,7 +289,7 @@ template <typename Value>
 Result<Value> parse_number(const Token &token, std::string_view source,
                            std::string_view field_name) {
   Value value{};
-  const auto result = std::from_chars(
+  const auto result = molshredder::core::from_chars(
       token.text.data(), token.text.data() + token.text.size(), value);
   if (result.ec != std::errc{} ||
       result.ptr != token.text.data() + token.text.size()) {

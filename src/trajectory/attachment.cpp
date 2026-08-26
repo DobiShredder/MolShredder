@@ -76,8 +76,9 @@ bool finite_property(const model::AtomProperty& property) {
                       std::is_same_v<Values, std::vector<double>>) {
           return std::all_of(values.begin(), values.end(),
                              [](auto value) { return std::isfinite(value); });
+        } else {
+          return true;
         }
-        return true;
       },
       property.values);
 }

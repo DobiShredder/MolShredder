@@ -94,6 +94,8 @@ molshredder.run_script("analysis.py", ["trajectory.dcd"], trusted=True)
 Desktop에서는 상단 `Run Script`에서 file을 선택하고 권한 경고를 확인한 뒤 실행한다.
 실행 중에도 UI는 응답하며 viewer 편집은 잠시 잠긴다. Cancel은 cooperative request이므로 실행 중인 Python code가
 반환된 뒤 취소가 확정된다.
+Desktop의 QML UI chrome은 OS locale을 기본으로 영어와 한국어 catalog를 지원한다. Toolbar에서 실행 중 전환할 수 있고
+`--language=en`, `--language=ko`, `--language=system`으로 startup locale을 명시할 수 있다.
 상단 `System`은 같은 `system info` operation의 build, dependency와 실제 graphics runtime 결과를 읽기 쉬운 panel로
 표시한다. 값이 runtime에서 제공되지 않으면 추정하지 않고 `Not reported`로 표시한다.
 상단 `Views`에서는 현재 camera를 이름으로 저장·복원·삭제할 수 있다. 같은 기능은
@@ -132,6 +134,7 @@ background task이며 rapid seek에서는 마지막 요청만 반영한다. CLI�
 - [Python API](docs/PYTHON_API.md)
 - [Automation and script execution](docs/AUTOMATION.md)
 - [Desktop application](docs/DESKTOP_VIEWPORT.md)
+- [Localization](docs/LOCALIZATION.md)
 
 ## 문서
 

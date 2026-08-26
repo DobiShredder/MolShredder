@@ -4,6 +4,7 @@
 #include <array>
 #include <cctype>
 #include <charconv>
+#include "molshredder/core/parse_number.hpp"
 #include <cmath>
 #include <fstream>
 #include <iterator>
@@ -108,13 +109,13 @@ StructureFormat detect_format(std::string_view content) {
   if (line_count == first_lines.size()) {
     const auto count_text = detail::trim(first_lines[1]);
     std::size_t atom_count{};
-    const auto count_result = std::from_chars(
+    const auto count_result = molshredder::core::from_chars(
         count_text.data(), count_text.data() + count_text.size(), atom_count);
     const auto atom_line = first_lines[2];
     std::int64_t residue_number{};
     const auto residue_field = detail::trim(
         atom_line.substr(0U, std::min<std::size_t>(5U, atom_line.size())));
-    const auto residue_result = std::from_chars(
+    const auto residue_result = molshredder::core::from_chars(
         residue_field.data(), residue_field.data() + residue_field.size(),
         residue_number);
     if (count_result.ec == std::errc{} &&
@@ -134,7 +135,7 @@ StructureFormat detect_format(std::string_view content) {
     const auto cleaned = detail::trim(line);
     if (!cleaned.empty() && cleaned.front() != '#') {
       std::size_t atom_count{};
-      const auto count_result = std::from_chars(
+      const auto count_result = molshredder::core::from_chars(
           cleaned.data(), cleaned.data() + cleaned.size(), atom_count);
       if (count_result.ec == std::errc{} &&
           count_result.ptr == cleaned.data() + cleaned.size()) {

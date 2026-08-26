@@ -629,7 +629,7 @@ Result<StructureDocument> MolfileProviderRegistry::read_structure(
       sizeof(abi18::Atom) + 3U * sizeof(float) + 2U * sizeof(double) +
       sizeof(std::string) + sizeof(model::Vec3f) + sizeof(model::AtomRecord) +
       sizeof(model::ResidueRecord) + 128U;
-  if (count > std::numeric_limits<std::size_t>::max() /
+  if (count > (std::numeric_limits<std::size_t>::max)() /
                   kPerAtomStagingEstimate ||
       count * kPerAtomStagingEstimate > limits.max_staging_bytes) {
     return Result<StructureDocument>::failure(invalid(
@@ -655,7 +655,7 @@ Result<StructureDocument> MolfileProviderRegistry::read_structure(
     return Result<StructureDocument>::failure(invalid(
         "PQR molfile provider did not supply charge and radius fields"));
   }
-  if (count > std::numeric_limits<std::size_t>::max() / 3U) {
+  if (count > (std::numeric_limits<std::size_t>::max)() / 3U) {
     return Result<StructureDocument>::failure(
         invalid("molfile coordinate buffer size overflow"));
   }

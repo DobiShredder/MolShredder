@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <bit>
 #include <charconv>
+#include "molshredder/core/parse_number.hpp"
 #include <iomanip>
 #include <limits>
 #include <optional>
@@ -70,7 +71,7 @@ operation::Result<std::size_t> parse_size(std::string_view token,
                                           std::string_view field) {
   std::size_t value{};
   const auto result =
-      std::from_chars(token.data(), token.data() + token.size(), value);
+      molshredder::core::from_chars(token.data(), token.data() + token.size(), value);
   if (result.ec != std::errc{} || result.ptr != token.data() + token.size()) {
     return operation::Result<std::size_t>::failure(
         invalid("invalid representation visibility " + std::string{field}));
@@ -82,7 +83,7 @@ operation::Result<std::uint64_t> parse_uint64(std::string_view token,
                                               std::string_view field) {
   std::uint64_t value{};
   const auto result =
-      std::from_chars(token.data(), token.data() + token.size(), value);
+      molshredder::core::from_chars(token.data(), token.data() + token.size(), value);
   if (result.ec != std::errc{} || result.ptr != token.data() + token.size())
     return operation::Result<std::uint64_t>::failure(
         invalid("invalid representation visibility " + std::string{field}));
@@ -314,7 +315,7 @@ parse_representation_visibility(std::string_view text) {
             invalid("truncated representation visibility mask"));
       }
       std::uint64_t value{};
-      const auto parsed = std::from_chars(token.data(),
+      const auto parsed = molshredder::core::from_chars(token.data(),
                                           token.data() + token.size(), value,
                                           16);
       if (parsed.ec != std::errc{} ||

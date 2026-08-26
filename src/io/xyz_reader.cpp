@@ -1,6 +1,7 @@
 #include "structure_reader_internal.hpp"
 
 #include <charconv>
+#include "molshredder/core/parse_number.hpp"
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
@@ -47,7 +48,7 @@ operation::Result<std::size_t> parse_atom_count(const SourceLine& line,
   const auto cleaned = trim(line.text);
   std::size_t count{};
   const auto parsed =
-      std::from_chars(cleaned.data(), cleaned.data() + cleaned.size(), count);
+      molshredder::core::from_chars(cleaned.data(), cleaned.data() + cleaned.size(), count);
   if (cleaned.empty() || parsed.ec != std::errc{} ||
       parsed.ptr != cleaned.data() + cleaned.size() || count == 0U) {
     return operation::Result<std::size_t>::failure(parse_error(
@@ -87,7 +88,7 @@ operation::Result<ParsedAtom> parse_atom(const SourceLine& line,
   }
   std::uint8_t number{};
   unsigned int ordinal{};
-  const auto parsed_ordinal = std::from_chars(
+  const auto parsed_ordinal = molshredder::core::from_chars(
       symbol.data(), symbol.data() + symbol.size(), ordinal);
   if (!symbol.empty() && parsed_ordinal.ec == std::errc{} &&
       parsed_ordinal.ptr == symbol.data() + symbol.size()) {

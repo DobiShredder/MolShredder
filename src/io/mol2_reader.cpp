@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <charconv>
+#include "molshredder/core/parse_number.hpp"
 #include <cctype>
 #include <cmath>
 #include <cstdint>
@@ -102,7 +103,7 @@ Result<Value> number(std::string_view raw, std::string_view source,
                      std::size_t line, std::string_view field_name) {
   Value value{};
   const auto parsed =
-      std::from_chars(raw.data(), raw.data() + raw.size(), value);
+      molshredder::core::from_chars(raw.data(), raw.data() + raw.size(), value);
   if (raw.empty() || parsed.ec != std::errc{} ||
       parsed.ptr != raw.data() + raw.size()) {
     return Result<Value>::failure(parse_error(
@@ -542,16 +543,16 @@ Result<StructureData> parse_record(std::span<const SourceLine> record,
     builder.set_source_metadata("mol2.not_connected_count",
                                 std::to_string(not_connected.size()));
     for (std::size_t index = 0; index < not_connected.size(); ++index) {
-      const auto &record = not_connected[index];
+      const auto &connection = not_connected[index];
       const auto prefix =
           "mol2.not_connected." + std::to_string(index) + ".";
-      builder.set_source_metadata(prefix + "id", std::to_string(record.id));
+      builder.set_source_metadata(prefix + "id", std::to_string(connection.id));
       builder.set_source_metadata(prefix + "first",
-                                  std::to_string(record.first));
+                                  std::to_string(connection.first));
       builder.set_source_metadata(prefix + "second",
-                                  std::to_string(record.second));
-      if (!record.status_bits.empty()) {
-        builder.set_source_metadata(prefix + "status", record.status_bits);
+                                  std::to_string(connection.second));
+      if (!connection.status_bits.empty()) {
+        builder.set_source_metadata(prefix + "status", connection.status_bits);
       }
     }
   }

@@ -7,6 +7,12 @@ project(
   LANGUAGES C CXX
 )
 
+# Prevent the Windows SDK min/max macros from corrupting standard-library
+# calls such as std::numeric_limits<T>::max() in transitive Windows includes.
+if(WIN32)
+  add_compile_definitions(NOMINMAX WIN32_LEAN_AND_MEAN)
+endif()
+
 find_package(Threads REQUIRED)
 set(HDF5_USE_STATIC_LIBRARIES OFF)
 find_package(HDF5 1.14 REQUIRED COMPONENTS C)
@@ -50,11 +56,13 @@ if(NOT DEFINED netCDF_VERSION OR netCDF_VERSION STREQUAL "")
 endif()
 if(CMAKE_BUILD_TYPE STREQUAL "")
   set(MOLSHREDDER_SUPPORT_BUILD_CONFIGURATION "multi-config")
+  set(MOLSHREDDER_SUPPORT_CONFIG_IS_MULTI 1)
 else()
   string(TOLOWER
     "${CMAKE_BUILD_TYPE}"
     MOLSHREDDER_SUPPORT_BUILD_CONFIGURATION
   )
+  set(MOLSHREDDER_SUPPORT_CONFIG_IS_MULTI 0)
 endif()
 set(
   MOLSHREDDER_SUPPORT_GENERATED_DIR
@@ -607,13 +615,15 @@ molshredder_enable_warnings(molshredder_python)
 if(MOLSHREDDER_BUILD_DESKTOP)
   find_package(
     Qt6 6.8.3 EXACT REQUIRED
-    COMPONENTS Core Gui Qml Quick ShaderTools
+    COMPONENTS Core Gui LinguistTools Qml Quick ShaderTools
   )
   qt_standard_project_setup(REQUIRES 6.8)
   qt_add_executable(
     molshredder_desktop
     MACOSX_BUNDLE
     WIN32
+    apps/desktop/localization_controller.cpp
+    apps/desktop/localization_controller.hpp
     apps/desktop/main.cpp
     apps/desktop/viewport_item.cpp
     apps/desktop/viewport_item.hpp
@@ -651,6 +661,11 @@ if(MOLSHREDDER_BUILD_DESKTOP)
     QML_FILES apps/desktop/Main.qml
     NO_RESOURCE_TARGET_PATH
   )
+  qt_add_translations(
+    molshredder_desktop
+    TS_FILES translations/molshredder_ko.ts
+    RESOURCE_PREFIX /i18n
+  )
   qt_add_shaders(
     molshredder_desktop
     molshredder_desktop_shaders
@@ -680,6 +695,36 @@ if(MOLSHREDDER_BUILD_DESKTOP)
     RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
   )
   if(BUILD_TESTING)
+    add_test(
+      NAME frontend.localization_catalog
+      COMMAND
+        Python3::Interpreter
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/localization_catalog_test.py"
+        --qml "${CMAKE_CURRENT_SOURCE_DIR}/apps/desktop/Main.qml"
+        --ts "${CMAKE_CURRENT_SOURCE_DIR}/translations/molshredder_ko.ts"
+    )
+    add_test(
+      NAME desktop.localization_english_smoke
+      COMMAND molshredder_desktop --smoke --language=en
+    )
+    set_tests_properties(
+      desktop.localization_english_smoke
+      PROPERTIES
+        TIMEOUT 10
+        PASS_REGULAR_EXPRESSION
+          "MolShredder localization ready: language=en title=MolShredder Molecular Viewer"
+    )
+    add_test(
+      NAME desktop.localization_korean_smoke
+      COMMAND molshredder_desktop --smoke --language=ko
+    )
+    set_tests_properties(
+      desktop.localization_korean_smoke
+      PROPERTIES
+        TIMEOUT 10
+        PASS_REGULAR_EXPRESSION
+          "MolShredder localization ready: language=ko title=MolShredder 분자 뷰어"
+    )
     add_executable(
       molshredder_dcd_fixture_generator
       tests/support/dcd_fixture_generator.cpp

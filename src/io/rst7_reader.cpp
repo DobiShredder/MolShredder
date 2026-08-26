@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <charconv>
+#include "molshredder/core/parse_number.hpp"
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -33,7 +34,7 @@ Result<double> real(std::string raw, const std::filesystem::path &path,
   std::replace(raw.begin(), raw.end(), 'd', 'e');
   double value{};
   const auto parsed =
-      std::from_chars(raw.data(), raw.data() + raw.size(), value);
+      molshredder::core::from_chars(raw.data(), raw.data() + raw.size(), value);
   if (raw.empty() || parsed.ec != std::errc{} ||
       parsed.ptr != raw.data() + raw.size() || !std::isfinite(value)) {
     return Result<double>::failure(
@@ -104,7 +105,7 @@ open_amber_restart(const std::filesystem::path &path,
             "NATOM header requires atom count and optional time/temperature"));
   }
   std::uint64_t atom_count64{};
-  const auto atom_parsed = std::from_chars(
+  const auto atom_parsed = molshredder::core::from_chars(
       header_fields[0].data(),
       header_fields[0].data() + header_fields[0].size(), atom_count64);
   if (atom_parsed.ec != std::errc{} ||

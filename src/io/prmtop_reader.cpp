@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <charconv>
+#include "molshredder/core/parse_number.hpp"
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -83,7 +84,7 @@ parse_format(std::string_view raw, std::string_view source, std::size_t line) {
     ++width_end;
   }
   std::size_t width{};
-  const auto parsed = std::from_chars(descriptor.data() + width_begin,
+  const auto parsed = molshredder::core::from_chars(descriptor.data() + width_begin,
                                       descriptor.data() + width_end, width);
   if (width_begin == width_end || parsed.ec != std::errc{} || width == 0U ||
       width > 1024U) {
@@ -211,7 +212,7 @@ Result<std::vector<std::int64_t>> integers(const Section &section,
   for (const auto &field : raw.value()) {
     std::int64_t value{};
     const auto parsed =
-        std::from_chars(field.data(), field.data() + field.size(), value);
+        molshredder::core::from_chars(field.data(), field.data() + field.size(), value);
     if (parsed.ec != std::errc{} || parsed.ptr != field.data() + field.size()) {
       return Result<std::vector<std::int64_t>>::failure(parse_error(
           source, section.header_line,
@@ -238,7 +239,7 @@ Result<std::vector<double>> reals(const Section &section,
     std::replace(field.begin(), field.end(), 'd', 'e');
     double value{};
     const auto parsed =
-        std::from_chars(field.data(), field.data() + field.size(), value);
+        molshredder::core::from_chars(field.data(), field.data() + field.size(), value);
     if (parsed.ec != std::errc{} || parsed.ptr != field.data() + field.size() ||
         !std::isfinite(value)) {
       return Result<std::vector<double>>::failure(parse_error(

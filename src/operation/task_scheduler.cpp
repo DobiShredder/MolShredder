@@ -47,8 +47,7 @@ Result<std::shared_ptr<TaskScheduler>> TaskScheduler::create(
       new TaskScheduler(config));
   scheduler->workers_.reserve(config.worker_count);
   for (std::size_t index = 0; index < config.worker_count; ++index) {
-    scheduler->workers_.emplace_back(
-        [raw = scheduler.get()](std::stop_token stop) { raw->run(stop); });
+    scheduler->workers_.emplace_back([raw = scheduler.get()] { raw->run(); });
   }
   return Result<std::shared_ptr<TaskScheduler>>::success(std::move(scheduler));
 }
@@ -59,7 +58,6 @@ TaskScheduler::~TaskScheduler() {
     stopping_ = true;
     for (const auto& record : records_) record->cancellation.request_cancel();
   }
-  for (auto& worker : workers_) worker.request_stop();
   condition_.notify_all();
   for (auto& worker : workers_) {
     if (worker.joinable()) worker.join();
@@ -352,14 +350,13 @@ void TaskScheduler::prune_completed_locked(
   }
 }
 
-void TaskScheduler::run(std::stop_token stop) {
-  while (!stop.stop_requested()) {
+void TaskScheduler::run() {
+  while (true) {
     std::shared_ptr<TaskRecord> record;
     {
       std::unique_lock lock{mutex_};
-      condition_.wait(lock, stop,
-                      [&] { return stopping_ || !queue_.empty(); });
-      if (stop.stop_requested() || stopping_) return;
+      condition_.wait(lock, [&] { return stopping_ || !queue_.empty(); });
+      if (stopping_) return;
       record = take_next_locked();
     }
     if (!record) continue;

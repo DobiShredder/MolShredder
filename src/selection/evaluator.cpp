@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <charconv>
+#include "molshredder/core/parse_number.hpp"
 #include <cctype>
 #include <cstdint>
 #include <optional>
@@ -31,7 +32,7 @@ std::string lowercase(std::string value) {
 std::optional<std::int64_t> integer(std::string_view text) {
   std::int64_t value{};
   const auto parsed =
-      std::from_chars(text.data(), text.data() + text.size(), value);
+      molshredder::core::from_chars(text.data(), text.data() + text.size(), value);
   if (parsed.ec != std::errc{} || parsed.ptr != text.data() + text.size()) {
     return std::nullopt;
   }

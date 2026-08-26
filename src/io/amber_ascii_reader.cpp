@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <charconv>
+#include "molshredder/core/parse_number.hpp"
 #include <cmath>
 #include <cstdint>
 #include <fstream>
@@ -33,7 +34,7 @@ Result<double> parse_real(std::string field, const std::filesystem::path &path,
   std::replace(field.begin(), field.end(), 'd', 'e');
   double value{};
   const auto parsed =
-      std::from_chars(field.data(), field.data() + field.size(), value);
+      molshredder::core::from_chars(field.data(), field.data() + field.size(), value);
   if (field.empty() || parsed.ec != std::errc{} ||
       parsed.ptr != field.data() + field.size() || !std::isfinite(value)) {
     return Result<double>::failure(

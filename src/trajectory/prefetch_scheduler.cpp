@@ -16,16 +16,17 @@ PrefetchScheduler::create(std::shared_ptr<FrameCache> cache) {
   }
   auto scheduler = std::shared_ptr<PrefetchScheduler>(
       new PrefetchScheduler(std::move(cache)));
-  scheduler->worker_ = std::jthread(
-      [scheduler_raw = scheduler.get()](std::stop_token stop) {
-        scheduler_raw->run(stop);
-      });
+  scheduler->worker_ =
+      std::thread([scheduler_raw = scheduler.get()] { scheduler_raw->run(); });
   return operation::Result<std::shared_ptr<PrefetchScheduler>>::success(
       std::move(scheduler));
 }
 
 PrefetchScheduler::~PrefetchScheduler() {
-  worker_.request_stop();
+  {
+    std::lock_guard lock{mutex_};
+    stopping_ = true;
+  }
   condition_.notify_all();
   if (worker_.joinable()) worker_.join();
 }
@@ -58,14 +59,14 @@ PrefetchSnapshot PrefetchScheduler::snapshot() const {
   return snapshot_;
 }
 
-void PrefetchScheduler::run(std::stop_token stop) {
-  while (!stop.stop_requested()) {
+void PrefetchScheduler::run() {
+  while (true) {
     Request request;
     {
       std::unique_lock lock{mutex_};
-      condition_.wait(lock, stop,
-                      [&] { return pending_.has_value(); });
-      if (stop.stop_requested()) return;
+      condition_.wait(lock,
+                      [&] { return stopping_ || pending_.has_value(); });
+      if (stopping_) return;
       request = std::move(*pending_);
       pending_.reset();
       if (request.generation != generation_) continue;

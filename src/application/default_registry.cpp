@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <charconv>
+#include "molshredder/core/parse_number.hpp"
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -179,7 +180,7 @@ size_argument(const command::Arguments &arguments, std::string_view name,
   const auto &text = found->second;
   unsigned long long parsed{};
   const auto result =
-      std::from_chars(text.data(), text.data() + text.size(), parsed);
+      molshredder::core::from_chars(text.data(), text.data() + text.size(), parsed);
   if (result.ec != std::errc{} || result.ptr != text.data() + text.size() ||
       parsed > std::numeric_limits<std::size_t>::max() ||
       (require_positive && parsed == 0U)) {
@@ -227,7 +228,7 @@ uint64_argument(const command::Arguments &arguments, std::string_view name,
   std::uint64_t parsed{};
   const auto &text = found->second;
   const auto result =
-      std::from_chars(text.data(), text.data() + text.size(), parsed);
+      molshredder::core::from_chars(text.data(), text.data() + text.size(), parsed);
   if (result.ec != std::errc{} || result.ptr != text.data() + text.size() ||
       (require_positive && parsed == 0U)) {
     return operation::Result<std::uint64_t>::failure(operation::Error{
@@ -258,7 +259,7 @@ operation::Result<std::vector<model::AtomId>> atom_id_list_argument(
     const auto token = remaining.substr(0U, comma);
     std::uint64_t value{};
     const auto parsed =
-        std::from_chars(token.data(), token.data() + token.size(), value);
+        molshredder::core::from_chars(token.data(), token.data() + token.size(), value);
     if (token.empty() || parsed.ec != std::errc{} ||
         parsed.ptr != token.data() + token.size() || value == 0U) {
       return operation::Result<std::vector<model::AtomId>>::failure(
@@ -354,7 +355,7 @@ camera_state_scope(const command::Arguments &arguments) {
         CameraStateScope{CameraStateScopeKind::all, 0U});
   }
   unsigned long long parsed{};
-  const auto converted = std::from_chars(
+  const auto converted = molshredder::core::from_chars(
       found->second.data(), found->second.data() + found->second.size(), parsed);
   if (converted.ec != std::errc{} ||
       converted.ptr != found->second.data() + found->second.size() ||
@@ -390,7 +391,7 @@ operation::Result<double> number_argument(const command::Arguments &arguments,
   }
   double parsed{};
   const auto result =
-      std::from_chars(found->second.data(),
+      molshredder::core::from_chars(found->second.data(),
                       found->second.data() + found->second.size(), parsed);
   if (result.ec != std::errc{} ||
       result.ptr != found->second.data() + found->second.size() ||
@@ -455,7 +456,7 @@ operation::Result<RenderSettingTarget> render_setting_target(
   } else {
     unsigned long long parsed{};
     const auto conversion =
-        std::from_chars(state.data(), state.data() + state.size(), parsed);
+        molshredder::core::from_chars(state.data(), state.data() + state.size(), parsed);
     if (conversion.ec != std::errc{} ||
         conversion.ptr != state.data() + state.size() || parsed == 0U ||
         parsed - 1U > std::numeric_limits<std::size_t>::max()) {
@@ -479,7 +480,7 @@ operation::Result<RenderSettingTarget> render_setting_target(
           "provide the one-based atom or bond ID"});
     }
     unsigned long long parsed{};
-    const auto conversion = std::from_chars(
+    const auto conversion = molshredder::core::from_chars(
         found->second.data(), found->second.data() + found->second.size(), parsed);
     if (conversion.ec != std::errc{} ||
         conversion.ptr != found->second.data() + found->second.size() ||
@@ -524,7 +525,7 @@ operation::Result<render::RenderSettingValue> parse_render_setting_value(
   case render::RenderSettingValueType::integer: {
     std::int64_t parsed{};
     const auto conversion =
-        std::from_chars(text.data(), text.data() + text.size(), parsed);
+        molshredder::core::from_chars(text.data(), text.data() + text.size(), parsed);
     if (conversion.ec == std::errc{} &&
         conversion.ptr == text.data() + text.size())
       return Result<render::RenderSettingValue>::success(parsed);
@@ -533,7 +534,7 @@ operation::Result<render::RenderSettingValue> parse_render_setting_value(
   case render::RenderSettingValueType::number: {
     double parsed{};
     const auto conversion =
-        std::from_chars(text.data(), text.data() + text.size(), parsed);
+        molshredder::core::from_chars(text.data(), text.data() + text.size(), parsed);
     if (conversion.ec == std::errc{} &&
         conversion.ptr == text.data() + text.size() && std::isfinite(parsed))
       return Result<render::RenderSettingValue>::success(parsed);

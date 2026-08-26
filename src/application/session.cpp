@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <charconv>
+#include "molshredder/core/parse_number.hpp"
 #include <initializer_list>
 #include <limits>
 #include <optional>
@@ -217,7 +218,7 @@ operation::Result<SessionDocument> parse_session(std::string_view text) {
   }
   unsigned int schema_version{};
   const auto version_text = header.substr(prefix.size());
-  const auto converted = std::from_chars(
+  const auto converted = molshredder::core::from_chars(
       version_text.data(), version_text.data() + version_text.size(),
       schema_version);
   if (converted.ec != std::errc{} ||

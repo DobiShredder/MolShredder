@@ -49,7 +49,7 @@ class PrefetchScheduler {
     std::vector<std::size_t> frame_indices;
   };
 
-  void run(std::stop_token stop);
+  void run();
 
   std::shared_ptr<FrameCache> cache_;
   mutable std::mutex mutex_;
@@ -57,7 +57,8 @@ class PrefetchScheduler {
   std::optional<Request> pending_;
   PrefetchSnapshot snapshot_;
   std::uint64_t generation_{};
-  std::jthread worker_;
+  std::thread worker_;
+  bool stopping_{};
 };
 
 [[nodiscard]] std::string_view to_string(PrefetchState state) noexcept;

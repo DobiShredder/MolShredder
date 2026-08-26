@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <charconv>
+#include "molshredder/core/parse_number.hpp"
 #include <cstdint>
 #include <map>
 #include <optional>
@@ -48,7 +49,7 @@ Result<Value> parse_number(std::string_view raw, std::string_view source,
   }
   Value value{};
   const auto result =
-      std::from_chars(cleaned.data(), cleaned.data() + cleaned.size(), value);
+      molshredder::core::from_chars(cleaned.data(), cleaned.data() + cleaned.size(), value);
   if (result.ec != std::errc{} || result.ptr != cleaned.data() + cleaned.size()) {
     return Result<Value>::failure(parse_error(
         source, line,

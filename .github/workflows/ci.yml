@@ -36,6 +36,14 @@ jobs:
           printf 'MOLSHREDDER_CONDA_PREFIX=%s\n' "$prefix" >> "$GITHUB_ENV"
           printf 'Conda prefix: %s\n' "$prefix"
 
+      - name: Install Linux display and graphics development runtime
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            libgl-dev libglx-dev libegl-dev libxkbcommon-x11-0 \
+            libxcb-cursor0 mesa-vulkan-drivers xvfb xauth
+
       - name: Configure
         run: >-
           conda run --no-capture-output -n molshredder
@@ -58,12 +66,6 @@ jobs:
           ctest --test-dir build/ci -C Debug
           --output-on-failure --no-tests=error
           -R "^io\.molfile_provider$"
-
-      - name: Install Linux display and software graphics runtime
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends xvfb xauth libgl1-mesa-dri mesa-vulkan-drivers
 
       - name: Test (macOS and Windows)
         if: runner.os != 'Linux'

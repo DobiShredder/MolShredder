@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <charconv>
+#include "molshredder/core/parse_number.hpp"
 #include <cmath>
 #include <cstdint>
 #include <fstream>
@@ -61,7 +62,7 @@ Result<double> real_value(std::string_view text,
   std::replace(normalized.begin(), normalized.end(), 'D', 'E');
   std::replace(normalized.begin(), normalized.end(), 'd', 'e');
   double value{};
-  const auto parsed = std::from_chars(normalized.data(),
+  const auto parsed = molshredder::core::from_chars(normalized.data(),
                                       normalized.data() + normalized.size(),
                                       value);
   if (normalized.empty() || parsed.ec != std::errc{} ||
@@ -80,7 +81,7 @@ Result<std::int64_t> integer_value(std::string_view text,
                                    std::string_view field) {
   std::int64_t value{};
   const auto parsed =
-      std::from_chars(text.data(), text.data() + text.size(), value);
+      molshredder::core::from_chars(text.data(), text.data() + text.size(), value);
   if (text.empty() || parsed.ec != std::errc{} ||
       parsed.ptr != text.data() + text.size()) {
     return Result<std::int64_t>::failure(invalid(
@@ -539,7 +540,7 @@ model::AtomProperty property_from_strings(std::vector<std::string> values) {
   for (const auto &value : values) {
     std::int64_t parsed{};
     const auto result =
-        std::from_chars(value.data(), value.data() + value.size(), parsed);
+        molshredder::core::from_chars(value.data(), value.data() + value.size(), parsed);
     if (result.ec != std::errc{} || result.ptr != value.data() + value.size()) {
       all_integer = false;
       break;
@@ -558,7 +559,7 @@ model::AtomProperty property_from_strings(std::vector<std::string> values) {
       std::replace(value.begin(), value.end(), 'd', 'e');
       double parsed{};
       const auto result =
-          std::from_chars(value.data(), value.data() + value.size(), parsed);
+          molshredder::core::from_chars(value.data(), value.data() + value.size(), parsed);
       if (result.ec != std::errc{} || result.ptr != value.data() + value.size() ||
           !std::isfinite(parsed)) {
         all_numeric = false;

@@ -97,7 +97,7 @@ class TaskScheduler {
       : config_{config} {}
 
   struct TaskRecord;
-  void run(std::stop_token stop);
+  void run();
   [[nodiscard]] std::shared_ptr<TaskRecord> take_next_locked();
   void finish(const std::shared_ptr<TaskRecord>& record, TaskState state,
               std::optional<Error> error, bool release_running = true);
@@ -109,7 +109,7 @@ class TaskScheduler {
   mutable std::condition_variable_any condition_;
   std::vector<std::shared_ptr<TaskRecord>> records_;
   std::vector<std::shared_ptr<TaskRecord>> queue_;
-  std::vector<std::jthread> workers_;
+  std::vector<std::thread> workers_;
   std::uint64_t next_task_id_{1U};
   std::size_t running_count_{};
   std::size_t reserved_memory_bytes_{};

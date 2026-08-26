@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <charconv>
+#include "molshredder/core/parse_number.hpp"
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -509,7 +510,7 @@ std::optional<std::pair<std::string, int>> split_unit_power(std::string token) {
   int power = 1;
   if (power_begin != token.size()) {
     const auto power_text = std::string_view{token}.substr(power_begin);
-    const auto parsed = std::from_chars(
+    const auto parsed = molshredder::core::from_chars(
         power_text.data(), power_text.data() + power_text.size(), power);
     if (parsed.ec != std::errc{} ||
         parsed.ptr != power_text.data() + power_text.size() || power == 0)
@@ -526,7 +527,7 @@ std::optional<std::pair<std::string, int>> split_unit_power(std::string token) {
 std::optional<double> numeric_unit_factor(std::string_view token) {
   double value{};
   const auto plain =
-      std::from_chars(token.data(), token.data() + token.size(), value);
+      molshredder::core::from_chars(token.data(), token.data() + token.size(), value);
   if (plain.ec == std::errc{} && plain.ptr == token.data() + token.size() &&
       std::isfinite(value) && value > 0.0)
     return value;
@@ -536,8 +537,8 @@ std::optional<double> numeric_unit_factor(std::string_view token) {
   double base{};
   int exponent{};
   const auto base_result =
-      std::from_chars(token.data(), token.data() + exponent_sign, base);
-  const auto exponent_result = std::from_chars(
+      molshredder::core::from_chars(token.data(), token.data() + exponent_sign, base);
+  const auto exponent_result = molshredder::core::from_chars(
       token.data() + exponent_sign, token.data() + token.size(), exponent);
   if (base_result.ec != std::errc{} ||
       base_result.ptr != token.data() + exponent_sign ||

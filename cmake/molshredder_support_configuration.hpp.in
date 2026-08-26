@@ -25,13 +25,14 @@ inline constexpr bool thread_sanitizer =
     @MOLSHREDDER_SUPPORT_THREAD_SANITIZER@;
 
 inline constexpr std::string_view build_configuration() noexcept {
-  if constexpr (configured_build_type != "multi-config") {
-    return configured_build_type;
-  }
+#if @MOLSHREDDER_SUPPORT_CONFIG_IS_MULTI@
 #ifdef NDEBUG
   return "release";
 #else
   return "debug";
+#endif
+#else
+  return configured_build_type;
 #endif
 }
 

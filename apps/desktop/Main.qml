@@ -16,19 +16,19 @@ Window {
 
     function systemInfoValue(group, key) {
         if (!root.systemInfoData || !root.systemInfoData[group])
-            return "Not reported"
+            return qsTr("Not reported")
         const value = root.systemInfoData[group][key]
         return value === null || value === undefined || value === ""
-               ? "Not reported" : String(value)
+               ? qsTr("Not reported") : String(value)
     }
 
     function graphicsInfoValue(key) {
         if (!root.systemInfoData || !root.systemInfoData.runtime ||
                 !root.systemInfoData.runtime.graphics)
-            return "Not reported"
+            return qsTr("Not reported")
         const value = root.systemInfoData.runtime.graphics[key]
         return value === null || value === undefined || value === ""
-               ? "Not reported" : String(value)
+               ? qsTr("Not reported") : String(value)
     }
 
     function openSystemInfo() {
@@ -75,7 +75,7 @@ Window {
     function openRenderSettings() {
         renderSettingsOverlay.visible = true
         renderSettingNameInput.forceActiveFocus()
-        renderSettingResult.text = "Choose a P0 setting, scope and value. Atom/bond targets are 1-based."
+        renderSettingResult.text = qsTr("Choose a P0 setting, scope and value. Atom/bond targets are 1-based.")
     }
 
     function openAnalyze() {
@@ -86,7 +86,7 @@ Window {
     height: 720
     visible: true
     color: "#050812"
-    title: "MolShredder GPU Viewport Prototype"
+    title: qsTr("MolShredder Molecular Viewer")
 
     MolecularViewport {
         id: viewport
@@ -153,18 +153,18 @@ Window {
 
     FileDialog {
         id: structureDialog
-        title: "Open molecular structure or scalar volume"
+        title: qsTr("Open molecular structure or scalar volume")
         fileMode: FileDialog.OpenFiles
-        nameFilters: ["Molecular data (*.pdb *.ent *.cif *.mmcif *.bcif *.pqr *.mol *.mol2 *.psf *.prmtop *.parm7 *.top *.sdf *.sd *.gro *.g96 *.vtf *.xyz *.dx *.mrc *.map *.ccp4 *.mrcs)",
-                      "OpenDX scalar volumes (*.dx)",
-                      "MRC/CCP4 scalar volumes (*.mrc *.map *.ccp4 *.mrcs)",
-                      "All files (*)"]
+        nameFilters: [qsTr("Molecular data (*.pdb *.ent *.cif *.mmcif *.bcif *.pqr *.mol *.mol2 *.psf *.prmtop *.parm7 *.top *.sdf *.sd *.gro *.g96 *.vtf *.xyz *.dx *.mrc *.map *.ccp4 *.mrcs)"),
+                      qsTr("OpenDX scalar volumes (*.dx)"),
+                      qsTr("MRC/CCP4 scalar volumes (*.mrc *.map *.ccp4 *.mrcs)"),
+                      qsTr("All files (*)")]
         onAccepted: viewport.loadStructures(selectedFiles)
     }
 
     FileDialog {
         id: saveDialog
-        title: "Save active molecular coordinates"
+        title: qsTr("Save active molecular coordinates")
         fileMode: FileDialog.SaveFile
         defaultSuffix: selectedNameFilter.index === 1 ? "pdb"
                        : selectedNameFilter.index === 2 ? "cif"
@@ -175,26 +175,26 @@ Window {
                        : selectedNameFilter.index === 7 ? "mol2"
                        : selectedNameFilter.index === 8 ? "psf"
                        : selectedNameFilter.index === 9 ? "sdf" : "xyz"
-        nameFilters: ["XYZ coordinates (*.xyz)",
-                      "Protein Data Bank 3.3 (*.pdb *.ent)",
-                      "PDBx/mmCIF (*.cif *.mmcif)",
-                      "BinaryCIF (*.bcif)",
-                      "GROMACS structure/trajectory (*.gro)",
-                      "GROMOS-96 structure/trajectory (*.g96)",
-                      "PQR electrostatics (*.pqr)",
-                      "MDL MOL V2000 (*.mol)",
-                      "Tripos MOL2 (*.mol2)",
-                      "CHARMM/NAMD PSF topology (*.psf)",
-                      "SDF V2000 record (*.sdf *.sd)"]
+        nameFilters: [qsTr("XYZ coordinates (*.xyz)"),
+                      qsTr("Protein Data Bank 3.3 (*.pdb *.ent)"),
+                      qsTr("PDBx/mmCIF (*.cif *.mmcif)"),
+                      qsTr("BinaryCIF (*.bcif)"),
+                      qsTr("GROMACS structure/trajectory (*.gro)"),
+                      qsTr("GROMOS-96 structure/trajectory (*.g96)"),
+                      qsTr("PQR electrostatics (*.pqr)"),
+                      qsTr("MDL MOL V2000 (*.mol)"),
+                      qsTr("Tripos MOL2 (*.mol2)"),
+                      qsTr("CHARMM/NAMD PSF topology (*.psf)"),
+                      qsTr("SDF V2000 record (*.sdf *.sd)")]
         onAccepted: viewport.saveStructure(selectedFile, false)
     }
 
     FileDialog {
         id: trajectoryDialog
-        title: "Attach molecular dynamics trajectory"
+        title: qsTr("Attach molecular dynamics trajectory")
         fileMode: FileDialog.OpenFile
-        nameFilters: ["MD trajectories/restarts (*.dcd *.xtc *.trr *.mdcrd *.crd *.nc *.ncdf *.netcdf *.h5md *.rst7 *.restrt *.inpcrd *.inprst *.lammpstrj *.lammpstraj *.dump *.binpos)",
-                      "All files (*)"]
+        nameFilters: [qsTr("MD trajectories/restarts (*.dcd *.xtc *.trr *.mdcrd *.crd *.nc *.ncdf *.netcdf *.h5md *.rst7 *.restrt *.inpcrd *.inprst *.lammpstrj *.lammpstraj *.dump *.binpos)"),
+                      qsTr("All files (*)")]
         onAccepted: viewport.loadTrajectory(selectedFile,
                                               root.trajectoryCoordinateUnit,
                                               root.trajectoryMapping,
@@ -203,9 +203,9 @@ Window {
 
     FileDialog {
         id: scriptDialog
-        title: "Run a local Python script"
+        title: qsTr("Run a local Python script")
         fileMode: FileDialog.OpenFile
-        nameFilters: ["Python scripts (*.py)"]
+        nameFilters: [qsTr("Python scripts (*.py)")]
         onAccepted: {
             root.pendingScriptUrl = selectedFile
             scriptTrustOverlay.visible = true
@@ -215,11 +215,11 @@ Window {
 
     FileDialog {
         id: analysisExportDialog
-        title: "Export persistent analysis result"
+        title: qsTr("Export persistent analysis result")
         fileMode: FileDialog.SaveFile
         defaultSuffix: root.analysisExportFormat
         nameFilters: root.analysisExportFormat === "csv"
-                     ? ["CSV table (*.csv)"] : ["JSON result (*.json)"]
+                     ? [qsTr("CSV table (*.csv)")] : [qsTr("JSON result (*.json)")]
         onAccepted: viewport.exportAnalysisResult(
                         root.analysisExportResultId, selectedFile,
                         root.analysisExportFormat)
@@ -294,16 +294,16 @@ Window {
             spacing: 8
 
             ToolbarButton {
-                label: "Open"
+                label: qsTr("Open")
                 action: function() { structureDialog.open() }
             }
             ToolbarButton {
-                label: "Trajectory"
+                label: qsTr("Trajectory")
                 action: function() { trajectoryDialog.open() }
             }
             ToolbarButton {
                 label: root.trajectoryCoordinateUnit === "angstrom"
-                       ? "Traj Å" : "Traj nm"
+                       ? qsTr("Traj Å") : qsTr("Traj nm")
                 action: function() {
                     root.trajectoryCoordinateUnit =
                         root.trajectoryCoordinateUnit === "angstrom"
@@ -312,9 +312,9 @@ Window {
             }
             ToolbarButton {
                 objectName: "trajectoryMappingButton"
-                label: root.trajectoryMapping === "exact" ? "Map exact" :
-                       root.trajectoryMapping === "explicit" ? "Map IDs" :
-                       "Map index"
+                label: root.trajectoryMapping === "exact" ? qsTr("Map exact") :
+                       root.trajectoryMapping === "explicit" ? qsTr("Map IDs") :
+                       qsTr("Map index")
                 selected: root.trajectoryMapping !== "index"
                 action: function() {
                     root.trajectoryMapping =
@@ -342,7 +342,7 @@ Window {
                     onTextChanged: root.trajectoryAtomMap = text
                     Text {
                         anchors.fill: parent
-                        text: "stable IDs: 3,2,1"
+                        text: qsTr("stable IDs: 3,2,1")
                         visible: parent.text.length === 0
                         color: "#71849c"
                         font.pixelSize: 11
@@ -350,74 +350,82 @@ Window {
                 }
             }
             ToolbarButton {
-                label: "Save"
+                label: qsTr("Save")
                 action: function() { saveDialog.open() }
             }
             ToolbarButton {
-                label: "Run Script"
+                label: qsTr("Run Script")
                 action: function() { scriptDialog.open() }
             }
             ToolbarButton {
-                label: "Views"
+                label: qsTr("Views")
                 action: function() { root.openViews() }
             }
             ToolbarButton {
-                label: "System"
+                label: qsTr("System")
                 action: function() { root.openSystemInfo() }
             }
             ToolbarButton {
-                label: "Settings"
+                label: qsTr("Settings")
                 action: function() { root.openRenderSettings() }
             }
             ToolbarButton {
-                label: "Analyze"
-                action: function() { root.openAnalyze() }
+                label: qsTr("Analyze")
+                action: root.openAnalyze
             }
             ToolbarButton {
-                label: "Lines"
+                label: localization.currentLanguage === "ko" ? "한국어" : "English"
+                selected: localization.currentLanguage === "ko"
+                action: function() {
+                    localization.setLanguage(localization.currentLanguage === "ko"
+                                             ? "en" : "ko")
+                }
+            }
+            ToolbarButton {
+                label: qsTr("Lines")
                 selected: viewport.representation === "lines"
                 action: function() { viewport.setRepresentation("lines") }
             }
             ToolbarButton {
-                label: "Sticks"
+                label: qsTr("Sticks")
                 selected: viewport.representation === "sticks"
                 action: function() { viewport.setRepresentation("sticks") }
             }
             ToolbarButton {
-                label: "Spheres"
+                label: qsTr("Spheres")
                 selected: viewport.representation === "spheres"
                 action: function() { viewport.setRepresentation("spheres") }
             }
             ToolbarButton {
-                label: "Ribbon"
+                label: qsTr("Ribbon")
                 selected: viewport.representation === "ribbon"
                 action: function() { viewport.setRepresentation("ribbon") }
             }
             ToolbarButton {
-                label: "Cartoon"
+                label: qsTr("Cartoon")
                 selected: viewport.representation === "cartoon"
                 action: function() { viewport.setRepresentation("cartoon") }
             }
             ToolbarButton {
-                label: "Show"
+                label: qsTr("Show")
                 action: function() {
                     viewport.applyRepresentationVisibility("show", "all")
                 }
             }
             ToolbarButton {
-                label: "Hide"
+                label: qsTr("Hide")
                 action: function() {
                     viewport.applyRepresentationVisibility("hide", "all")
                 }
             }
             ToolbarButton {
-                label: "As"
+                label: qsTr("As")
                 action: function() {
                     viewport.applyRepresentationVisibility("as", "all")
                 }
             }
             ToolbarButton {
-                label: "Toggle"
+                label: qsTr("Toggle")
                 action: function() {
                     viewport.applyRepresentationVisibility("toggle", "all")
                 }
@@ -501,7 +509,7 @@ Window {
                 action: function() { viewport.stepTrajectory(-1) }
             }
             ToolbarButton {
-                label: viewport.trajectoryPlaying ? "Pause" : "Play"
+                label: viewport.trajectoryPlaying ? qsTr("Pause") : qsTr("Play")
                 selected: viewport.trajectoryPlaying
                 action: function() {
                     viewport.setTrajectoryPlaying(!viewport.trajectoryPlaying)
@@ -527,7 +535,7 @@ Window {
                 }
             }
             ToolbarButton {
-                label: viewport.playbackDirection === "forward" ? "Forward" : "Reverse"
+                label: viewport.playbackDirection === "forward" ? qsTr("Forward") : qsTr("Reverse")
                 selected: viewport.playbackDirection === "reverse"
                 action: function() {
                     viewport.setPlaybackDirection(viewport.playbackDirection === "forward" ?
@@ -547,7 +555,7 @@ Window {
             ToolbarButton {
                 objectName: "trajectoryTaskCancelButton"
                 visible: viewport.trajectoryTaskRunning
-                label: "Cancel"
+                label: qsTr("Cancel")
                 action: function() { viewport.cancelTrajectoryTask() }
             }
         }
@@ -561,8 +569,8 @@ Window {
             text: viewport.trajectoryTaskRunning ?
                   viewport.trajectoryTaskStage + " " +
                   Math.round(viewport.trajectoryTaskProgress * 100) + "%" :
-                  "Frame " + viewport.trajectoryFrame + " / " +
-                  Math.max(0, viewport.trajectoryFrameCount - 1)
+                  qsTr("Frame %1 / %2").arg(viewport.trajectoryFrame).arg(
+                      Math.max(0, viewport.trajectoryFrameCount - 1))
             color: "#d8e8fa"
             font.pixelSize: 13
         }
@@ -645,7 +653,7 @@ Window {
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
             anchors.leftMargin: 14
-            text: "Contour " + Number(viewport.volumeLevel).toPrecision(5)
+            text: qsTr("Contour %1").arg(Number(viewport.volumeLevel).toPrecision(5))
             color: "#d8e8fa"
             font.pixelSize: 14
         }
@@ -665,7 +673,7 @@ Window {
                 }
             }
             ToolbarButton {
-                label: "Midpoint"
+                label: qsTr("Midpoint")
                 action: function() {
                     viewport.setVolumeIsosurface(
                         (viewport.volumeMinimum + viewport.volumeMaximum) / 2)
@@ -701,7 +709,7 @@ Window {
             anchors.left: parent.left
             anchors.top: parent.top
             anchors.margins: 14
-            text: "Objects"
+            text: qsTr("Objects")
             color: "#eef6ff"
             font.pixelSize: 15
             font.bold: true
@@ -782,7 +790,8 @@ Window {
                             anchors.verticalCenter: parent.verticalCenter
                             anchors.leftMargin: 9
                             anchors.rightMargin: 5
-                            text: parent.modelData.name + " · " + parent.modelData.atoms + " atoms"
+                            text: parent.modelData.name + " · " +
+                                  qsTr("%1 atoms").arg(parent.modelData.atoms)
                             visible: !parent.editingName
                             color: parent.modelData.visible ? "#e5f1ff" : "#8291a6"
                             elide: Text.ElideRight
@@ -963,7 +972,9 @@ Window {
         id: analysisOverlay
         objectName: "analysisOverlay"
         property int modeIndex: 0
-        property var modes: ["Centroid", "Center of mass", "Distance", "Contacts", "Trajectory RMSD"]
+        property var modes: [qsTr("Centroid"), qsTr("Center of mass"),
+                             qsTr("Distance"), qsTr("Contacts"),
+                             qsTr("Trajectory RMSD")]
         anchors.fill: parent
         visible: false
         color: "#99050812"
@@ -989,20 +1000,20 @@ Window {
                     spacing: 12
                     Text {
                         width: 620
-                        text: "Analyze · persistent results"
+                        text: qsTr("Analyze · persistent results")
                         color: "#eef6ff"
                         font.pixelSize: 20
                         font.bold: true
                     }
                     ToolbarButton {
-                        label: "Close"
+                        label: qsTr("Close")
                         action: function() { analysisOverlay.visible = false }
                     }
                 }
 
                 Text {
                     width: parent.width
-                    text: "Computations, CLI commands and Python calls share one canonical operation. Selections use MolShredder expressions; atom distance endpoints must each select one atom."
+                    text: qsTr("Computations, CLI commands and Python calls share one canonical operation. Selections use MolShredder expressions; atom distance endpoints must each select one atom.")
                     color: "#a9bdd5"
                     font.pixelSize: 13
                     wrapMode: Text.WordWrap
@@ -1024,7 +1035,7 @@ Window {
                         TextInput {
                             id: analysisPrimaryInput
                             anchors.fill: parent; anchors.margins: 9
-                            text: analysisOverlay.modeIndex === 2 ? "index 1" : "all"
+                            text: analysisOverlay.modeIndex === 2 ? qsTr("index 1") : qsTr("all")
                             color: "#eef6ff"; selectByMouse: true; clip: true
                         }
                     }
@@ -1034,7 +1045,7 @@ Window {
                         TextInput {
                             id: analysisSecondaryInput
                             anchors.fill: parent; anchors.margins: 9
-                            text: "index 2"
+                            text: qsTr("index 2")
                             color: "#eef6ff"; selectByMouse: true; clip: true
                         }
                     }
@@ -1046,7 +1057,7 @@ Window {
                             anchors.fill: parent; anchors.margins: 9
                             text: ""
                             color: "#eef6ff"; selectByMouse: true; clip: true
-                            Text { anchors.fill: parent; text: "optional name";
+                            Text { anchors.fill: parent; text: qsTr("optional name");
                                    visible: parent.text.length === 0;
                                    color: "#71849c"; verticalAlignment: Text.AlignVCenter }
                         }
@@ -1058,12 +1069,12 @@ Window {
                     Text {
                         width: 265
                         text: analysisOverlay.modeIndex === 0 || analysisOverlay.modeIndex === 1
-                              ? "Selection"
+                              ? qsTr("Selection")
                               : analysisOverlay.modeIndex === 2
-                                ? "From / To selections"
+                                ? qsTr("From / To selections")
                                 : analysisOverlay.modeIndex === 3
-                                  ? "First / optional second selection"
-                                  : "Selection / reference frame"
+                                  ? qsTr("First / optional second selection")
+                                  : qsTr("Selection / reference frame")
                         color: "#91a8c2"; font.pixelSize: 12
                     }
                     Rectangle {
@@ -1077,7 +1088,7 @@ Window {
                         }
                     }
                     ToolbarButton {
-                        label: "Compute and store"
+                        label: qsTr("Compute and store")
                         action: function() {
                             if (analysisOverlay.modeIndex === 0)
                                 viewport.analyzeCenter(analysisPrimaryInput.text, "centroid", analysisResultNameInput.text)
@@ -1094,7 +1105,7 @@ Window {
                 }
 
                 Text {
-                    text: "Results (click a row for provenance)"
+                    text: qsTr("Results (click a row for provenance)")
                     color: "#dceaff"; font.pixelSize: 14; font.bold: true
                 }
 
@@ -1129,7 +1140,7 @@ Window {
                                     anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                                     anchors.rightMargin: 7; spacing: 6
                                     ToolbarButton {
-                                        label: parent.parent.modelData.visible ? "Hide" : "Show"
+                                        label: parent.parent.modelData.visible ? qsTr("Hide") : qsTr("Show")
                                         action: function() { viewport.setAnalysisResultVisible(
                                             parent.parent.modelData.id, !parent.parent.modelData.visible) }
                                     }
@@ -1150,7 +1161,7 @@ Window {
                                         }
                                     }
                                     ToolbarButton {
-                                        label: "Delete"
+                                        label: qsTr("Delete")
                                         action: function() { viewport.deleteAnalysisResult(parent.parent.modelData.id) }
                                     }
                                 }
@@ -1171,7 +1182,7 @@ Window {
                     Text {
                         id: analysisResultDetail
                         anchors.fill: parent; anchors.margins: 9
-                        text: "Select a result to inspect algorithm, units, PBC, missing-data policy and source status."
+                        text: qsTr("Select a result to inspect algorithm, units, PBC, missing-data policy and source status.")
                         color: "#a9bdd5"; font.pixelSize: 11
                         wrapMode: Text.WrapAnywhere; elide: Text.ElideRight
                     }
@@ -1206,7 +1217,7 @@ Window {
                 spacing: 14
 
                 Text {
-                    text: "Render Settings"
+                    text: qsTr("Render Settings")
                     color: "#eef6ff"
                     font.pixelSize: 20
                     font.bold: true
@@ -1214,7 +1225,7 @@ Window {
 
                 Text {
                     width: parent.width
-                    text: "The editor calls the same typed setting operation as CLI and Python. State is current; atom and bond IDs are 1-based."
+                    text: qsTr("The editor calls the same typed setting operation as CLI and Python. State is current; atom and bond IDs are 1-based.")
                     color: "#a9bdd5"
                     font.pixelSize: 13
                     wrapMode: Text.WordWrap
@@ -1259,14 +1270,14 @@ Window {
                     spacing: 9
 
                     ToolbarButton {
-                        label: "Scope: " + renderSettingsOverlay.scopes[renderSettingsOverlay.scopeIndex]
+                        label: qsTr("Scope: %1").arg(renderSettingsOverlay.scopes[renderSettingsOverlay.scopeIndex])
                         action: function() {
                             renderSettingsOverlay.scopeIndex =
                                 (renderSettingsOverlay.scopeIndex + 1) % renderSettingsOverlay.scopes.length
                         }
                     }
                     ToolbarButton {
-                        label: "Set"
+                        label: qsTr("Set")
                         selected: true
                         action: function() {
                             viewport.applyRenderSetting("set", renderSettingNameInput.text,
@@ -1280,7 +1291,7 @@ Window {
                         }
                     }
                     ToolbarButton {
-                        label: "Get"
+                        label: qsTr("Get")
                         action: function() {
                             renderSettingResult.text = viewport.renderSettingJson(
                                 renderSettingNameInput.text,
@@ -1289,7 +1300,7 @@ Window {
                         }
                     }
                     ToolbarButton {
-                        label: "Unset"
+                        label: qsTr("Unset")
                         action: function() {
                             viewport.applyRenderSetting("unset", renderSettingNameInput.text, "",
                                                         renderSettingsOverlay.scopes[renderSettingsOverlay.scopeIndex],
@@ -1297,7 +1308,7 @@ Window {
                         }
                     }
                     ToolbarButton {
-                        label: "Reset scope"
+                        label: qsTr("Reset scope")
                         action: function() {
                             viewport.applyRenderSetting("reset", "", "",
                                                         renderSettingsOverlay.scopes[renderSettingsOverlay.scopeIndex],
@@ -1320,7 +1331,7 @@ Window {
 
                 ToolbarButton {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    label: "Close"
+                    label: qsTr("Close")
                     action: function() { renderSettingsOverlay.visible = false }
                 }
             }
@@ -1383,7 +1394,7 @@ Window {
                     spacing: 12
 
                 Text {
-                    text: "Camera & Named Views"
+                    text: qsTr("Camera & Named Views")
                     color: "#eef6ff"
                     font.pixelSize: 20
                     font.bold: true
@@ -1391,7 +1402,7 @@ Window {
 
                 Text {
                     width: parent.width
-                    text: "Frame a selection or change its rotation pivot. The same actions are available from CLI and Python."
+                    text: qsTr("Frame a selection or change its rotation pivot. The same actions are available from CLI and Python.")
                     color: "#a9bdd5"
                     font.pixelSize: 13
                     wrapMode: Text.WordWrap
@@ -1423,7 +1434,7 @@ Window {
 
                     ToolbarButton {
                         objectName: "cameraStateModeButton"
-                        label: "State " + viewsOverlay.cameraStateModes[viewsOverlay.cameraStateModeIndex]
+                        label: qsTr("State %1").arg(viewsOverlay.cameraStateModes[viewsOverlay.cameraStateModeIndex])
                         action: function() {
                             viewsOverlay.cameraStateModeIndex =
                                 (viewsOverlay.cameraStateModeIndex + 1) % viewsOverlay.cameraStateModes.length
@@ -1455,7 +1466,7 @@ Window {
                     spacing: 10
 
                     ToolbarButton {
-                        label: "Center"
+                        label: qsTr("Center")
                         action: function() {
                             viewport.centerSelection(cameraSelectionInput.text,
                                                      true, viewsOverlay.cameraStateArgument(),
@@ -1463,7 +1474,7 @@ Window {
                         }
                     }
                     ToolbarButton {
-                        label: "Fit"
+                        label: qsTr("Fit")
                         action: function() {
                             viewport.zoomSelection(cameraSelectionInput.text,
                                                    0.0, true,
@@ -1473,7 +1484,7 @@ Window {
                     }
                     ToolbarButton {
                         objectName: "cameraOrientButton"
-                        label: "Orient"
+                        label: qsTr("Orient")
                         action: function() {
                             viewport.orientSelection(
                                 cameraSelectionInput.text,
@@ -1481,7 +1492,7 @@ Window {
                         }
                     }
                     ToolbarButton {
-                        label: "Set pivot"
+                        label: qsTr("Set pivot")
                         action: function() {
                             viewport.setOriginSelection(
                                 cameraSelectionInput.text,
@@ -1489,7 +1500,7 @@ Window {
                         }
                     }
                     ToolbarButton {
-                        label: "Reset all"
+                        label: qsTr("Reset all")
                         action: function() { viewport.resetViewAnimated(0.35, 1) }
                     }
                 }
@@ -1572,7 +1583,7 @@ Window {
                     }
 
                     ToolbarButton {
-                        label: "Object pivot"
+                        label: qsTr("Object pivot")
                         action: function() {
                             viewport.setObjectOriginSelection(
                                 objectOriginInput.text, cameraSelectionInput.text,
@@ -1580,7 +1591,7 @@ Window {
                         }
                     }
                     ToolbarButton {
-                        label: "Reset object"
+                        label: qsTr("Reset object")
                         action: function() {
                             viewport.resetObjectTransform(objectOriginInput.text)
                         }
@@ -1591,7 +1602,7 @@ Window {
                     spacing: 8
 
                     ToolbarButton {
-                        label: "Set XYZ camera"
+                        label: qsTr("Set XYZ camera")
                         action: function() {
                             viewport.setOriginPosition(
                                 Number(objectOriginX.text), Number(objectOriginY.text),
@@ -1600,14 +1611,14 @@ Window {
                     }
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
-                        text: "Object accepts current, all (reset only), name, or ID"
+                        text: qsTr("Object accepts current, all (reset only), name, or ID")
                         color: "#8ea5bf"
                         font.pixelSize: 12
                     }
                 }
 
                 Text {
-                    text: "Stereo · adjacent-eye and anaglyph presentation"
+                    text: qsTr("Stereo · adjacent-eye and anaglyph presentation")
                     color: "#dceaff"
                     font.pixelSize: 13
                     font.bold: true
@@ -1618,7 +1629,7 @@ Window {
 
                     ToolbarButton {
                         objectName: "stereoEnabledButton"
-                        label: viewsOverlay.stereoEnabled ? "Stereo on" : "Stereo off"
+                        label: viewsOverlay.stereoEnabled ? qsTr("Stereo on") : qsTr("Stereo off")
                         selected: viewsOverlay.stereoEnabled
                         action: function() {
                             viewsOverlay.stereoEnabled = !viewsOverlay.stereoEnabled
@@ -1634,7 +1645,7 @@ Window {
                     }
                     ToolbarButton {
                         objectName: "stereoSwapButton"
-                        label: viewsOverlay.stereoSwapEyes ? "Eyes swapped" : "Eye order"
+                        label: viewsOverlay.stereoSwapEyes ? qsTr("Eyes swapped") : qsTr("Eye order")
                         selected: viewsOverlay.stereoSwapEyes
                         action: function() {
                             viewsOverlay.stereoSwapEyes = !viewsOverlay.stereoSwapEyes
@@ -1687,13 +1698,13 @@ Window {
                     }
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
-                        text: "angle scale"
+                        text: qsTr("angle scale")
                         color: "#8ea5bf"
                         font.pixelSize: 12
                     }
                     ToolbarButton {
                         objectName: "anaglyphModeButton"
-                        label: "Anaglyph " + viewsOverlay.anaglyphModes[viewsOverlay.anaglyphModeIndex]
+                        label: qsTr("Anaglyph %1").arg(viewsOverlay.anaglyphModes[viewsOverlay.anaglyphModeIndex])
                         action: function() {
                             viewsOverlay.anaglyphModeIndex =
                                 (viewsOverlay.anaglyphModeIndex + 1) % viewsOverlay.anaglyphModes.length
@@ -1701,7 +1712,7 @@ Window {
                     }
                     ToolbarButton {
                         objectName: "stereoApplyButton"
-                        label: "Apply stereo"
+                        label: qsTr("Apply stereo")
                         action: function() {
                             const shift = Number(stereoShiftInput.text)
                             const angle = Number(stereoAngleInput.text)
@@ -1716,7 +1727,7 @@ Window {
                 }
 
                 Text {
-                    text: "Projection · preserve target-plane scale by default"
+                    text: qsTr("Projection · preserve target-plane scale by default")
                     color: "#dceaff"
                     font.pixelSize: 13
                     font.bold: true
@@ -1755,7 +1766,7 @@ Window {
 
                     ToolbarButton {
                         objectName: "projectionPreserveButton"
-                        label: viewsOverlay.preserveProjectionScale ? "Scale locked" : "Raw switch"
+                        label: viewsOverlay.preserveProjectionScale ? qsTr("Scale locked") : qsTr("Raw switch")
                         selected: viewsOverlay.preserveProjectionScale
                         action: function() {
                             viewsOverlay.preserveProjectionScale =
@@ -1764,7 +1775,7 @@ Window {
                     }
 
                     ToolbarButton {
-                        label: "Apply projection"
+                        label: qsTr("Apply projection")
                         action: function() {
                             const fov = Number(projectionFovInput.text)
                             if (Number.isFinite(fov))
@@ -1776,7 +1787,7 @@ Window {
                 }
 
                 Text {
-                    text: "Axis navigation · camera-local move / pivoted turn"
+                    text: qsTr("Axis navigation · camera-local move / pivoted turn")
                     color: "#dceaff"
                     font.pixelSize: 13
                     font.bold: true
@@ -1787,7 +1798,7 @@ Window {
 
                     ToolbarButton {
                         objectName: "navigationAxisButton"
-                        label: "Axis " + viewsOverlay.navigationAxes[viewsOverlay.navigationAxisIndex].toUpperCase()
+                        label: qsTr("Axis %1").arg(viewsOverlay.navigationAxes[viewsOverlay.navigationAxisIndex].toUpperCase())
                         action: function() {
                             viewsOverlay.navigationAxisIndex =
                                 (viewsOverlay.navigationAxisIndex + 1) % viewsOverlay.navigationAxes.length
@@ -1814,7 +1825,7 @@ Window {
                     }
 
                     ToolbarButton {
-                        label: "Move −"
+                        label: qsTr("Move −")
                         action: function() {
                             const step = Number(navigationStepInput.text)
                             if (Number.isFinite(step))
@@ -1823,7 +1834,7 @@ Window {
                         }
                     }
                     ToolbarButton {
-                        label: "Move +"
+                        label: qsTr("Move +")
                         action: function() {
                             const step = Number(navigationStepInput.text)
                             if (Number.isFinite(step))
@@ -1832,7 +1843,7 @@ Window {
                         }
                     }
                     ToolbarButton {
-                        label: "Turn −"
+                        label: qsTr("Turn −")
                         action: function() {
                             const step = Number(navigationStepInput.text)
                             if (Number.isFinite(step))
@@ -1841,7 +1852,7 @@ Window {
                         }
                     }
                     ToolbarButton {
-                        label: "Turn +"
+                        label: qsTr("Turn +")
                         action: function() {
                             const step = Number(navigationStepInput.text)
                             if (Number.isFinite(step))
@@ -1852,7 +1863,7 @@ Window {
                 }
 
                 Text {
-                    text: "Clipping · click mode to change · " + viewsOverlay.clipRange
+                    text: qsTr("Clipping · click mode to change · %1").arg(viewsOverlay.clipRange)
                     color: "#dceaff"
                     font.pixelSize: 13
                     font.bold: true
@@ -1909,7 +1920,7 @@ Window {
                     }
 
                     ToolbarButton {
-                        label: "Apply"
+                        label: qsTr("Apply")
                         action: function() {
                             const distance = Number(clipDistanceInput.text)
                             if (Number.isFinite(distance) && viewport.clipCamera(
@@ -1922,7 +1933,7 @@ Window {
                 }
 
                 Text {
-                    text: "Named views"
+                    text: qsTr("Named views")
                     color: "#dceaff"
                     font.pixelSize: 13
                     font.bold: true
@@ -1955,7 +1966,7 @@ Window {
 
                             Text {
                                 anchors.fill: parent
-                                text: "View name"
+                                text: qsTr("View name")
                                 color: "#667b94"
                                 font.pixelSize: 14
                                 visible: viewNameInput.text.length === 0 && !viewNameInput.activeFocus
@@ -1964,7 +1975,7 @@ Window {
                     }
 
                     ToolbarButton {
-                        label: "Store"
+                        label: qsTr("Store")
                         action: function() {
                             if (viewNameInput.text.trim().length > 0 &&
                                     viewport.storeNamedView(viewNameInput.text))
@@ -1975,7 +1986,7 @@ Window {
 
                 Text {
                     visible: viewport.viewItems.length === 0
-                    text: "No named views stored yet."
+                    text: qsTr("No named views stored yet.")
                     color: "#8291a6"
                     font.pixelSize: 13
                 }
@@ -2011,7 +2022,7 @@ Window {
                             anchors.right: deleteViewButton.left
                             anchors.rightMargin: 8
                             anchors.verticalCenter: parent.verticalCenter
-                            label: "Recall"
+                            label: qsTr("Recall")
                             action: function() {
                                 viewport.recallNamedViewAnimated(
                                     parent.modelData.name, 0.35, 1)
@@ -2023,7 +2034,7 @@ Window {
                             anchors.right: parent.right
                             anchors.rightMargin: 6
                             anchors.verticalCenter: parent.verticalCenter
-                            label: "Delete"
+                            label: qsTr("Delete")
                             action: function() {
                                 viewport.deleteNamedView(parent.modelData.name)
                             }
@@ -2032,7 +2043,7 @@ Window {
                 }
 
                 Text {
-                    text: "PyMOL 18-value camera"
+                    text: qsTr("PyMOL 18-value camera")
                     color: "#dceaff"
                     font.pixelSize: 13
                     font.bold: true
@@ -2059,7 +2070,7 @@ Window {
 
                         Text {
                             anchors.fill: parent
-                            text: "Paste cmd.get_view() values here, or export the current camera."
+                            text: qsTr("Paste cmd.get_view() values here, or export the current camera.")
                             color: "#667b94"
                             font.pixelSize: 12
                             wrapMode: Text.WordWrap
@@ -2072,7 +2083,7 @@ Window {
                     spacing: 10
 
                     ToolbarButton {
-                        label: "Export current"
+                        label: qsTr("Export current")
                         action: function() {
                             pymolViewInput.text = viewport.pymolViewText()
                             pymolViewInput.forceActiveFocus()
@@ -2080,7 +2091,7 @@ Window {
                         }
                     }
                     ToolbarButton {
-                        label: "Import values"
+                        label: qsTr("Import values")
                         action: function() {
                             viewport.importPymolViewAnimated(
                                 pymolViewInput.text, 0.35, 1)
@@ -2091,7 +2102,7 @@ Window {
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
                     visible: viewsOverlay.clearArmed
-                    text: "This removes every stored camera view. Click confirm to continue."
+                    text: qsTr("This removes every stored camera view. Click confirm to continue.")
                     color: "#e7b56f"
                     font.pixelSize: 12
                 }
@@ -2101,7 +2112,7 @@ Window {
                     spacing: 12
 
                     ToolbarButton {
-                        label: viewsOverlay.clearArmed ? "Confirm clear all" : "Clear all"
+                        label: viewsOverlay.clearArmed ? qsTr("Confirm clear all") : qsTr("Clear all")
                         selected: viewsOverlay.clearArmed
                         action: function() {
                             if (!viewsOverlay.clearArmed) {
@@ -2113,7 +2124,7 @@ Window {
                         }
                     }
                     ToolbarButton {
-                        label: "Close"
+                        label: qsTr("Close")
                         action: function() {
                             viewsOverlay.clearArmed = false
                             viewsOverlay.visible = false
@@ -2151,7 +2162,7 @@ Window {
                 spacing: 7
 
                 Text {
-                    text: "MolShredder System Information"
+                    text: qsTr("MolShredder System Information")
                     color: "#eef6ff"
                     font.pixelSize: 20
                     font.bold: true
@@ -2162,7 +2173,7 @@ Window {
                     width: parent.width
                     text: root.systemInfoPanelError.length > 0
                           ? root.systemInfoPanelError
-                          : "Build and graphics runtime reported by the canonical system info operation."
+                          : qsTr("Build and graphics runtime reported by the canonical system info operation.")
                     color: root.systemInfoPanelError.length > 0 ? "#ff9f9f" : "#a9bdd5"
                     font.pixelSize: 12
                     wrapMode: Text.WordWrap
@@ -2172,28 +2183,28 @@ Window {
 
                 InfoRow {
                     width: parent.width
-                    label: "Version / configuration"
+                    label: qsTr("Version / configuration")
                     value: root.systemInfoData.project_version === undefined
-                           ? "Not reported"
+                           ? qsTr("Not reported")
                            : String(root.systemInfoData.project_version) + " / " +
                              String(root.systemInfoData.build_configuration)
                 }
                 InfoRow {
                     width: parent.width
-                    label: "Platform"
+                    label: qsTr("Platform")
                     value: root.systemInfoValue("platform", "operating_system") + " / " +
                            root.systemInfoValue("platform", "architecture")
                 }
                 InfoRow {
                     width: parent.width
-                    label: "Compiler"
+                    label: qsTr("Compiler")
                     value: root.systemInfoValue("toolchain", "compiler_id") + " " +
                            root.systemInfoValue("toolchain", "compiler_version") +
                            " · C++" + root.systemInfoValue("toolchain", "cxx_standard")
                 }
                 InfoRow {
                     width: parent.width
-                    label: "Python / HDF5 / netCDF"
+                    label: qsTr("Python / HDF5 / netCDF")
                     value: root.systemInfoValue("dependencies", "python") + " / " +
                            root.systemInfoValue("dependencies", "hdf5") + " / " +
                            root.systemInfoValue("dependencies", "netcdf")
@@ -2203,35 +2214,35 @@ Window {
 
                 InfoRow {
                     width: parent.width
-                    label: "Graphics status"
+                    label: qsTr("Graphics status")
                     value: root.graphicsInfoValue("status")
                 }
                 InfoRow {
                     width: parent.width
-                    label: "API / backend"
+                    label: qsTr("API / backend")
                     value: root.graphicsInfoValue("api") + " / " +
                            root.graphicsInfoValue("backend")
                 }
                 InfoRow {
                     width: parent.width
-                    label: "Device"
+                    label: qsTr("Device")
                     value: root.graphicsInfoValue("device_name") + " / " +
                            root.graphicsInfoValue("device_type")
                 }
                 InfoRow {
                     width: parent.width
-                    label: "Driver version"
+                    label: qsTr("Driver version")
                     value: root.graphicsInfoValue("driver_version")
                 }
                 InfoRow {
                     width: parent.width
-                    label: "Failure reason"
+                    label: qsTr("Failure reason")
                     value: root.graphicsInfoValue("failure_reason")
                 }
 
                 Text {
                     width: parent.width
-                    text: "Full machine-readable report: molshredder system info --format json"
+                    text: qsTr("Full machine-readable report: molshredder system info --format json")
                     color: "#7fb9ec"
                     font.pixelSize: 12
                     wrapMode: Text.WordWrap
@@ -2239,7 +2250,7 @@ Window {
 
                 ToolbarButton {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    label: "Close"
+                    label: qsTr("Close")
                     action: function() { systemInfoOverlay.visible = false }
                 }
             }
@@ -2272,7 +2283,7 @@ Window {
 
                 Text {
                     width: parent.width
-                    text: "Run trusted Python code?"
+                    text: qsTr("Run trusted Python code?")
                     color: "#eef6ff"
                     font.pixelSize: 19
                     font.bold: true
@@ -2280,7 +2291,7 @@ Window {
 
                 Text {
                     width: parent.width
-                    text: "Python scripts run with the same permissions as MolShredder. Review the selected file before continuing."
+                    text: qsTr("Python scripts run with the same permissions as MolShredder. Review the selected file before continuing.")
                     color: "#d8e8fa"
                     font.pixelSize: 14
                     wrapMode: Text.WordWrap
@@ -2288,7 +2299,7 @@ Window {
 
                 Text {
                     width: parent.width
-                    text: "Scripts can read files, use the network, start processes, and may leave partial viewer changes if they fail."
+                    text: qsTr("Scripts can read files, use the network, start processes, and may leave partial viewer changes if they fail.")
                     color: "#e7b56f"
                     font.pixelSize: 13
                     wrapMode: Text.WordWrap
@@ -2299,7 +2310,7 @@ Window {
                     spacing: 12
 
                     ToolbarButton {
-                        label: "Run script"
+                        label: qsTr("Run script")
                         selected: true
                         action: function() {
                             scriptTrustOverlay.visible = false
@@ -2309,7 +2320,7 @@ Window {
                     }
 
                     ToolbarButton {
-                        label: "Cancel"
+                        label: qsTr("Cancel")
                         action: function() {
                             scriptTrustOverlay.visible = false
                             root.pendingScriptUrl = ""
@@ -2344,7 +2355,7 @@ Window {
 
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: "Python script is running"
+                    text: qsTr("Python script is running")
                     color: "#eef6ff"
                     font.pixelSize: 18
                     font.bold: true
@@ -2352,14 +2363,14 @@ Window {
 
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: "Viewer editing is paused to protect the workspace."
+                    text: qsTr("Viewer editing is paused to protect the workspace.")
                     color: "#a9bdd5"
                     font.pixelSize: 13
                 }
 
                 ToolbarButton {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    label: "Request cancellation"
+                    label: qsTr("Request cancellation")
                     action: function() { viewport.cancelPythonScript() }
                 }
             }

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <charconv>
+#include "molshredder/core/parse_number.hpp"
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -91,7 +92,7 @@ Result<Value> integer(std::string_view raw, std::string_view source,
                       std::size_t line, std::string_view field) {
   Value value{};
   const auto parsed =
-      std::from_chars(raw.data(), raw.data() + raw.size(), value);
+      molshredder::core::from_chars(raw.data(), raw.data() + raw.size(), value);
   if (raw.empty() || parsed.ec != std::errc{} ||
       parsed.ptr != raw.data() + raw.size()) {
     return Result<Value>::failure(parse_error(
@@ -105,7 +106,7 @@ Result<double> real(std::string_view raw, std::string_view source,
                     std::size_t line, std::string_view field) {
   double value{};
   const auto parsed =
-      std::from_chars(raw.data(), raw.data() + raw.size(), value);
+      molshredder::core::from_chars(raw.data(), raw.data() + raw.size(), value);
   if (raw.empty() || parsed.ec != std::errc{} ||
       parsed.ptr != raw.data() + raw.size() || !std::isfinite(value)) {
     return Result<double>::failure(parse_error(

@@ -5,6 +5,7 @@
 #include <atomic>
 #include <cctype>
 #include <charconv>
+#include "molshredder/core/parse_number.hpp"
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
@@ -154,7 +155,7 @@ gro_title_with_time(std::string title,
     }
     double parsed{};
     const auto result =
-        std::from_chars(title.data() + begin, title.data() + title.size(), parsed);
+        molshredder::core::from_chars(title.data() + begin, title.data() + title.size(), parsed);
     if (result.ec == std::errc{} && result.ptr != title.data() + begin &&
         std::isfinite(parsed)) {
       existing_time = std::pair{
@@ -2219,7 +2220,7 @@ write_mol2(std::ostream &output, const model::Topology &topology,
       preserve_bond_ids = false;
       break;
     }
-    const auto [end, error] = std::from_chars(
+    const auto [end, error] = molshredder::core::from_chars(
         source_id->data(), source_id->data() + source_id->size(), parsed);
     if (error != std::errc{} || end != source_id->data() + source_id->size() ||
         parsed <= 0 || !unique_bond_ids.insert(parsed).second) {
@@ -2246,7 +2247,7 @@ write_mol2(std::ostream &output, const model::Topology &topology,
           source_value(topology, "mol2.not_connected_count");
       count_text.has_value()) {
     std::size_t count{};
-    const auto [end, error] = std::from_chars(
+    const auto [end, error] = molshredder::core::from_chars(
         count_text->data(), count_text->data() + count_text->size(), count);
     if (error != std::errc{} || end != count_text->data() + count_text->size()) {
       return operation::Result<StructureWriteReport>::failure(
@@ -2270,7 +2271,7 @@ write_mol2(std::ostream &output, const model::Topology &topology,
               "MOL2 retained not-connected record is missing " +
               std::string{field}));
         }
-        const auto [value_end, value_error] = std::from_chars(
+        const auto [value_end, value_error] = molshredder::core::from_chars(
             value->data(), value->data() + value->size(), *target);
         if (value_error != std::errc{} ||
             value_end != value->data() + value->size() || *target <= 0) {
@@ -2404,10 +2405,10 @@ write_mol2(std::ostream &output, const model::Topology &topology,
     if (source_first.has_value() && source_second.has_value()) {
       std::int64_t parsed_first{};
       std::int64_t parsed_second{};
-      const auto [first_end, first_error] = std::from_chars(
+      const auto [first_end, first_error] = molshredder::core::from_chars(
           source_first->data(), source_first->data() + source_first->size(),
           parsed_first);
-      const auto [second_end, second_error] = std::from_chars(
+      const auto [second_end, second_error] = molshredder::core::from_chars(
           source_second->data(), source_second->data() + source_second->size(),
           parsed_second);
       const auto endpoints_match =
