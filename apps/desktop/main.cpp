@@ -124,11 +124,21 @@ int main(int argc, char *argv[]) {
     return false;
   }();
   if (redirected_render_requested) {
+#ifdef Q_OS_WIN
+    qputenv("QT_QPA_PLATFORM", QByteArrayLiteral("offscreen"));
+    qputenv("QT_QUICK_BACKEND", QByteArrayLiteral("rhi"));
+    qputenv("QSG_RHI_PREFER_SOFTWARE_RENDERER", QByteArrayLiteral("1"));
+#endif
     std::fprintf(stderr,
                  "MolShredder redirected renderer stage: process-entry\n");
     std::fflush(stderr);
   }
   molshredder::python::link_embedded_module();
+  if (redirected_render_requested) {
+    std::fprintf(stderr,
+                 "MolShredder redirected renderer stage: embedded-module-linked\n");
+    std::fflush(stderr);
+  }
   QGuiApplication application{argc, argv};
   if (redirected_render_requested) {
     std::fprintf(
