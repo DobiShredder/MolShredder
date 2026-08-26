@@ -74,11 +74,16 @@ jobs:
           ctest --test-dir build/ci -C Debug
           --output-on-failure --no-tests=error
 
-      - name: Test (Windows offscreen D3D11)
+      - name: Test (Windows D3D11)
         if: runner.os == 'Windows'
         shell: pwsh
+        timeout-minutes: 15
         run: |
-          $env:QT_QPA_PLATFORM = "offscreen"
+          # The offscreen QPA plugin does not provide the native window/surface
+          # contract required by Qt Quick's D3D11 QRhi path. GitHub's Windows
+          # runner has a Windows window station, so exercise that platform
+          # plugin explicitly while keeping the renderer deterministic.
+          $env:QT_QPA_PLATFORM = "windows"
           $env:QSG_RHI_BACKEND = "d3d11"
           conda run --no-capture-output -n molshredder ctest --test-dir build/ci -C Debug --output-on-failure --no-tests=error
           if ($LASTEXITCODE -ne 0) { throw "Windows test suite failed" }
@@ -184,8 +189,9 @@ jobs:
       - name: Check installed Desktop D3D and daily workflow (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
+        timeout-minutes: 5
         run: |
-          $env:QT_QPA_PLATFORM = "offscreen"
+          $env:QT_QPA_PLATFORM = "windows"
           $env:QSG_RHI_BACKEND = "d3d11"
           $desktop = ".\build\stage\bin\molshredder_desktop.exe"
           if (-not (Test-Path $desktop)) { throw "installed Desktop executable missing" }
