@@ -82,32 +82,22 @@ jobs:
           conda run --no-capture-output -n molshredder ctest --test-dir build/ci -C Debug --output-on-failure --no-tests=error -E "^desktop\."
           if ($LASTEXITCODE -ne 0) { throw "Windows non-Desktop test suite failed" }
 
-      - name: Preflight Windows Desktop D3D11 WARP
-        if: runner.os == 'Windows'
-        shell: pwsh
-        timeout-minutes: 2
-        run: |
-          $env:QT_QPA_PLATFORM = "windows"
-          $env:QSG_RHI_BACKEND = "d3d11"
-          $env:QSG_RHI_PREFER_SOFTWARE_RENDERER = "1"
-          $env:QSG_RENDER_LOOP = "basic"
-          $env:QSG_NO_VSYNC = "1"
-          $env:QSG_INFO = "1"
-          conda run --no-capture-output -n molshredder ctest --test-dir build/ci -C Debug --output-on-failure --no-tests=error -R "^desktop\.localization_english_smoke$"
-          if ($LASTEXITCODE -ne 0) { throw "Windows Desktop D3D11 WARP preflight failed" }
-
-      - name: Test (Windows Desktop D3D11 WARP)
+      # GitHub-hosted Windows runners execute the agent without an interactive
+      # desktop. Creating a visible Qt Quick D3D window can therefore block
+      # before the event loop starts, even when D3D11 WARP is requested. Keep
+      # GUI/QML parity covered here with the software scene graph. The four
+      # tests excluded below require a real QRhi renderer and belong to the
+      # interactive Windows D3D checkpoint, not this hosted-runner gate.
+      - name: Test (Windows Desktop headless)
         if: runner.os == 'Windows'
         shell: pwsh
         timeout-minutes: 8
         run: |
-          $env:QT_QPA_PLATFORM = "windows"
-          $env:QSG_RHI_BACKEND = "d3d11"
-          $env:QSG_RHI_PREFER_SOFTWARE_RENDERER = "1"
+          $env:QT_QPA_PLATFORM = "offscreen"
+          $env:QT_QUICK_BACKEND = "software"
           $env:QSG_RENDER_LOOP = "basic"
-          $env:QSG_NO_VSYNC = "1"
-          conda run --no-capture-output -n molshredder ctest --test-dir build/ci -C Debug --output-on-failure --no-tests=error -R "^desktop\."
-          if ($LASTEXITCODE -ne 0) { throw "Windows Desktop D3D11 WARP suite failed" }
+          conda run --no-capture-output -n molshredder ctest --test-dir build/ci -C Debug --output-on-failure --no-tests=error -R "^desktop\." -E "^desktop\.(gpu_smoke|graphics_info_smoke|system_info_panel_smoke|gpu_picking_smoke)$"
+          if ($LASTEXITCODE -ne 0) { throw "Windows Desktop headless suite failed" }
 
       - name: Test (Linux/Xvfb)
         if: runner.os == 'Linux'
@@ -207,22 +197,18 @@ jobs:
             --trajectory="$GITHUB_WORKSPACE/build/ci/desktop_trajectory.dcd" \
             --representation=spheres
 
-      - name: Check installed Desktop D3D and daily workflow (Windows)
+      - name: Check installed Desktop headless and daily workflow (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         timeout-minutes: 5
         run: |
-          $env:QT_QPA_PLATFORM = "windows"
-          $env:QSG_RHI_BACKEND = "d3d11"
-          $env:QSG_RHI_PREFER_SOFTWARE_RENDERER = "1"
+          $env:QT_QPA_PLATFORM = "offscreen"
+          $env:QT_QUICK_BACKEND = "software"
           $env:QSG_RENDER_LOOP = "basic"
-          $env:QSG_NO_VSYNC = "1"
           $desktop = ".\build\stage\bin\molshredder_desktop.exe"
           if (-not (Test-Path $desktop)) { throw "installed Desktop executable missing" }
-          $graphicsOutput = conda run --no-capture-output -n molshredder $desktop --smoke --graphics-info-smoke 2>&1 | Out-String
-          if ($LASTEXITCODE -ne 0) { throw "installed Desktop graphics smoke failed" }
-          Write-Host $graphicsOutput
-          if ($graphicsOutput -notmatch '"api":"direct3d(11|12)"') { throw "Expected Direct3D graphics API" }
+          conda run --no-capture-output -n molshredder $desktop --smoke --language=en
+          if ($LASTEXITCODE -ne 0) { throw "installed Desktop headless startup failed" }
           conda run --no-capture-output -n molshredder $desktop `
             --daily-workflow-smoke `
             --open="$env:GITHUB_WORKSPACE\tests\io\fixtures\synthetic_multimodel.pdb" `
