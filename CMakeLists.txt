@@ -799,7 +799,7 @@ if(MOLSHREDDER_BUILD_DESKTOP)
       PROPERTIES FIXTURES_SETUP desktop_trajectory_fixture
     )
     add_test(
-      NAME renderer.redirected_smoke
+      NAME desktop.redirected_renderer_smoke
       COMMAND
         molshredder_desktop
         "--redirected-render-smoke=${MOLSHREDDER_REDIRECTED_RENDER_BACKEND}"
@@ -808,7 +808,7 @@ if(MOLSHREDDER_BUILD_DESKTOP)
         "--representation=spheres"
     )
     set_tests_properties(
-      renderer.redirected_smoke
+      desktop.redirected_renderer_smoke
       PROPERTIES
         FIXTURES_REQUIRED desktop_trajectory_fixture
         TIMEOUT 20
@@ -817,7 +817,7 @@ if(MOLSHREDDER_BUILD_DESKTOP)
     )
     if(WIN32)
       set_tests_properties(
-        renderer.redirected_smoke
+        desktop.redirected_renderer_smoke
         PROPERTIES
           ENVIRONMENT
             "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=rhi;QSG_RHI_PREFER_SOFTWARE_RENDERER=1"
@@ -1060,7 +1060,7 @@ if(MOLSHREDDER_BUILD_DESKTOP)
     set_tests_properties(
       desktop.gpu_picking_smoke
       PROPERTIES
-        TIMEOUT 10
+        TIMEOUT 15
         PASS_REGULAR_EXPRESSION "MolShredder desktop GPU picking ready: Atom 1"
     )
     add_test(

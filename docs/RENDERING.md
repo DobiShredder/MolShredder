@@ -77,13 +77,14 @@ minor upgrade마다 compile/render regression을 수행한다. `--redirected-ren
 native window 없이 QRhi texture로 구동한다. 두 연속 frame의 320×240 RGBA8 readback이 byte-exact하고
 pixel variation이 있으며 centered pick이 0이 아닌 GPU ID를 반환해야 성공한다. CI fixture는 3-atom PDB를
 canonical load path로 열고 spheres representation을 적용한 뒤 4-frame DCD를 background attach하고 frame 1로
-seek한다. 따라서 성공 marker는 `atoms=3 frames=4 frame=1`과 atom GPU pick까지 포함한다. 이 경로는 Metal에서
-product pipeline과 installed bundle resource를 검증했으며 Windows hosted runner에서는 D3D11 WARP로 실행하도록
-연결돼 있다. Hosted Windows는 offscreen QPA가 software adaptation으로 내려가지 않도록
-`QT_QUICK_BACKEND=rhi`를 명시하고 WARP device를 요청한다. Redirected smoke는 실제 on-screen window,
+seek한다. 따라서 성공 marker는 `atoms=3 frames=4 frame=1`과 atom GPU pick까지 포함한다. 이 경로는 Metal과
+Linux OpenGL에서 product pipeline 및 installed bundle resource를 검증한다. GitHub-hosted Windows에서는
+offscreen 설정과 D3D11 WARP 요청에도 `QGuiApplication` 생성이 완료되지 않아 자동 실행하지 않으며, CI는
+Desktop 설치 산출물 존재까지만 검사한다. Windows D3D11 redirected smoke는 interactive Windows checkpoint에서
+동일 명령으로 실행한다. Redirected smoke는 실제 on-screen window,
 `Main.qml`, file dialog, keyboard/mouse
 event delivery나 physical display presentation을 검증하지 않으므로 interactive platform checkpoint를
-대체하지 않는다. 남은 backend 항목은 Windows/Linux remote evidence, hover/highlight/multi-selection과
+대체하지 않는다. 남은 backend 항목은 Windows D3D remote evidence, hover/highlight/multi-selection과
 large-instance benchmark다.
 
 Desktop adapter는 synthetic packet 전용이 아니다. Qt file dialog 또는 `--open` path를 registry의

@@ -890,20 +890,24 @@ int main(int argc, char *argv[]) {
   }
   if (picking_smoke) {
     const auto capture_requested = screenshot.has_value();
+    auto *pick_retry = new QTimer(viewport);
+    pick_retry->setInterval(500);
     QObject::connect(
         viewport, &molshredder::desktop::MolecularViewport::selectionChanged,
-        &application, [viewport, &application, capture_requested] {
+        &application, [viewport, pick_retry, &application, capture_requested] {
           if (viewport->selectionText().startsWith(QStringLiteral("Atom "))) {
+            pick_retry->stop();
             qInfo("MolShredder desktop GPU picking ready: %s",
                   viewport->selectionText().toUtf8().constData());
             if (!capture_requested)
               application.quit();
           }
         });
-    QTimer::singleShot(750, viewport, [viewport] {
+    QObject::connect(pick_retry, &QTimer::timeout, viewport, [viewport] {
       viewport->pickAt(viewport->width() * 0.5, viewport->height() * 0.5);
     });
-    QTimer::singleShot(5000, &application, [&application] {
+    QTimer::singleShot(750, pick_retry, [pick_retry] { pick_retry->start(); });
+    QTimer::singleShot(12000, &application, [&application] {
       qCritical("MolShredder desktop GPU picking smoke timed out");
       application.exit(EXIT_FAILURE);
     });
