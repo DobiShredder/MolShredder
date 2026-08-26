@@ -1414,7 +1414,11 @@ private:
       buffer.reset();
       return false;
     }
-    updates.uploadStaticBuffer(buffer.get(), data);
+    if (type == QRhiBuffer::Dynamic) {
+      updates.updateDynamicBuffer(buffer.get(), 0U, bytes, data);
+    } else {
+      updates.uploadStaticBuffer(buffer.get(), 0U, bytes, data);
+    }
     return true;
   }
 
