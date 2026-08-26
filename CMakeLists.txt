@@ -748,6 +748,14 @@ if(MOLSHREDDER_BUILD_DESKTOP)
     BUNDLE DESTINATION .
     RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
   )
+  if(WIN32)
+    qt_generate_deploy_qml_app_script(
+      TARGET molshredder_desktop
+      OUTPUT_SCRIPT MOLSHREDDER_DESKTOP_DEPLOY_SCRIPT
+      NO_UNSUPPORTED_PLATFORM_ERROR
+    )
+    install(SCRIPT "${MOLSHREDDER_DESKTOP_DEPLOY_SCRIPT}")
+  endif()
   if(BUILD_TESTING)
     if(WIN32)
       # The Windows CI test build must remain attached to CTest's console so

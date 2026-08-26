@@ -189,3 +189,9 @@ jobs:
         run: |
           $desktop = ".\build\stage\bin\molshredder_desktop.exe"
           if (-not (Test-Path $desktop)) { throw "installed Desktop executable missing" }
+          $platform = Get-ChildItem .\build\stage -Recurse -Filter qwindows.dll | Select-Object -First 1
+          if ($null -eq $platform) { throw "installed Qt Windows platform plugin missing" }
+          $dialogs = Get-ChildItem .\build\stage -Recurse -Filter qmldir |
+            Where-Object { $_.FullName -match 'QtQuick[\\/]Dialogs[\\/]qmldir$' } |
+            Select-Object -First 1
+          if ($null -eq $dialogs) { throw "installed QtQuick.Dialogs QML module missing" }
