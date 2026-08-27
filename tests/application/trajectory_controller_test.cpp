@@ -362,6 +362,18 @@ int main(int argc, char **argv) {
                  std::get<double>((*center_position)[1].data) == 211.0 &&
                  std::get<double>((*center_position)[2].data) == 221.0,
              "analysis must consume the selected trajectory frame");
+  const auto center_record = workspace->analysis_results().front();
+  const auto center_revision =
+      center_record.provenance.scientific.coordinate_revision;
+  const auto changed_frame = trigger(gui, "traj frame", {{"frame", "1"}});
+  const auto restored_frame = trigger(gui, "traj frame", {{"frame", "2"}});
+  passed &= expect(
+      center_revision != 0U && changed_frame.succeeded() &&
+          restored_frame.succeeded() &&
+          workspace->active_object()->coordinate_revision > center_revision &&
+          workspace->analysis_source_status(center_record) ==
+              application::AnalysisSourceStatus::coordinate_changed,
+      "frame commits must advance coordinate revision and stale prior results");
 
   const auto center_series = trigger(gui, "analyze trajectory center",
                                      {{"selection", "all"},
@@ -379,6 +391,11 @@ int main(int argc, char **argv) {
   passed &= expect(
       center_series_response != nullptr &&
           center_series_response->table.has_value() &&
+          std::get<std::string>(center_series_response->fields.at(
+              "coordinate_scope").data) == "trajectory_range" &&
+          std::get<std::string>(center_series_response->fields.at(
+              "algorithm_version").data) ==
+              "molshredder-center-series-v1" &&
           center_series_response->table->rows.size() == 2U &&
           std::get<std::uint64_t>(
               center_series_response->table->rows[0][0].data) == 0U &&
@@ -427,6 +444,10 @@ int main(int argc, char **argv) {
           : nullptr;
   passed &= expect(distance_series_response != nullptr &&
                        distance_series_response->table.has_value() &&
+                       std::get<std::string>(
+                           distance_series_response->fields.at(
+                               "algorithm_version").data) ==
+                           "molshredder-distance-series-v1" &&
                        distance_series_response->table->rows.size() == 3U &&
                        numeric(distance_series_response->table->rows[0][9]) ==
                            0.34641 &&
@@ -498,6 +519,62 @@ int main(int argc, char **argv) {
                  rmsd_presentation.value().table.has_value() &&
                  rmsd_presentation.value().title == "Trajectory RMSD analysis",
              "GUI presenter must expose the shared RMSD table");
+  const auto rmsd_matrix=trigger(gui,"analyze trajectory rmsd-matrix",
+      {{"selection","all"},{"first","0"},{"last","2"},{"stride","1"},
+       {"fit","none"},{"weight","uniform"},{"missing","error"},
+       {"frame-pair-budget","6"},{"precision","6"},{"unit","angstrom"}});
+  const auto *matrix_response=rmsd_matrix.succeeded()
+      ?std::get_if<command::Response>(&rmsd_matrix.envelope.payload):nullptr;
+  passed &= expect(matrix_response!=nullptr && matrix_response->table.has_value() &&
+      matrix_response->table->rows.size()==6U &&
+      numeric(matrix_response->table->rows[0][2])==0.0 &&
+      numeric(matrix_response->table->rows[1][2])==173.205081 &&
+      std::get<std::uint64_t>(matrix_response->fields.at("frame_count").data)==3U &&
+      std::holds_alternative<command::Value::Object>(matrix_response->fields.at("plot").data) &&
+      std::get<std::string>(matrix_response->fields.at("triangle").data)=="upper-including-diagonal",
+      "RMSD matrix command must expose the bounded upper triangle");
+  const auto matrix_presentation=gui::make_analysis_presentation(rmsd_matrix);
+  passed &= expect(matrix_presentation.has_value() && matrix_presentation.value().table.has_value() &&
+      matrix_presentation.value().title=="Trajectory RMSD matrix analysis",
+      "GUI presenter must expose the RMSD matrix table");
+  auto analysis_scheduler = operation::TaskScheduler::create(
+      {1U, 2U, 16U * 1024U * 1024U, 2U, 16U}).value();
+  std::atomic_uint64_t analysis_generation{1U};
+  application::ScheduledRmsdMatrixRequest scheduled_matrix_request;
+  scheduled_matrix_request.arguments = {
+      {"selection", "all"}, {"first", "0"}, {"last", "2"},
+      {"stride", "1"}, {"fit", "none"}, {"weight", "uniform"},
+      {"missing", "error"}, {"frame-pair-budget", "6"},
+      {"precision", "6"}, {"unit", "angstrom"},
+      {"result-name", "scheduled-matrix"}};
+  scheduled_matrix_request.selection_expression = "all";
+  scheduled_matrix_request.fit_selection_expression = "all";
+  scheduled_matrix_request.range = {0U, 2U, 1U};
+  scheduled_matrix_request.fit = analysis::FitMode::none;
+  scheduled_matrix_request.frame_pair_budget = 6U;
+  scheduled_matrix_request.generation = 1U;
+  scheduled_matrix_request.generation_is_current =
+      [&](std::uint64_t value) { return value == analysis_generation.load(); };
+  const auto scheduled_matrix = application::schedule_rmsd_matrix_analysis(
+      workspace, analysis_scheduler, std::move(scheduled_matrix_request));
+  passed &= expect(
+      scheduled_matrix.has_value() &&
+          wait_for_task(analysis_scheduler, scheduled_matrix.value().task_id,
+                        operation::TaskState::ready_to_commit) &&
+          workspace->analysis_results().size() == 4U,
+      "RMSD matrix worker must prepare without publishing owner state");
+  if (scheduled_matrix.has_value()) {
+    const auto committed =
+        analysis_scheduler->commit_ready(scheduled_matrix.value().task_id);
+    const auto completed = scheduled_matrix.value().completion->result();
+    passed &= expect(
+        !committed.has_value() && completed.has_value() &&
+            workspace->analysis_results().size() == 5U &&
+            workspace->analysis_results().back().name == "scheduled-matrix" &&
+            workspace->analysis_results().back().kind ==
+                application::AnalysisResultKind::rmsd_matrix,
+        "owner-thread scheduled matrix commit must use canonical persistence");
+  }
   const auto mass_rmsd = trigger(gui, "analyze trajectory rmsd",
                                  {{"selection", "all"},
                                   {"reference", "0"},
@@ -519,7 +596,7 @@ int main(int argc, char **argv) {
               mass_rmsd_response->fields.at("weight_unit").data) == "dalton",
       "mass-weighted RMSD must expose estimated mass provenance");
   passed &= expect(
-      workspace->analysis_results().size() == 4U &&
+      workspace->analysis_results().size() == 6U &&
           workspace->analysis_results()[1].kind ==
               application::AnalysisResultKind::contact_series &&
           workspace->analysis_results()[2].kind ==
@@ -527,7 +604,9 @@ int main(int argc, char **argv) {
           workspace->analysis_results()[2].provenance.frame_first == 0U &&
           workspace->analysis_results()[2].provenance.frame_last == 2U &&
           workspace->analysis_results()[2].provenance.frame_stride == 1U &&
-          workspace->analysis_results()[3].provenance.algorithm ==
+          workspace->analysis_results()[3].kind ==
+              application::AnalysisResultKind::rmsd_matrix &&
+          workspace->analysis_results()[5].provenance.scientific.algorithm ==
               "weighted RMSD without fit",
       "target trajectory analyses must persist typed result/provenance state");
   operation::TaskContext cancelled_analysis_context;
@@ -538,7 +617,7 @@ int main(int argc, char **argv) {
         {"result-name", "must-not-commit"}}},
       cancelled_analysis_context);
   passed &= expect(!cancelled_analysis.succeeded() &&
-                       workspace->analysis_results().size() == 4U,
+                       workspace->analysis_results().size() == 6U,
                    "cancelled long analysis must not publish a result object");
 
   const auto rmsf_series = trigger(gui, "analyze trajectory rmsf",
@@ -558,11 +637,20 @@ int main(int argc, char **argv) {
           : nullptr;
   passed &= expect(
       rmsf_response != nullptr && rmsf_response->table.has_value() &&
+          std::holds_alternative<command::Value::Object>(
+              rmsf_response->fields.at("plot").data) &&
+          std::get<std::string>(rmsf_response->fields.at(
+              "algorithm_version").data) ==
+              "molshredder-rmsf-series-v1" &&
           rmsf_response->table->rows.size() == 3U &&
           numeric(rmsf_response->table->rows[0][9]) == 141.421356 &&
           std::get<std::uint64_t>(rmsf_response->table->rows[0][8].data) == 3U,
       "RMSF command must return per-atom population fluctuation and "
       "observations");
+  passed &= expect(workspace->analysis_results().size()==7U &&
+      workspace->analysis_results().back().kind==
+          application::AnalysisResultKind::rmsf_series,
+      "RMSF must persist the same typed table and plot projection");
   passed &= expect(
       !trigger(gui, "analyze trajectory rmsd",
                {{"selection", "all"}, {"fit", "rigid"}})
@@ -606,6 +694,9 @@ int main(int argc, char **argv) {
   passed &=
       expect(hbond_occupancy_response != nullptr &&
                  hbond_occupancy_response->table.has_value() &&
+                 std::get<std::string>(hbond_occupancy_response->fields.at(
+                     "algorithm_version").data) ==
+                     "molshredder-hbond-series-v1" &&
                  hbond_occupancy_response->table->rows.size() == 1U &&
                  std::get<std::uint64_t>(
                      hbond_occupancy_response->table->rows[0][3].data) == 3U &&

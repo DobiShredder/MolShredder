@@ -1,4 +1,5 @@
 #include <iostream>
+#include <memory>
 #include <string_view>
 
 #include "embedded_module.hpp"
@@ -13,8 +14,10 @@ int main(int argc, char* argv[]) {
     return 0;
   }
   molshredder::python::link_embedded_module();
-  auto registry = molshredder::application::make_default_registry();
-  if (molshredder::automation::register_python_script_command(registry)
+  auto workspace = std::make_shared<molshredder::application::Workspace>();
+  auto registry = molshredder::application::make_default_registry(workspace);
+  if (molshredder::automation::register_python_script_command(registry,
+                                                               workspace)
           .has_value()) {
     std::cerr << "failed to register Python script command\n";
     return 2;

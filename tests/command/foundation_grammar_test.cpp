@@ -49,19 +49,59 @@ int main(int argc, char *argv[]) {
       molshredder::command::file_command_descriptors();
   const auto trajectory_descriptors =
       molshredder::command::trajectory_command_descriptors();
-  passed &= expect(descriptors.size() == 16,
-                   "foundation grammar must define exactly sixteen commands");
-  passed &= expect(aliases.size() == 9,
-                   "foundation grammar v1 must expose nine shorthand aliases");
+  const auto find_descriptor = [](const auto &items, std::string_view name) {
+    return std::find_if(items.begin(), items.end(), [name](const auto &item) {
+      return item.canonical_name == name;
+    });
+  };
+  const auto has_all_commands = [&find_descriptor](
+                                    const auto &items,
+                                    const std::vector<std::string_view> &names) {
+    return std::ranges::all_of(names, [&items, &find_descriptor](auto name) {
+      return find_descriptor(items, name) != items.end();
+    });
+  };
+  auto foundation_names = std::vector<std::string>{};
+  foundation_names.reserve(descriptors.size());
+  std::ranges::transform(descriptors, std::back_inserter(foundation_names),
+                         [](const auto &descriptor) {
+                           return descriptor.canonical_name;
+                         });
+  std::ranges::sort(foundation_names);
+  passed &= expect(std::ranges::adjacent_find(foundation_names) ==
+                       foundation_names.end(),
+                   "foundation grammar canonical command names must be unique");
+  for (const auto name :
+       std::vector<std::string_view>{"load", "select", "show", "hide", "as",
+                                     "toggle", "surface show", "surface hide",
+                                     "setting set", "analyze center",
+                                     "measure distance", "analyze contacts"}) {
+    passed &= expect(find_descriptor(descriptors, name) != descriptors.end(),
+                     std::string{"foundation grammar is missing command: "} +
+                         std::string{name});
+  }
+  auto alias_names = std::vector<std::string>{};
+  alias_names.reserve(aliases.size());
+  std::ranges::transform(aliases, std::back_inserter(alias_names),
+                         [](const auto &alias) { return alias.name; });
+  std::ranges::sort(alias_names);
+  passed &= expect(std::ranges::adjacent_find(alias_names) == alias_names.end(),
+                   "foundation shorthand alias names must be unique");
+  for (const auto name : std::vector<std::string_view>{
+           "com", "distance", "angle", "dihedral", "sasa"}) {
+    passed &= expect(std::ranges::binary_search(alias_names, name),
+                     std::string{"foundation grammar is missing alias: "} +
+                         std::string{name});
+  }
   passed &= expect(view_aliases.size() == 3,
                    "view grammar must expose three projection aliases");
   passed &= expect(
-      file_descriptors.size() == 7U &&
-          file_descriptors.front().canonical_name == "format list" &&
-          file_descriptors[3].canonical_name == "volume save" &&
-          file_descriptors[4].canonical_name == "volume isosurface" &&
-          file_descriptors[5].canonical_name == "save" &&
-          file_descriptors.back().canonical_name == "load batch",
+      has_all_commands(file_descriptors,
+                       {"format list", "volume load", "volume list",
+                        "volume save", "volume isosurface", "volume slice",
+                        "volume ramp set", "volume ramp define",
+                        "volume ramp get", "volume render", "volume hide",
+                        "save", "load batch"}),
       "additive file grammar must expose format, volume, save and batch commands");
   const auto has_provider = [](const auto &descriptor) {
     const auto found = std::find_if(
@@ -76,18 +116,21 @@ int main(int argc, char *argv[]) {
              !parameter.default_value.has_value();
     });
   };
-  const auto foundation_load = std::find_if(
-      descriptors.begin(), descriptors.end(), [](const auto &descriptor) {
-        return descriptor.canonical_name == "load";
-      });
+  const auto foundation_load = find_descriptor(descriptors, "load");
+  const auto format_list = find_descriptor(file_descriptors, "format list");
+  const auto volume_load = find_descriptor(file_descriptors, "volume load");
+  const auto volume_save = find_descriptor(file_descriptors, "volume save");
+  const auto structure_save = find_descriptor(file_descriptors, "save");
+  const auto batch_load = find_descriptor(file_descriptors, "load batch");
   passed &= expect(
       foundation_load != descriptors.end() && has_provider(*foundation_load) &&
           has_plugin_path(*foundation_load) &&
-          has_provider(file_descriptors[0]) &&
-          has_provider(file_descriptors[1]) &&
-          has_provider(file_descriptors[3]) &&
-          has_provider(file_descriptors[5]) &&
-          has_provider(file_descriptors.back()),
+          format_list != file_descriptors.end() && has_provider(*format_list) &&
+          volume_load != file_descriptors.end() && has_provider(*volume_load) &&
+          volume_save != file_descriptors.end() && has_provider(*volume_save) &&
+          structure_save != file_descriptors.end() &&
+          has_provider(*structure_save) && batch_load != file_descriptors.end() &&
+          has_provider(*batch_load),
       "all structure and volume I/O commands must expose provider override");
   const auto trajectory_save = std::find_if(
       trajectory_descriptors.begin(), trajectory_descriptors.end(),

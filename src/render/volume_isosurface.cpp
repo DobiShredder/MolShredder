@@ -33,6 +33,11 @@ operation::Error invalid(std::string message) {
   return {operation::ErrorCode::invalid_argument, std::move(message), {}};
 }
 
+operation::Error exhausted(std::string message) {
+  return {operation::ErrorCode::resource_exhausted, std::move(message),
+          "increase the memory budget or use a coarser grid"};
+}
+
 operation::Error cancelled() {
   return {operation::ErrorCode::cancelled, "isosurface generation was cancelled",
           "Retry the operation when the volume is ready."};
@@ -104,6 +109,10 @@ operation::Result<RenderPacket> build_isosurface(
     return operation::Result<RenderPacket>::failure(
         invalid("isosurface color must contain finite values in [0, 1]"));
   }
+  if (request.memory_budget_bytes == 0U) {
+    return operation::Result<RenderPacket>::failure(
+        invalid("isosurface memory budget must be positive"));
+  }
   if (cancellation_requested(request)) {
     return operation::Result<RenderPacket>::failure(cancelled());
   }
@@ -123,6 +132,17 @@ operation::Result<RenderPacket> build_isosurface(
     return operation::Result<RenderPacket>::success(std::move(packet));
   }
 
+  constexpr auto kMapNodeBudgetBytes = 128U;
+  constexpr auto kVertexBudgetBytes =
+      sizeof(MeshVertex) * 2U + sizeof(EdgeKey) + sizeof(std::uint32_t) +
+      kMapNodeBudgetBytes;
+  constexpr auto kTriangleBudgetBytes = sizeof(MeshTriangle) * 2U;
+  if (grid.value_count() >
+      request.memory_budget_bytes / sizeof(model::Vec3d)) {
+    return operation::Result<RenderPacket>::failure(
+        exhausted("isosurface gradients exceed the memory budget"));
+  }
+  std::size_t budget_used = grid.value_count() * sizeof(model::Vec3d);
   std::vector<model::Vec3d> gradients(grid.value_count());
   for (std::size_t x = 0; x < shape.x; ++x) {
     for (std::size_t y = 0; y < shape.y; ++y) {
@@ -134,6 +154,7 @@ operation::Result<RenderPacket> build_isosurface(
   }
 
   std::map<EdgeKey, std::uint32_t> edge_vertices;
+  bool budget_exhausted{};
   auto edge_vertex = [&](std::size_t first, std::size_t second) {
     const EdgeKey key = std::minmax(first, second);
     if (const auto found = edge_vertices.find(key); found != edge_vertices.end()) {
@@ -163,16 +184,38 @@ operation::Result<RenderPacket> build_isosurface(
     const auto position = first_position + (second_position - first_position) * fraction;
     const auto gradient = gradients[first] + (gradients[second] - gradients[first]) * fraction;
     const auto normal = scene::normalized(gradient * -1.0);
+    if (packet.mesh_vertices.size() >=
+            std::numeric_limits<std::uint32_t>::max() ||
+        kVertexBudgetBytes > request.memory_budget_bytes - budget_used) {
+      budget_exhausted = true;
+      return std::uint32_t{};
+    }
+    budget_used += kVertexBudgetBytes;
     const auto index = static_cast<std::uint32_t>(packet.mesh_vertices.size());
     packet.mesh_vertices.push_back({position, normal, request.style.color});
     include(packet.bounds, position);
     edge_vertices.emplace(key, index);
     return index;
   };
+  const auto add_triangle = [&](std::uint32_t first, std::uint32_t second,
+                                std::uint32_t third) {
+    if (budget_exhausted)
+      return;
+    if (kTriangleBudgetBytes > request.memory_budget_bytes - budget_used) {
+      budget_exhausted = true;
+      return;
+    }
+    budget_used += kTriangleBudgetBytes;
+    orient_and_add(packet, first, second, third);
+  };
 
   for (std::size_t x = 0; x + 1U < shape.x; ++x) {
     if (cancellation_requested(request)) {
       return operation::Result<RenderPacket>::failure(cancelled());
+    }
+    if (budget_exhausted) {
+      return operation::Result<RenderPacket>::failure(
+          exhausted("isosurface mesh exceeds the memory budget"));
     }
     if (request.context != nullptr && request.context->report_progress) {
       request.context->report_progress(
@@ -204,20 +247,25 @@ operation::Result<RenderPacket> build_isosurface(
           if (inside_count == 1U || inside_count == 3U) {
             const auto& lone = inside_count == 1U ? inside : outside;
             const auto& others = inside_count == 1U ? outside : inside;
-            orient_and_add(packet, edge_vertex(lone[0], others[0]),
-                           edge_vertex(lone[0], others[1]),
-                           edge_vertex(lone[0], others[2]));
+            const auto first = edge_vertex(lone[0], others[0]);
+            const auto second = edge_vertex(lone[0], others[1]);
+            const auto third = edge_vertex(lone[0], others[2]);
+            add_triangle(first, second, third);
             continue;
           }
           const auto ac = edge_vertex(inside[0], outside[0]);
           const auto ad = edge_vertex(inside[0], outside[1]);
           const auto bc = edge_vertex(inside[1], outside[0]);
           const auto bd = edge_vertex(inside[1], outside[1]);
-          orient_and_add(packet, ac, ad, bd);
-          orient_and_add(packet, ac, bd, bc);
+          add_triangle(ac, ad, bd);
+          add_triangle(ac, bd, bc);
         }
       }
     }
+  }
+  if (budget_exhausted) {
+    return operation::Result<RenderPacket>::failure(
+        exhausted("isosurface mesh exceeds the memory budget"));
   }
   if (request.context != nullptr && request.context->report_progress) {
     request.context->report_progress({1.0, "isosurface"});

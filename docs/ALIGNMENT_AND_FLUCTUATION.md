@@ -51,8 +51,9 @@ source serial, atom/residue/chain identity, observation count, value와 unit을 
 값 자체가 아니라 frame fit에 사용된다. Missing=`skip`이면 atom마다 observation count가 다를 수 있고
 관측이 0인 atom의 RMSF는 null이다.
 
-두 operation은 current playback frame, representation과 measurement state를 변경하지 않는다. Frame
-read 전 cancellation을 확인하고 partial success를 반환하지 않는다. 현재 raw coordinate만 사용하며
-PBC molecule reconstruction/unwrap을 암묵 수행하지 않는다. Frame 내부 parallel/SIMD, robust outlier
-rejection, sequence-based atom matching, transform application/export, pair-fit constraint, RMSD matrix 및
-plot/result persistence는 후속 범위다.
+RMSD/RMSF와 RMSD matrix는 current playback frame, representation과 measurement state를 변경하지 않는다. Frame
+read 전 cancellation을 확인하고 partial success를 반환하지 않는다. 이 결과들은 persistent table과 line/heatmap
+plot projection을 만들고 JSON/CSV export를 공유한다. Desktop matrix 계산은 bounded worker와 owner-thread
+generation/source-revision commit을 사용하며 progress/cancel을 제공한다. 현재 raw coordinate만 사용하며 PBC molecule reconstruction/
+unwrap을 암묵 수행하지 않는다. Frame 내부 parallel/SIMD, robust outlier rejection, sequence-based atom matching,
+transform application/export와 pair-fit constraint는 후속 범위다.

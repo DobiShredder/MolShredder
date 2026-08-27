@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <map>
@@ -21,14 +22,26 @@ struct ColorRgba {
   friend bool operator==(const ColorRgba&, const ColorRgba&) = default;
 };
 
-enum class PickKind { atom, bond, residue };
+enum class PickKind { atom, bond, residue, volume };
 
 struct PickTarget {
+  PickTarget() = default;
+  PickTarget(PickKind target_kind, std::uint64_t target_scene_node_id,
+             std::optional<model::AtomIndex> target_atom = std::nullopt,
+             std::optional<std::size_t> target_bond_index = std::nullopt,
+             std::optional<model::ResidueIndex> target_residue = std::nullopt,
+             std::optional<std::array<std::size_t, 3U>> target_volume_sample =
+                 std::nullopt)
+      : kind{target_kind}, scene_node_id{target_scene_node_id},
+        atom{target_atom}, bond_index{target_bond_index},
+        residue{target_residue}, volume_sample{target_volume_sample} {}
+
   PickKind kind{PickKind::atom};
   std::uint64_t scene_node_id{};
   std::optional<model::AtomIndex> atom;
   std::optional<std::size_t> bond_index;
   std::optional<model::ResidueIndex> residue;
+  std::optional<std::array<std::size_t, 3U>> volume_sample;
 
   friend bool operator==(const PickTarget&, const PickTarget&) = default;
 };
@@ -70,6 +83,8 @@ struct MeshVertex {
   model::Vec3d position;
   model::Vec3d normal;
   ColorRgba color;
+
+  friend bool operator==(const MeshVertex &, const MeshVertex &) = default;
 };
 
 struct MeshTriangle {
@@ -77,6 +92,8 @@ struct MeshTriangle {
   std::uint32_t second{};
   std::uint32_t third{};
   std::uint64_t pick_id{};
+
+  friend bool operator==(const MeshTriangle &, const MeshTriangle &) = default;
 };
 
 struct Bounds3d {

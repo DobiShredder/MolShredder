@@ -11,6 +11,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -77,12 +78,73 @@ struct ResidueIndex {
   friend auto operator<=>(const ResidueIndex&, const ResidueIndex&) = default;
 };
 
+enum class ChemicalAnnotationOrigin : std::uint8_t {
+  unspecified,
+  explicit_input,
+  inferred,
+  user_override,
+};
+
+enum class ResidueKind : std::uint8_t {
+  unknown,
+  amino_acid,
+  nucleic_acid,
+  carbohydrate,
+  solvent,
+  ion,
+  ligand,
+};
+
+enum class PolymerType : std::uint8_t {
+  none,
+  protein,
+  dna,
+  rna,
+  carbohydrate,
+  other,
+};
+
 struct ResidueRecord {
   std::string name;
   std::int64_t sequence_number{};
   std::string insertion_code;
   std::string chain_id;
   std::string segment_id;
+  ResidueKind kind{ResidueKind::unknown};
+  PolymerType polymer_type{PolymerType::none};
+  ChemicalAnnotationOrigin chemical_origin{
+      ChemicalAnnotationOrigin::unspecified};
+
+  ResidueRecord() = default;
+  ResidueRecord(std::string residue_name, std::int64_t sequence,
+                std::string insertion, std::string chain,
+                std::string segment,
+                ResidueKind residue_kind = ResidueKind::unknown,
+                PolymerType polymer = PolymerType::none,
+                ChemicalAnnotationOrigin origin =
+                    ChemicalAnnotationOrigin::unspecified)
+      : name{std::move(residue_name)},
+        sequence_number{sequence},
+        insertion_code{std::move(insertion)},
+        chain_id{std::move(chain)},
+        segment_id{std::move(segment)},
+        kind{residue_kind},
+        polymer_type{polymer},
+        chemical_origin{origin} {}
+};
+
+enum class AtomStereoParity : std::uint8_t {
+  unspecified,
+  odd,
+  even,
+  either,
+};
+
+enum class RadicalState : std::uint8_t {
+  none,
+  singlet,
+  doublet,
+  triplet,
 };
 
 struct AtomRecord {
@@ -92,6 +154,35 @@ struct AtomRecord {
   std::string alternate_location;
   std::int32_t formal_charge{};
   std::optional<std::int64_t> source_serial;
+  std::optional<std::uint16_t> isotope_mass_number;
+  AtomStereoParity stereo_parity{AtomStereoParity::unspecified};
+  RadicalState radical{RadicalState::none};
+  bool formal_charge_present{};
+  ChemicalAnnotationOrigin chemical_origin{
+      ChemicalAnnotationOrigin::unspecified};
+
+  AtomRecord() = default;
+  AtomRecord(std::string atom_name, std::uint8_t element,
+             ResidueIndex residue_index, std::string alt_location,
+             std::int32_t charge,
+             std::optional<std::int64_t> serial = std::nullopt,
+             std::optional<std::uint16_t> isotope = std::nullopt,
+             AtomStereoParity parity = AtomStereoParity::unspecified,
+             RadicalState radical_state = RadicalState::none,
+             bool charge_present = false,
+             ChemicalAnnotationOrigin origin =
+                 ChemicalAnnotationOrigin::unspecified)
+      : name{std::move(atom_name)},
+        atomic_number{element},
+        residue{residue_index},
+        alternate_location{std::move(alt_location)},
+        formal_charge{charge},
+        source_serial{serial},
+        isotope_mass_number{isotope},
+        stereo_parity{parity},
+        radical{radical_state},
+        formal_charge_present{charge_present},
+        chemical_origin{origin} {}
 };
 
 enum class BondOrder : std::uint8_t {
@@ -102,12 +193,46 @@ enum class BondOrder : std::uint8_t {
   aromatic,
   amide,
   zero,
+  query,
+};
+
+enum class BondQuery : std::uint8_t {
+  none,
+  single_or_double,
+  single_or_aromatic,
+  double_or_aromatic,
+  any,
+};
+
+enum class BondStereo : std::uint8_t {
+  none,
+  up,
+  cis_or_trans,
+  either,
+  down,
 };
 
 struct Bond {
   AtomIndex first;
   AtomIndex second;
   BondOrder order{BondOrder::unknown};
+  BondQuery query{BondQuery::none};
+  BondStereo stereo{BondStereo::none};
+  ChemicalAnnotationOrigin order_origin{
+      ChemicalAnnotationOrigin::unspecified};
+
+  Bond() = default;
+  Bond(AtomIndex first_atom, AtomIndex second_atom, BondOrder bond_order,
+       BondQuery bond_query = BondQuery::none,
+       BondStereo bond_stereo = BondStereo::none,
+       ChemicalAnnotationOrigin origin =
+           ChemicalAnnotationOrigin::unspecified)
+      : first{first_atom},
+        second{second_atom},
+        order{bond_order},
+        query{bond_query},
+        stereo{bond_stereo},
+        order_origin{origin} {}
 };
 
 struct Angle {
@@ -255,6 +380,10 @@ class TopologyBuilder {
       ResidueRecord residue);
 
   [[nodiscard]] operation::Result<AtomIndex> add_atom(AtomRecord atom);
+  [[nodiscard]] std::optional<operation::Error> set_atom(
+      AtomIndex atom, AtomRecord replacement);
+  [[nodiscard]] std::optional<operation::Error> set_residue(
+      ResidueIndex residue, ResidueRecord replacement);
 
   // Retains the requested stable atom IDs in the supplied order. Connectivity
   // containing removed atoms is discarded; surviving atom/bond IDs persist.
@@ -262,6 +391,12 @@ class TopologyBuilder {
   retain_atoms(std::span<const AtomId> ordered_atom_ids);
 
   [[nodiscard]] std::optional<operation::Error> add_bond(Bond bond);
+  [[nodiscard]] std::optional<operation::Error> set_bond_semantics(
+      std::size_t bond_index, BondOrder order, BondQuery query,
+      ChemicalAnnotationOrigin origin);
+  [[nodiscard]] std::optional<operation::Error> set_residue_semantics(
+      ResidueIndex residue, ResidueKind kind, PolymerType polymer_type,
+      ChemicalAnnotationOrigin origin);
   [[nodiscard]] std::optional<operation::Error> add_angle(Angle angle);
   [[nodiscard]] std::optional<operation::Error> add_dihedral(
       Dihedral dihedral, bool allow_duplicate_term = false);

@@ -15,6 +15,7 @@
 #include <QTimer>
 #include <QUrl>
 #include <QVariantList>
+#include <QVariantMap>
 #include <QtQml/qqmlregistration.h>
 
 #include "molshredder/application/default_registry.hpp"
@@ -58,13 +59,39 @@ class MolecularViewport : public QQuickRhiItem {
                  trajectoryTaskChanged)
   Q_PROPERTY(QString trajectoryTaskStage READ trajectoryTaskStage NOTIFY
                  trajectoryTaskChanged)
+  Q_PROPERTY(bool analysisTaskRunning READ analysisTaskRunning NOTIFY
+                 analysisTaskChanged)
+  Q_PROPERTY(double analysisTaskProgress READ analysisTaskProgress NOTIFY
+                 analysisTaskChanged)
+  Q_PROPERTY(QString analysisTaskStage READ analysisTaskStage NOTIFY
+                 analysisTaskChanged)
   Q_PROPERTY(bool hasVolume READ hasVolume NOTIFY volumeChanged)
   Q_PROPERTY(double volumeLevel READ volumeLevel NOTIFY volumeChanged)
   Q_PROPERTY(double volumeMinimum READ volumeMinimum NOTIFY volumeChanged)
   Q_PROPERTY(double volumeMaximum READ volumeMaximum NOTIFY volumeChanged)
+  Q_PROPERTY(QString volumeMode READ volumeMode NOTIFY volumeChanged)
+  Q_PROPERTY(bool volumeTaskRunning READ volumeTaskRunning NOTIFY
+                 volumeTaskChanged)
+  Q_PROPERTY(double volumeTaskProgress READ volumeTaskProgress NOTIFY
+                 volumeTaskChanged)
+  Q_PROPERTY(QString volumeTaskStage READ volumeTaskStage NOTIFY
+                 volumeTaskChanged)
+  Q_PROPERTY(QString volumeGpuState READ volumeGpuState NOTIFY
+                 volumeGpuStatusChanged)
+  Q_PROPERTY(QString volumeGpuMessage READ volumeGpuMessage NOTIFY
+                 volumeGpuStatusChanged)
+  Q_PROPERTY(QString volumeSliceAxis READ volumeSliceAxis NOTIFY volumeChanged)
+  Q_PROPERTY(qulonglong volumeSliceIndex READ volumeSliceIndex NOTIFY
+                 volumeChanged)
+  Q_PROPERTY(qulonglong volumeSliceMaximum READ volumeSliceMaximum NOTIFY
+                 volumeChanged)
   Q_PROPERTY(QString scriptOutput READ scriptOutput NOTIFY scriptOutputChanged)
   Q_PROPERTY(bool scriptRunning READ scriptRunning NOTIFY scriptRunningChanged)
   Q_PROPERTY(QVariantList viewItems READ viewItems NOTIFY viewsChanged)
+  Q_PROPERTY(QVariantList sceneItems READ sceneItems NOTIFY sessionChanged)
+  Q_PROPERTY(QVariantMap movieState READ movieState NOTIFY sessionChanged)
+  Q_PROPERTY(QString sessionVisiblePanels READ sessionVisiblePanels NOTIFY
+                 sessionChanged)
   Q_PROPERTY(QVariantList analysisItems READ analysisItems NOTIFY
                  analysisResultsChanged)
   Q_PROPERTY(QVariantList analysisLabelItems READ analysisLabelItems NOTIFY
@@ -123,15 +150,56 @@ public:
   [[nodiscard]] const QString &trajectoryTaskStage() const noexcept {
     return trajectory_task_stage_;
   }
+  [[nodiscard]] bool analysisTaskRunning() const noexcept {
+    return analysis_task_running_;
+  }
+  [[nodiscard]] double analysisTaskProgress() const noexcept {
+    return analysis_task_progress_;
+  }
+  [[nodiscard]] const QString &analysisTaskStage() const noexcept {
+    return analysis_task_stage_;
+  }
   [[nodiscard]] bool hasVolume() const noexcept { return has_volume_; }
   [[nodiscard]] double volumeLevel() const noexcept { return volume_level_; }
   [[nodiscard]] double volumeMinimum() const noexcept { return volume_minimum_; }
   [[nodiscard]] double volumeMaximum() const noexcept { return volume_maximum_; }
+  [[nodiscard]] const QString &volumeMode() const noexcept {
+    return volume_mode_;
+  }
+  [[nodiscard]] bool volumeTaskRunning() const noexcept {
+    return volume_task_running_;
+  }
+  [[nodiscard]] double volumeTaskProgress() const noexcept {
+    return volume_task_progress_;
+  }
+  [[nodiscard]] const QString &volumeTaskStage() const noexcept {
+    return volume_task_stage_;
+  }
+  [[nodiscard]] const QString &volumeGpuState() const noexcept {
+    return volume_gpu_state_;
+  }
+  [[nodiscard]] const QString &volumeGpuMessage() const noexcept {
+    return volume_gpu_message_;
+  }
+  [[nodiscard]] const QString &volumeSliceAxis() const noexcept {
+    return volume_slice_axis_;
+  }
+  [[nodiscard]] qulonglong volumeSliceIndex() const noexcept {
+    return volume_slice_index_;
+  }
+  [[nodiscard]] qulonglong volumeSliceMaximum() const noexcept {
+    return volume_slice_maximum_;
+  }
   [[nodiscard]] const QString &scriptOutput() const noexcept {
     return script_output_;
   }
   [[nodiscard]] bool scriptRunning() const noexcept { return script_running_; }
   [[nodiscard]] QVariantList viewItems() const;
+  [[nodiscard]] QVariantList sceneItems() const;
+  [[nodiscard]] QVariantMap movieState() const;
+  [[nodiscard]] const QString &sessionVisiblePanels() const noexcept {
+    return session_visible_panels_;
+  }
   [[nodiscard]] QVariantList analysisItems() const;
   [[nodiscard]] QVariantList analysisLabelItems() const;
   Q_INVOKABLE QString trajectoryMappingText() const;
@@ -148,6 +216,23 @@ public:
   Q_INVOKABLE void cancelTrajectoryTask();
   [[nodiscard]] bool waitForTrajectoryTask(int timeout_milliseconds);
   Q_INVOKABLE bool setTrajectoryPlaying(bool playing);
+  Q_INVOKABLE bool setVolumeIsosurface(double level);
+  Q_INVOKABLE bool setVolumeSlice(const QString &axis, qulonglong index);
+  Q_INVOKABLE bool setDirectVolume(const QString &preset,
+                                   double sampling_step,
+                                   qulonglong maximum_steps,
+                                   qulonglong lookup_table_samples,
+                                   qulonglong texture_budget_bytes);
+  Q_INVOKABLE void cancelDirectVolumeTask();
+  [[nodiscard]] bool waitForDirectVolumeTask(int timeout_milliseconds);
+  Q_INVOKABLE bool hideDirectVolume();
+  Q_INVOKABLE bool setMolecularSurface(const QString &kind,
+                                       const QString &selection,
+                                       double probe_radius_angstrom,
+                                       double grid_spacing_angstrom,
+                                       qulonglong voxel_budget,
+                                       qulonglong memory_budget_bytes);
+  Q_INVOKABLE bool hideMolecularSurface();
   Q_INVOKABLE bool stepTrajectory(int direction);
   Q_INVOKABLE bool setPlaybackMode(const QString &mode);
   Q_INVOKABLE bool setPlaybackDirection(const QString &direction);
@@ -164,7 +249,6 @@ public:
   Q_INVOKABLE QString renderSettingJson(const QString &name,
                                         const QString &scope,
                                         const QString &target) const;
-  Q_INVOKABLE bool setVolumeIsosurface(double level);
   Q_INVOKABLE void orbit(double delta_x, double delta_y);
   Q_INVOKABLE void pan(double delta_x, double delta_y);
   Q_INVOKABLE void dolly(double delta);
@@ -209,22 +293,64 @@ public:
   Q_INVOKABLE double stereoAngleScale() const noexcept;
   Q_INVOKABLE QString anaglyphModeText() const;
   Q_INVOKABLE void pickAt(double x, double y);
+  Q_INVOKABLE bool defineSelection(const QString &name,
+                                   const QString &expression, bool dynamic);
+  Q_INVOKABLE bool selectAll();
   Q_INVOKABLE bool activateObject(qulonglong object_id);
   Q_INVOKABLE bool setObjectVisible(qulonglong object_id, bool visible);
   Q_INVOKABLE bool renameObject(qulonglong object_id, const QString &name);
   Q_INVOKABLE bool deleteObject(qulonglong object_id);
   Q_INVOKABLE bool reorderObject(qulonglong object_id,
                                  qulonglong one_based_position);
-  Q_INVOKABLE bool runPythonScript(const QUrl &url);
+  Q_INVOKABLE bool editAtomPosition(qulonglong atom_id, double x, double y,
+                                    double z);
+  Q_INVOKABLE bool editAtomProperties(qulonglong atom_id,
+                                      const QString &name,
+                                      const QString &atomic_number,
+                                      const QString &formal_charge);
+  Q_INVOKABLE bool editResidueProperties(qulonglong atom_id,
+                                         const QString &name,
+                                         const QString &chain,
+                                         const QString &residue_number);
+  Q_INVOKABLE bool editBondOrder(qulonglong bond_id, const QString &order);
+  Q_INVOKABLE bool undoEdit();
+  Q_INVOKABLE bool redoEdit();
+  Q_INVOKABLE QString editHistoryJson() const;
+  Q_INVOKABLE bool buildMolecule(const QString &name, const QString &atoms,
+                                 const QString &bonds,
+                                 const QString &residue_name,
+                                 const QString &chain,
+                                 qlonglong residue_number,
+                                 const QString &unit,
+                                 qulonglong memory_budget_bytes);
+  Q_INVOKABLE bool runPythonScript(const QUrl &url, bool isolated = false);
   Q_INVOKABLE void cancelPythonScript();
   Q_INVOKABLE void clearScriptOutput();
   Q_INVOKABLE QString systemInfoJson() const;
+  Q_INVOKABLE QString chemicalSemanticsJson() const;
+  Q_INVOKABLE QString chemicalPerceptionJson(bool apply) const;
   Q_INVOKABLE bool analyzeCenter(const QString &selection,
                                  const QString &mode,
                                  const QString &result_name);
   Q_INVOKABLE bool analyzeDistance(const QString &from, const QString &to,
                                    const QString &pbc,
                                    const QString &result_name);
+  Q_INVOKABLE bool analyzeAngle(const QString &first, const QString &vertex,
+                                const QString &third, const QString &pbc,
+                                const QString &result_name);
+  Q_INVOKABLE bool analyzeDihedral(const QString &first, const QString &second,
+                                   const QString &third,
+                                   const QString &fourth, const QString &pbc,
+                                   const QString &result_name);
+  Q_INVOKABLE bool analyzeSasa(const QString &selection, double probe_radius,
+                               qulonglong samples,
+                               qulonglong evaluation_budget,
+                               const QString &result_name);
+  Q_INVOKABLE bool analyzeRdf(const QString &first, const QString &second,
+                              double maximum_radius, double bin_width,
+                              const QString &normalization,
+                              const QString &pbc, qulonglong evaluation_budget,
+                              const QString &result_name);
   Q_INVOKABLE bool analyzeContacts(const QString &first,
                                    const QString &second, double cutoff,
                                    const QString &pbc,
@@ -232,6 +358,10 @@ public:
   Q_INVOKABLE bool analyzeTrajectoryRmsd(const QString &selection,
                                          qulonglong reference,
                                          const QString &result_name);
+  Q_INVOKABLE bool analyzeTrajectoryRmsdMatrix(
+      const QString &selection, qulonglong frame_pair_budget,
+      const QString &result_name);
+  Q_INVOKABLE void cancelAnalysisTask();
   Q_INVOKABLE QString analysisResultJson(qulonglong result_id) const;
   Q_INVOKABLE bool setAnalysisResultVisible(qulonglong result_id,
                                             bool visible);
@@ -246,6 +376,25 @@ public:
                                            int hand);
   Q_INVOKABLE bool deleteNamedView(const QString &name);
   Q_INVOKABLE bool clearNamedViews();
+  Q_INVOKABLE bool storeNamedScene(const QString &name);
+  Q_INVOKABLE bool recallNamedScene(const QString &name);
+  Q_INVOKABLE bool deleteNamedScene(const QString &name);
+  Q_INVOKABLE bool clearNamedScenes();
+  Q_INVOKABLE bool configureMovie(qulonglong frames, double fps, bool loop);
+  Q_INVOKABLE bool setMovieKeyframe(qulonglong frame,
+                                    const QString &scene_name,
+                                    qlonglong trajectory_frame = -1);
+  Q_INVOKABLE bool seekMovie(qulonglong frame);
+  Q_INVOKABLE bool setMoviePlaying(bool playing);
+  Q_INVOKABLE bool stepMovie(qulonglong steps = 1U);
+  Q_INVOKABLE bool clearMovie();
+  Q_INVOKABLE bool saveSession(const QUrl &url,
+                               const QString &visible_panels = {});
+  Q_INVOKABLE bool loadSession(const QUrl &url,
+                               const QUrl &recovery = {});
+  Q_INVOKABLE bool autosaveSession(const QUrl &primary,
+                                   const QUrl &recovery,
+                                   const QString &visible_panels = {});
   Q_INVOKABLE QString pymolViewText() const;
   Q_INVOKABLE bool importPymolView(const QString &values);
   Q_INVOKABLE bool importPymolViewAnimated(const QString &values,
@@ -257,6 +406,20 @@ public:
   void setRenderPacket(render::RenderPacket packet);
   [[nodiscard]] const render::RenderPacket &renderPacket() const noexcept {
     return packet_;
+  }
+  [[nodiscard]] const render::DirectVolumeData *directVolumeData() const noexcept {
+    const auto *volume = workspace_->active_volume();
+    return volume != nullptr && volume->direct_volume != nullptr
+               ? volume->direct_volume.get()
+               : nullptr;
+  }
+  [[nodiscard]] std::shared_ptr<const render::DirectVolumeData>
+  directVolumeLease() const noexcept {
+    const auto *volume = workspace_->active_volume();
+    return volume != nullptr ? volume->direct_volume : nullptr;
+  }
+  [[nodiscard]] std::uint64_t directVolumePickId() const noexcept {
+    return direct_volume_pick_id_;
   }
   [[nodiscard]] std::uint64_t packetRevision() const noexcept {
     return packet_revision_;
@@ -288,6 +451,9 @@ public:
   [[nodiscard]] QPointF pickPosition() const noexcept { return pick_position_; }
   void deliverPickResult(std::uint64_t request_revision,
                          std::uint64_t packet_revision, std::uint64_t pick_id);
+  void deliverDirectVolumeGpuStatus(
+      const std::shared_ptr<const render::DirectVolumeData> &source,
+      QString state, QString message);
 
 signals:
   void angleChanged();
@@ -297,21 +463,28 @@ signals:
   void objectsChanged();
   void trajectoryChanged();
   void trajectoryTaskChanged();
+  void analysisTaskChanged();
   void volumeChanged();
+  void volumeTaskChanged();
+  void volumeGpuStatusChanged();
   void scriptOutputChanged();
   void scriptRunningChanged();
   void scriptFinished(bool succeeded);
   void graphicsDiagnosticsChanged();
   void viewsChanged();
+  void sessionChanged();
   void analysisResultsChanged();
 
 private:
   [[nodiscard]] bool rebuildRepresentation();
   [[nodiscard]] bool rebuildScenePacket();
+  [[nodiscard]] bool refreshWorkspacePresentation();
   void syncActiveRepresentationName();
   void syncTrajectoryState();
   void onPlaybackTick();
   void onTrajectoryTaskPoll();
+  void onAnalysisTaskPoll();
+  void onDirectVolumeTaskPoll();
   void onCameraAnimationTick();
   [[nodiscard]] bool invokeTrajectoryAction(
       std::string command_name,
@@ -338,6 +511,7 @@ private:
   application::Dispatcher dispatcher_;
   gui::ActionAdapter actions_;
   render::RenderPacket packet_;
+  std::uint64_t direct_volume_pick_id_{};
   std::uint64_t packet_revision_{1U};
   bool packet_incremental_{};
   QString packet_update_mode_{QStringLiteral("full")};
@@ -380,11 +554,32 @@ private:
   bool trajectory_task_running_{};
   double trajectory_task_progress_{};
   QString trajectory_task_stage_{QStringLiteral("idle")};
+  std::shared_ptr<operation::TaskScheduler> analysis_task_scheduler_;
+  std::shared_ptr<std::atomic_uint64_t> analysis_task_generation_;
+  std::optional<application::ScheduledAnalysis> pending_analysis_;
+  QTimer analysis_task_timer_;
+  bool analysis_task_running_{};
+  double analysis_task_progress_{};
+  QString analysis_task_stage_{QStringLiteral("idle")};
   bool has_volume_{};
   double volume_level_{};
   double volume_minimum_{};
   double volume_maximum_{};
+  QString volume_mode_{QStringLiteral("isosurface")};
+  std::shared_ptr<operation::TaskScheduler> volume_task_scheduler_;
+  std::shared_ptr<std::atomic_uint64_t> volume_task_generation_;
+  std::optional<application::ScheduledDirectVolume> pending_direct_volume_;
+  QTimer volume_task_timer_;
+  bool volume_task_running_{};
+  double volume_task_progress_{};
+  QString volume_task_stage_{QStringLiteral("idle")};
+  QString volume_gpu_state_{QStringLiteral("idle")};
+  QString volume_gpu_message_{QStringLiteral("No direct volume is active")};
+  QString volume_slice_axis_{QStringLiteral("z")};
+  qulonglong volume_slice_index_{};
+  qulonglong volume_slice_maximum_{};
   QString script_output_;
+  QString session_visible_panels_;
   operation::CancellationToken script_cancellation_;
   std::thread script_worker_;
   bool script_running_{};

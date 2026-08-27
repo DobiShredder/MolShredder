@@ -138,11 +138,12 @@ operation::Result<AnalysisPresentation> make_analysis_presentation(
   const bool center_series = command_name == "analyze trajectory center";
   const bool distance_series = command_name == "analyze trajectory distance";
   const bool rmsd_series = command_name == "analyze trajectory rmsd";
+  const bool rmsd_matrix = command_name == "analyze trajectory rmsd-matrix";
   const bool rmsf_series = command_name == "analyze trajectory rmsf";
   const bool contact_series = command_name == "analyze trajectory contacts";
   const bool hbond_series = command_name == "analyze trajectory hbonds";
   if (!center_scalar && !distance_scalar && !center_series &&
-      !distance_series && !rmsd_series && !rmsf_series && !contact_scalar &&
+      !distance_series && !rmsd_series && !rmsd_matrix && !rmsf_series && !contact_scalar &&
       !hbond_scalar && !secondary_scalar && !contact_series && !hbond_series) {
     return operation::Result<AnalysisPresentation>::failure(operation::Error{
         operation::ErrorCode::unsupported,
@@ -169,6 +170,8 @@ operation::Result<AnalysisPresentation> make_analysis_presentation(
     presentation.title = "Trajectory distance analysis";
   } else if (rmsd_series) {
     presentation.title = "Trajectory RMSD analysis";
+  } else if (rmsd_matrix) {
+    presentation.title = "Trajectory RMSD matrix analysis";
   } else if (rmsf_series) {
     presentation.title = "Trajectory RMSF analysis";
   } else if (contact_series) {

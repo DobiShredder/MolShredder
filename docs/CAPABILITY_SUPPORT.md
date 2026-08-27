@@ -6,7 +6,7 @@
 
 Machine-readable data: [`capability-support-v1.json`](capability-support-v1.json)
 
-Baseline: `pymol-oss-3.1.0` commit `f51e58f6b08308c41c85b9d12a23231f49ca325a`; 검토일 `2026-08-25`.
+Baseline: `pymol-oss-3.1.0` commit `f51e58f6b08308c41c85b9d12a23231f49ca325a`; 검토일 `2026-08-27`.
 
 현재 normalized row는 pinned PyMOL baseline만 포함한다. VMD core/plugin inventory를 normalized capability row로 만든 뒤 별도로 추가하며, 이 표에서 VMD 지원 여부를 추론하지 않는다.
 
@@ -15,23 +15,23 @@ Baseline: `pymol-oss-3.1.0` commit `f51e58f6b08308c41c85b9d12a23231f49ca325a`; �
 | 상태 | 개수 | 의미 |
 |---|---:|---|
 | 검증됨 | 0 | implementation이 compatible/robust이며 fixture, evidence, module과 public interface가 모두 연결됨 |
-| 진행 중(미검증) | 264 | partial 구현이며 compatibility 완료 주장이 아님 |
-| 인벤토리/계획 | 1024 | inventory 또는 acceptance 설계 단계이며 사용자가 실행할 수 없음 |
+| 진행 중(미검증) | 361 | partial 구현이며 compatibility 완료 주장이 아님 |
+| 인벤토리/계획 | 928 | inventory 또는 acceptance 설계 단계이며 사용자가 실행할 수 없음 |
 | 사용 불가/보류 | 13 | 보류, 제외, 접근 제한 또는 license 격리 상태 |
 
 ## Domain 요약
 
 | Domain | 검증됨 | 진행 중 | 계획 | 사용 불가 | 전체 |
 |---|---:|---:|---:|---:|---:|
-| `analysis` | 0 | 7 | 15 | 3 | 25 |
+| `analysis` | 0 | 10 | 13 | 3 | 26 |
 | `automation` | 0 | 4 | 27 | 0 | 31 |
-| `io` | 0 | 33 | 70 | 7 | 110 |
+| `io` | 0 | 35 | 68 | 7 | 110 |
 | `object_state` | 0 | 20 | 27 | 1 | 48 |
 | `rendering` | 0 | 15 | 256 | 1 | 272 |
-| `representation` | 0 | 96 | 431 | 1 | 528 |
-| `scene` | 0 | 55 | 42 | 0 | 97 |
-| `selection` | 0 | 21 | 99 | 0 | 120 |
-| `trajectory` | 0 | 13 | 55 | 0 | 68 |
+| `representation` | 0 | 108 | 419 | 1 | 528 |
+| `scene` | 0 | 57 | 40 | 0 | 97 |
+| `selection` | 0 | 98 | 22 | 0 | 120 |
+| `trajectory` | 0 | 14 | 54 | 0 | 68 |
 | `ui` | 0 | 0 | 2 | 0 | 2 |
 
 ## Capability 행
@@ -46,8 +46,8 @@ Baseline: `pymol-oss-3.1.0` commit `f51e58f6b08308c41c85b9d12a23231f49ca325a`; �
 | `analysis.center.mass` | Selection center of mass | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 0 |
 | `analysis.fit.explicit_pairs` | Explicit-pair rigid fit | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
 | `analysis.fit.identifier_matched` | Identifier-matched rigid fit | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
-| `analysis.geometry.angle` | Scalar atom angle query | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `unwritten` | — | 0 |
-| `analysis.geometry.dihedral` | Scalar atom dihedral query | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `unwritten` | — | 0 |
+| `analysis.geometry.angle` | Scalar atom angle query | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | macos | 2 |
+| `analysis.geometry.dihedral` | Scalar atom dihedral query | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | macos | 2 |
 | `analysis.geometry.distance` | Scalar atom distance query | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `unwritten` | — | 0 |
 | `analysis.measurement_object.angle` | Angle measurement object | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `unwritten` | — | 0 |
 | `analysis.measurement_object.dihedral` | Dihedral measurement object | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `unwritten` | — | 0 |
@@ -63,6 +63,7 @@ Baseline: `pymol-oss-3.1.0` commit `f51e58f6b08308c41c85b9d12a23231f49ca325a`; �
 | `analysis.measurement_object.distance.vdw_ratio` | VDW-ratio contact distances | P1 | 인벤토리/계획 (`specified`) | — | — | — | `specified` | — | 0 |
 | `analysis.rms.current` | Current-coordinate RMS | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
 | `analysis.rms.fitted` | Fitted RMS without coordinate mutation | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
+| `analysis.surface_area.sasa` | Solvent-accessible surface area | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | macos | 2 |
 | `automation.command.alias` | Register a literal command alias | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
 | `automation.command.dispatch` | Dispatch command text from Python | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
 | `automation.command.introspect` | Inspect command-to-API binding | P2 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
@@ -194,16 +195,16 @@ Baseline: `pymol-oss-3.1.0` commit `f51e58f6b08308c41c85b9d12a23231f49ca325a`; �
 | `session.extension.hooks` | Extension session save and restore hooks | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
 | `session.file.load.pse` | Load a PSE session file | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
 | `session.file.save.pse` | Save a PSE session file | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `session.migration` | Session version check and migration | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `session.migration` | Session version check and migration | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | macos | 2 |
 | `session.partial` | Partial session export and restore | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
 | `session.path.current` | Current session-file path tracking | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
 | `session.presentation.chain` | Chain numbered presentation sessions | P2 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
 | `session.presentation.load.psw` | Load and auto-start a PSW presentation session | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
 | `session.presentation.save.psw` | Save a PSW presentation session | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `session.restore.memory` | Restore application state from memory | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
-| `session.security.movie_commands` | Lock commands restored from untrusted sessions | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `session.restore.memory` | Restore application state from memory | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | macos | 2 |
+| `session.security.movie_commands` | Lock commands restored from untrusted sessions | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | macos | 2 |
 | `session.serialization.encoding` | Session binary and compression encoding | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `session.serialize.memory` | Serialize application state in memory | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
+| `session.serialize.memory` | Serialize application state in memory | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | macos | 2 |
 | `object.copy.exact` | Exact molecular-object copy | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
 | `object.copy.merge_renamed` | Copy selection into object with identifier conflict repair | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
 | `object.create.copy_properties` | Copy object properties while creating from a selection | P1 | 사용 불가/보류 (`blocked_access`) | — | — | — | `specified` | — | 0 |
@@ -961,7 +962,7 @@ Baseline: `pymol-oss-3.1.0` commit `f51e58f6b08308c41c85b9d12a23231f49ca325a`; �
 | `representation.slice.setting.height_map` | Slice Height Map | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
 | `representation.slice.setting.height_scale` | Slice Height Scale | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
 | `representation.slice.setting.track_camera` | Slice Track Camera | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `representation.surface.molecular` | PyMOL-compatible surface representation | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `unwritten` | — | 0 |
+| `representation.surface.molecular` | PyMOL-compatible surface representation | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `unwritten` | — | 0 |
 | `representation.surface.setting.best` | Surface Best | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
 | `representation.surface.setting.carve_cutoff` | Surface Carve Cutoff | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
 | `representation.surface.setting.carve_normal_cutoff` | Surface Carve Normal Cutoff | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
@@ -1030,24 +1031,24 @@ Baseline: `pymol-oss-3.1.0` commit `f51e58f6b08308c41c85b9d12a23231f49ca325a`; �
 | `representation.visibility.toggle_all_or_none` | All-or-none representation toggle | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
 | `representation.visibility.toggle_object` | Object visibility through toggle special case | P2 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
 | `representation.volume.carve` | Direct volume atom carve | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `representation.volume.create` | Direct volume object creation | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `representation.volume.direct` | PyMOL-compatible volume representation | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `unwritten` | — | 0 |
+| `representation.volume.create` | Direct volume object creation | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `representation.volume.direct` | PyMOL-compatible volume representation | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `unwritten` | — | 0 |
 | `representation.volume.legacy_numeric_ramp` | Legacy numeric volume ramp argument | P2 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `representation.volume.object_overwrite` | Direct volume overwrite policy | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `representation.volume.ramp.builtin_presets` | Built-in volume ramp presets | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `representation.volume.ramp.define` | Volume ramp definition | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `representation.volume.ramp.get` | Volume ramp query | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `representation.volume.object_overwrite` | Direct volume overwrite policy | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `representation.volume.ramp.builtin_presets` | Built-in volume ramp presets | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `representation.volume.ramp.define` | Volume ramp definition | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 0 |
+| `representation.volume.ramp.get` | Volume ramp query | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 0 |
 | `representation.volume.ramp.panel` | Interactive volume ramp editor | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `representation.volume.ramp.set` | Volume ramp assignment | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `representation.volume.ramp.set` | Volume ramp assignment | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
 | `representation.volume.selection_extent` | Direct volume selection extent | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
 | `representation.volume.setting.bit_depth` | Volume Bit Depth | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
 | `representation.volume.setting.data_range` | Volume Data Range | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
 | `representation.volume.setting.layers` | Volume Layers | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `representation.volume.setting.mode` | Volume Mode | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `representation.volume.setting.mode.mode.post_classified` | Volume Mode mode post_classified | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `representation.volume.setting.mode` | Volume Mode | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `representation.volume.setting.mode.mode.post_classified` | Volume Mode mode post_classified | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
 | `representation.volume.setting.mode.mode.pre_integrated` | Volume Mode mode pre_integrated | P1 | 사용 불가/보류 (`blocked_access`) | — | — | — | `specified` | — | 0 |
-| `representation.volume.slice` | PyMOL-compatible slice representation | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `unwritten` | — | 0 |
-| `representation.volume.slice.create` | Map slice object creation | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `representation.volume.slice` | PyMOL-compatible slice representation | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `unwritten` | — | 0 |
+| `representation.volume.slice.create` | Map slice object creation | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
 | `representation.volume.slice.source_state` | Slice source-state semantics | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
 | `representation.volume.slice.target_state` | Slice target-state semantics | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
 | `representation.volume.source_state` | Direct volume source-state semantics | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
@@ -1145,61 +1146,61 @@ Baseline: `pymol-oss-3.1.0` commit `f51e58f6b08308c41c85b9d12a23231f49ca325a`; �
 | `scene.snapshot.insert_after` | Store current state after the current scene | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
 | `scene.snapshot.insert_before` | Store current state before the current scene | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
 | `scene.snapshot.manage` | Named scene snapshot lifecycle | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `scene.snapshot.recall` | Recall a named scene snapshot | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `scene.snapshot.recall` | Recall a named scene snapshot | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | macos | 2 |
 | `scene.snapshot.rename` | Rename a scene snapshot | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `scene.snapshot.store` | Store a named scene snapshot | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `scene.snapshot.store` | Store a named scene snapshot | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | macos | 2 |
 | `scene.snapshot.update` | Update the current scene while preserving its message | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.appearance.cartoon_color` | Cartoon-color selector | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.appearance.color` | Atom-color selector | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.appearance.enabled` | Enabled-object atom selector | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.appearance.representation` | Representation-visibility selector | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.appearance.ribbon_color` | Ribbon-color selector | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.appearance.visible` | Visible-atom selector | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.chemical.acceptor` | Hydrogen-bond acceptor selector | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.chemical.backbone` | Polymer backbone selector | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.chemical.donor` | Hydrogen-bond donor selector | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.chemical.guide` | Polymer guide-atom selector | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.chemical.hbond_acceptor_short` | Hydrogen-bond acceptor shorthand | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.chemical.hbond_donor_short` | Hydrogen-bond donor shorthand | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.chemical.hetatm` | HETATM-origin selector | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.chemical.hydrogen` | Hydrogen selector | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.chemical.inorganic` | Non-polymer inorganic selector | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.chemical.metal` | Metal selector | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.chemical.nucleic` | Nucleic-polymer selector | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.chemical.organic` | Non-polymer organic selector | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.chemical.polymer` | Polymer selector | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.chemical.protein` | Protein-polymer selector | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.chemical.sidechain` | Polymer sidechain selector | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.chemical.solvent` | Solvent selector | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.comparison.equal` | Numeric equality comparison | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.comparison.greater_than` | Greater-than numeric comparison | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.comparison.less_than` | Less-than numeric comparison | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.comparison.range` | Numeric range/list comparison | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `selection.appearance.cartoon_color` | Cartoon-color selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.appearance.color` | Atom-color selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.appearance.enabled` | Enabled-object atom selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.appearance.representation` | Representation-visibility selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.appearance.ribbon_color` | Ribbon-color selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.appearance.visible` | Visible-atom selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.chemical.acceptor` | Hydrogen-bond acceptor selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.chemical.backbone` | Polymer backbone selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.chemical.donor` | Hydrogen-bond donor selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.chemical.guide` | Polymer guide-atom selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.chemical.hbond_acceptor_short` | Hydrogen-bond acceptor shorthand | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.chemical.hbond_donor_short` | Hydrogen-bond donor shorthand | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.chemical.hetatm` | HETATM-origin selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.chemical.hydrogen` | Hydrogen selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.chemical.inorganic` | Non-polymer inorganic selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.chemical.metal` | Metal selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.chemical.nucleic` | Nucleic-polymer selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.chemical.organic` | Non-polymer organic selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.chemical.polymer` | Polymer selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.chemical.protein` | Protein-polymer selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.chemical.sidechain` | Polymer sidechain selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.chemical.solvent` | Solvent selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.comparison.equal` | Numeric equality comparison | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.comparison.greater_than` | Greater-than numeric comparison | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.comparison.less_than` | Less-than numeric comparison | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.comparison.range` | Numeric range/list comparison | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
 | `selection.constant.all` | All atoms | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
 | `selection.constant.none` | Empty atom set | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
-| `selection.coordinate.present` | Current-state coordinate presence | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.coordinate.state` | Coordinate-state selector | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.expansion.bond_steps` | Expand by bond steps | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.expansion.bound_to` | Direct bonded atoms including overlap | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.expansion.calpha` | Reduce expanded residues to C-alpha atoms | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.expansion.chain` | Expand to chains | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.expansion.fragment` | Expand to fragments | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.expansion.molecule` | Expand to bonded molecules | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.expansion.neighbor` | Direct bonded neighbors excluding source | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.expansion.object` | Expand to objects | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.expansion.residue` | Expand to residues | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.expansion.ring` | Expand to small rings | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.expansion.segment` | Expand to segments | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.expansion.unit_cell` | Expand to crystallographic unit cell | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.identifier.altloc` | Alternate-location selector | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `selection.coordinate.present` | Current-state coordinate presence | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.coordinate.state` | Coordinate-state selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.expansion.bond_steps` | Expand by bond steps | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.expansion.bound_to` | Direct bonded atoms including overlap | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.expansion.calpha` | Reduce expanded residues to C-alpha atoms | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.expansion.chain` | Expand to chains | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.expansion.fragment` | Expand to fragments | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.expansion.molecule` | Expand to bonded molecules | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.expansion.neighbor` | Direct bonded neighbors excluding source | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.expansion.object` | Expand to objects | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.expansion.residue` | Expand to residues | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.expansion.ring` | Expand to small rings | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.expansion.segment` | Expand to segments | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.expansion.unit_cell` | Expand to crystallographic unit cell | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.identifier.altloc` | Alternate-location selector | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
 | `selection.identifier.atom_name` | Atom-name selector | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
 | `selection.identifier.chain` | Chain selector | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
 | `selection.identifier.element` | Element selector | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
 | `selection.identifier.index` | Current object atom-index selector | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
-| `selection.identifier.label` | Atom-label selector | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.identifier.object` | Object/model selector | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.identifier.peptide_sequence` | Peptide-sequence selector | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.identifier.rank` | Load-order atom-rank selector | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `selection.identifier.label` | Atom-label selector | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.identifier.object` | Object/model selector | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.identifier.peptide_sequence` | Peptide-sequence selector | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.identifier.rank` | Load-order atom-rank selector | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
 | `selection.identifier.residue_id` | Residue-identifier selector | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
 | `selection.identifier.residue_name` | Residue-name selector | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
 | `selection.identifier.segment` | Segment selector | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
@@ -1207,9 +1208,9 @@ Baseline: `pymol-oss-3.1.0` commit `f51e58f6b08308c41c85b9d12a23231f49ca325a`; �
 | `selection.logical.and` | Logical conjunction | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
 | `selection.logical.not` | Logical negation | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
 | `selection.logical.or` | Logical disjunction | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
-| `selection.logical.subtract` | Selection subtraction | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.match.identifiers` | Identifier-set matching | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.match.name_residue` | Name/residue matching | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `selection.logical.subtract` | Selection subtraction | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.match.identifiers` | Identifier-set matching | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.match.name_residue` | Name/residue matching | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
 | `selection.named.create_replace` | Create or replace a named selection | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
 | `selection.named.default_name` | Default selection-name shortcut | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
 | `selection.named.delete` | Delete named selections | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
@@ -1228,35 +1229,35 @@ Baseline: `pymol-oss-3.1.0` commit `f51e58f6b08308c41c85b9d12a23231f49ca325a`; �
 | `selection.named.select_list.rank` | Select-list by load-order atom rank | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
 | `selection.named.select_list.state_scope` | State-scoped select-list API | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
 | `selection.named.state_scope` | State-scoped named selection | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.numeric.b_factor` | B-factor selector | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.numeric.coordinate_x` | Model-space X selector | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.numeric.coordinate_y` | Model-space Y selector | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.numeric.coordinate_z` | Model-space Z selector | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.numeric.formal_charge` | Formal-charge selector | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.numeric.occupancy` | Occupancy selector | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.numeric.partial_charge` | Partial-charge selector | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.numeric.user_property` | User numeric-property selector | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.position.first` | First selected atom | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.position.last` | Last selected atom | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.property.custom` | Custom atom-property selector | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.property.flag` | Atom-flag selector | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.property.numeric_type` | Numeric-type selector | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.property.secondary_structure` | Secondary-structure selector | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.property.stereochemistry` | Stereochemistry selector | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.property.text_type` | Text-type selector | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.pseudo.rotation_origin` | Rotation-origin pseudo-atom | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.pseudo.scene_center` | Scene-center pseudo-atom | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.spatial.around` | Atoms around a selection | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.spatial.beyond` | Beyond-distance selection | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.spatial.expand` | Distance expansion including source | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.spatial.near_to` | Within-distance selection excluding target | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.spatial.vdw_gap` | VDW-surface gap selection | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.spatial.within` | Within-distance selection | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.status.bonded` | Bonded-atom selector | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.status.fixed` | Fixed-atom selector | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.status.masked` | Masked-atom selector | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.status.protected` | Protected-atom selector | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.status.restrained` | Restrained-atom selector | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `selection.numeric.b_factor` | B-factor selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.numeric.coordinate_x` | Model-space X selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.numeric.coordinate_y` | Model-space Y selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.numeric.coordinate_z` | Model-space Z selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.numeric.formal_charge` | Formal-charge selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.numeric.occupancy` | Occupancy selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.numeric.partial_charge` | Partial-charge selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.numeric.user_property` | User numeric-property selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.position.first` | First selected atom | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.position.last` | Last selected atom | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.property.custom` | Custom atom-property selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.property.flag` | Atom-flag selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.property.numeric_type` | Numeric-type selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.property.secondary_structure` | Secondary-structure selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.property.stereochemistry` | Stereochemistry selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.property.text_type` | Text-type selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.pseudo.rotation_origin` | Rotation-origin pseudo-atom | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.pseudo.scene_center` | Scene-center pseudo-atom | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.spatial.around` | Atoms around a selection | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.spatial.beyond` | Beyond-distance selection | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.spatial.expand` | Distance expansion including source | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.spatial.near_to` | Within-distance selection excluding target | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.spatial.vdw_gap` | VDW-surface gap selection | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.spatial.within` | Within-distance selection | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.status.bonded` | Bonded-atom selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.status.fixed` | Fixed-atom selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.status.masked` | Masked-atom selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.status.protected` | Protected-atom selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `selection.status.restrained` | Restrained-atom selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
 | `selection.value.atom_name_wildcard` | Atom-name wildcard override | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
 | `selection.value.case_chain_segment` | Chain and segment case policy | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
 | `selection.value.case_general` | General selection case policy | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
@@ -1308,7 +1309,7 @@ Baseline: `pymol-oss-3.1.0` commit `f51e58f6b08308c41c85b9d12a23231f49ca325a`; �
 | `trajectory.movie.navigation.step_forward` | Step movie forward | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
 | `trajectory.movie.play` | Start movie playback | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
 | `trajectory.movie.playing_query` | Query movie playback state | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
-| `trajectory.movie.session.persistence` | Persist movie timeline | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `trajectory.movie.session.persistence` | Persist movie timeline | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | macos | 2 |
 | `trajectory.movie.setting.animate_by_frame` | Animate-by-frame policy | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
 | `trajectory.movie.setting.auto_interpolate` | Automatic interpolation | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
 | `trajectory.movie.setting.auto_store` | Automatic keyframe store | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |

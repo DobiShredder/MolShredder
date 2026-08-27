@@ -31,7 +31,7 @@ bool valid_name(std::string_view name) {
 
 std::optional<operation::Error> NamedSelections::set(
     std::string name, Expression expression, bool dynamic,
-    const model::Topology& topology) {
+    const model::Topology& topology, const EvaluationContext& context) {
   if (!valid_name(name) || name == "all" || name == "none") {
     return invalid(
         "named selection name is invalid or reserved",
@@ -45,7 +45,7 @@ std::optional<operation::Error> NamedSelections::set(
       name, Entry{std::move(expression), true, nullptr, 0U, {}});
 
   std::vector<std::string> stack;
-  auto mask = evaluate_impl(name, topology, stack);
+  auto mask = evaluate_impl(name, topology, context, stack);
   if (!mask.has_value()) {
     if (saved.has_value()) {
       entries_.insert_or_assign(name, std::move(saved.value()));
@@ -82,14 +82,15 @@ std::optional<operation::Error> NamedSelections::erase(std::string_view name) {
 }
 
 operation::Result<Mask> NamedSelections::evaluate(
-    std::string_view name, const model::Topology& topology) const {
+    std::string_view name, const model::Topology& topology,
+    const EvaluationContext& context) const {
   std::vector<std::string> stack;
-  return evaluate_impl(name, topology, stack);
+  return evaluate_impl(name, topology, context, stack);
 }
 
 operation::Result<Mask> NamedSelections::evaluate_impl(
     std::string_view name, const model::Topology& topology,
-    std::vector<std::string>& stack) const {
+    const EvaluationContext& context, std::vector<std::string>& stack) const {
   const auto found = entries_.find(name);
   if (found == entries_.end()) {
     return operation::Result<Mask>::failure(operation::Error{
@@ -117,8 +118,9 @@ operation::Result<Mask> NamedSelections::evaluate_impl(
   const auto resolved = selection::evaluate(
       entry.expression, topology,
       [&](std::string_view nested) {
-        return evaluate_impl(nested, topology, stack);
-      });
+        return evaluate_impl(nested, topology, context, stack);
+      },
+      context);
   stack.pop_back();
   return resolved;
 }

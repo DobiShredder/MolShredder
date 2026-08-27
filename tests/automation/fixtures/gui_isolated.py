@@ -1,0 +1,1 @@
+print("gui-isolated-output")

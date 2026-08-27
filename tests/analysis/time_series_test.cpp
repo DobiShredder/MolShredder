@@ -165,6 +165,37 @@ int main() {
           rmsd.value()[2].fit_paired_atom_count == 3U,
       "RMSD series must fit on one selection and score another selection");
 
+  operation::TaskContext matrix_context;
+  const auto matrix=analysis::rmsd_matrix(
+      {alignment_source.value(),{0U,2U,1U},alignment_all,fit_three,{},
+       analysis::FitMode::rigid,analysis::MissingAtomPolicy::error,6U},
+      matrix_context);
+  passed &= expect(matrix.has_value() && matrix.value().frame_indices.size()==3U &&
+      matrix.value().upper_triangle.size()==6U &&
+      matrix.value().evaluated_frame_pair_count==6U &&
+      matrix.value().upper_triangle[0].rmsd.rmsd==0.0 &&
+      matrix.value().upper_triangle[1].rmsd.rmsd<1.0e-10 &&
+      std::abs(matrix.value().upper_triangle[2].rmsd.rmsd-0.25)<1.0e-10 &&
+      std::abs(matrix.value().upper_triangle[4].rmsd.rmsd-0.25)<1.0e-10,
+      "RMSD matrix must emit a deterministic fitted upper triangle");
+  operation::TaskContext matrix_budget_context;
+  const auto matrix_budget=analysis::rmsd_matrix(
+      {alignment_source.value(),{0U,2U,1U},alignment_all,fit_three,{},
+       analysis::FitMode::rigid,analysis::MissingAtomPolicy::error,5U},
+      matrix_budget_context);
+  passed &= expect(!matrix_budget.has_value() &&
+      matrix_budget.error().code==operation::ErrorCode::resource_exhausted,
+      "RMSD matrix budget must reject work before publishing cells");
+  operation::TaskContext cancelled_matrix_context;
+  cancelled_matrix_context.cancellation.request_cancel();
+  const auto cancelled_matrix=analysis::rmsd_matrix(
+      {alignment_source.value(),{0U,2U,1U},alignment_all,fit_three,{},
+       analysis::FitMode::rigid,analysis::MissingAtomPolicy::error,6U},
+      cancelled_matrix_context);
+  passed &= expect(!cancelled_matrix.has_value() &&
+      cancelled_matrix.error().code==operation::ErrorCode::cancelled,
+      "pre-cancelled RMSD matrix must not return partial cells");
+
   operation::TaskContext rmsf_context;
   const auto rmsf = analysis::rmsf_series(
       analysis::RmsfSeriesRequest{

@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "molshredder/application/workspace.hpp"
+#include "molshredder/command/registry.hpp"
 #include "molshredder/operation/task_scheduler.hpp"
 
 namespace molshredder::application {
@@ -112,5 +113,116 @@ schedule_trajectory_load(
     std::shared_ptr<Workspace> workspace,
     std::shared_ptr<operation::TaskScheduler> scheduler,
     ScheduledTrajectoryLoadRequest request);
+
+class ScheduledDirectVolumeCompletion {
+ public:
+  [[nodiscard]] operation::Result<DirectVolumeResult> result() const;
+  void publish(operation::Result<DirectVolumeResult> result);
+
+ private:
+  mutable std::mutex mutex_;
+  std::optional<operation::Result<DirectVolumeResult>> result_;
+};
+
+struct ScheduledDirectVolumeRequest {
+  render::DirectVolumeStyle style;
+  std::optional<render::TransferPreset> preset;
+  bool replace_existing{};
+  operation::TaskPriority priority{operation::TaskPriority::interactive};
+  // Zero reserves the exact prepared texture payload estimated by Workspace.
+  std::size_t memory_reservation_bytes{};
+  std::uint64_t generation{};
+  std::function<bool(std::uint64_t)> generation_is_current;
+  operation::ProgressCallback report_progress;
+};
+
+struct ScheduledDirectVolume {
+  std::uint64_t task_id{};
+  std::size_t reserved_memory_bytes{};
+  std::shared_ptr<ScheduledDirectVolumeCompletion> completion;
+};
+
+// Planning snapshots immutable volume/ramp input on the Workspace owner
+// thread. Preparation runs on a bounded worker; commit_ready performs the
+// revision-checked publication on the owner thread.
+[[nodiscard]] operation::Result<ScheduledDirectVolume>
+schedule_direct_volume(
+    std::shared_ptr<Workspace> workspace,
+    std::shared_ptr<operation::TaskScheduler> scheduler,
+    ScheduledDirectVolumeRequest request);
+
+class ScheduledAnalysisCompletion {
+ public:
+  [[nodiscard]] operation::Result<command::Response> result() const;
+  void publish(operation::Result<command::Response> result);
+
+ private:
+  mutable std::mutex mutex_;
+  std::optional<operation::Result<command::Response>> result_;
+};
+
+struct ScheduledAnalysis {
+  std::uint64_t task_id{};
+  std::size_t reserved_memory_bytes{};
+  std::shared_ptr<ScheduledAnalysisCompletion> completion;
+};
+
+struct ScheduledSasaRequest {
+  command::Arguments arguments;
+  std::string selection_expression;
+  double probe_radius_angstrom{};
+  std::size_t samples_per_atom{};
+  std::size_t evaluation_budget{};
+  std::size_t memory_reservation_bytes{};
+  std::uint64_t generation{};
+  std::function<bool(std::uint64_t)> generation_is_current;
+  operation::ProgressCallback report_progress;
+};
+
+struct ScheduledRdfRequest {
+  command::Arguments arguments;
+  std::string first_expression;
+  std::string second_expression;
+  double maximum_radius{};
+  double bin_width{};
+  analysis::DistanceBoundary boundary{analysis::DistanceBoundary::raw};
+  analysis::RdfNormalization normalization{analysis::RdfNormalization::pair_count};
+  bool same_selection{};
+  std::uint64_t evaluation_budget{};
+  operation::LengthUnit distance_unit{operation::LengthUnit::angstrom};
+  std::size_t memory_reservation_bytes{};
+  std::uint64_t generation{};
+  std::function<bool(std::uint64_t)> generation_is_current;
+  operation::ProgressCallback report_progress;
+};
+
+struct ScheduledRmsdMatrixRequest {
+  command::Arguments arguments;
+  std::string selection_expression;
+  std::string fit_selection_expression;
+  analysis::SeriesRange range;
+  analysis::FitMode fit{analysis::FitMode::rigid};
+  analysis::WeightMode weight_mode{analysis::WeightMode::uniform};
+  analysis::MissingAtomPolicy missing_atom_policy{analysis::MissingAtomPolicy::error};
+  std::uint64_t frame_pair_budget{};
+  std::size_t memory_reservation_bytes{};
+  std::uint64_t generation{};
+  std::function<bool(std::uint64_t)> generation_is_current;
+  operation::ProgressCallback report_progress;
+};
+
+[[nodiscard]] operation::Result<ScheduledAnalysis> schedule_sasa_analysis(
+    std::shared_ptr<Workspace> workspace,
+    std::shared_ptr<operation::TaskScheduler> scheduler,
+    ScheduledSasaRequest request);
+[[nodiscard]] operation::Result<ScheduledAnalysis> schedule_rdf_analysis(
+    std::shared_ptr<Workspace> workspace,
+    std::shared_ptr<operation::TaskScheduler> scheduler,
+    ScheduledRdfRequest request);
+[[nodiscard]] operation::Result<ScheduledAnalysis>
+schedule_rmsd_matrix_analysis(
+    std::shared_ptr<Workspace> workspace,
+    std::shared_ptr<operation::TaskScheduler> scheduler,
+    ScheduledRmsdMatrixRequest request);
 
 }  // namespace molshredder::application

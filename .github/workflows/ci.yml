@@ -73,6 +73,13 @@ jobs:
           --output-on-failure --no-tests=error
           -R "^io\.molfile_provider$"
 
+      - name: Test M2 scientific workstation gate
+        run: >-
+          conda run --no-capture-output -n molshredder
+          ctest --test-dir build/ci -C ${{ matrix.configuration }}
+          --output-on-failure --no-tests=error
+          -R "^frontend\.m2_scientific_workstation$"
+
       - name: Test (macOS)
         if: runner.os == 'macOS'
         run: >-
@@ -128,6 +135,14 @@ jobs:
             "import json, pathlib, molshredder; info=molshredder.invoke('system info'); manifest=json.loads(pathlib.Path('build/stage/share/molshredder/molshredder-support.json').read_text()); assert info['status'] == 'ok' and info['data']['features'] == manifest['features']"
           conda run --no-capture-output -n molshredder python -c \
             "import os, molshredder; result=molshredder.run_script(os.environ['MOLSHREDDER_SCRIPT'], [os.environ['MOLSHREDDER_STRUCTURE'], 'ci-installed-python'], trusted=True); assert result['status'] == 'ok' and result['data']['stdout'] == 'script-argument=ci-installed-python\\n'"
+          module_path="$(find build/stage/lib/molshredder/python -maxdepth 1 -type f -name 'molshredder*.so' -print -quit)"
+          test -n "$module_path"
+          conda run --no-capture-output -n molshredder python \
+            tests/frontend/m2_workstation_test.py \
+            "$module_path" \
+            tests/application/fixtures/hydrogen_bond.pdb \
+            build/ci/desktop_trajectory.dcd \
+            build/ci/density.mrc
 
       - name: Smoke installed executable (Windows)
         if: runner.os == 'Windows'
@@ -152,6 +167,9 @@ jobs:
           $env:MOLSHREDDER_STRUCTURE = (Resolve-Path .\tests\io\fixtures\synthetic_multimodel.pdb).Path
           conda run --no-capture-output -n molshredder python -c "import json, pathlib, molshredder; info=molshredder.invoke('system info'); manifest=json.loads(pathlib.Path('build/stage/share/molshredder/molshredder-support.json').read_text()); assert info['status'] == 'ok' and info['data']['features'] == manifest['features']"
           conda run --no-capture-output -n molshredder python -c "import os, molshredder; result=molshredder.run_script(os.environ['MOLSHREDDER_SCRIPT'], [os.environ['MOLSHREDDER_STRUCTURE'], 'ci-installed-python'], trusted=True); assert result['status'] == 'ok' and result['data']['stdout'] == 'script-argument=ci-installed-python\n'"
+          $modulePath = (Get-ChildItem .\build\stage\lib\molshredder\python -Filter 'molshredder*.pyd' | Select-Object -First 1).FullName
+          if (-not $modulePath) { throw "installed Python module missing" }
+          conda run --no-capture-output -n molshredder python .\tests\frontend\m2_workstation_test.py $modulePath .\tests\application\fixtures\hydrogen_bond.pdb .\build\ci\desktop_trajectory.dcd .\build\ci\density.mrc
 
       - name: Check installed Desktop Metal and daily workflow (macOS)
         if: runner.os == 'macOS'
@@ -169,6 +187,11 @@ jobs:
             --open="$GITHUB_WORKSPACE/tests/io/fixtures/synthetic_multimodel.pdb" \
             --trajectory="$GITHUB_WORKSPACE/build/ci/desktop_trajectory.dcd" \
             --representation=spheres
+          conda run --no-capture-output -n molshredder "$desktop" --smoke --language=en
+          conda run --no-capture-output -n molshredder "$desktop" --smoke --language=ko
+          conda run --no-capture-output -n molshredder "$desktop" \
+            --smoke --session-smoke \
+            --open="$GITHUB_WORKSPACE/tests/application/fixtures/pbc_distance.pdb"
 
       - name: Check installed Desktop Vulkan/OpenGL and daily workflow (Linux)
         if: runner.os == 'Linux'
@@ -186,6 +209,11 @@ jobs:
             --open="$GITHUB_WORKSPACE/tests/io/fixtures/synthetic_multimodel.pdb" \
             --trajectory="$GITHUB_WORKSPACE/build/ci/desktop_trajectory.dcd" \
             --representation=spheres
+          xvfb-run -a conda run --no-capture-output -n molshredder "$desktop" --smoke --language=en
+          xvfb-run -a conda run --no-capture-output -n molshredder "$desktop" --smoke --language=ko
+          xvfb-run -a conda run --no-capture-output -n molshredder "$desktop" \
+            --smoke --session-smoke \
+            --open="$GITHUB_WORKSPACE/tests/application/fixtures/pbc_distance.pdb"
 
       # GitHub-hosted Windows stalls while constructing QGuiApplication even
       # for an offscreen QQuickRenderControl process. D3D validation therefore

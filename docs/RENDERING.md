@@ -84,7 +84,8 @@ Desktop 설치 산출물 존재까지만 검사한다. Windows D3D11 redirected 
 동일 명령으로 실행한다. Redirected smoke는 실제 on-screen window,
 `Main.qml`, file dialog, keyboard/mouse
 event delivery나 physical display presentation을 검증하지 않으므로 interactive platform checkpoint를
-대체하지 않는다. 남은 backend 항목은 Windows D3D remote evidence, hover/highlight/multi-selection과
+대체하지 않는다. M1에서는 actual Windows D3D11 installed Desktop checkpoint가 통과했지만 새 milestone은 같은 source
+revision으로 이를 반복해야 한다. 남은 renderer 항목은 M2 Windows D3D11 반복 evidence, hover/highlight/multi-selection과
 large-instance benchmark다.
 
 Desktop adapter는 synthetic packet 전용이 아니다. Qt file dialog 또는 `--open` path를 registry의

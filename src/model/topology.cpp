@@ -37,6 +37,39 @@ bool valid_boolean_column(const BooleanColumn& column) {
                      [](std::uint8_t value) { return value <= 1U; });
 }
 
+BondStereo reversed_stereo(BondStereo stereo) noexcept {
+  switch (stereo) {
+    case BondStereo::up: return BondStereo::down;
+    case BondStereo::down: return BondStereo::up;
+    case BondStereo::none:
+    case BondStereo::cis_or_trans:
+    case BondStereo::either: return stereo;
+  }
+  return stereo;
+}
+
+bool valid_residue_semantics(ResidueKind kind, PolymerType polymer,
+                             ChemicalAnnotationOrigin origin) {
+  if (origin == ChemicalAnnotationOrigin::unspecified)
+    return kind == ResidueKind::unknown && polymer == PolymerType::none;
+  switch (kind) {
+  case ResidueKind::unknown:
+    return polymer == PolymerType::none || polymer == PolymerType::other;
+  case ResidueKind::amino_acid:
+    return polymer == PolymerType::none || polymer == PolymerType::protein;
+  case ResidueKind::nucleic_acid:
+    return polymer == PolymerType::none || polymer == PolymerType::dna ||
+           polymer == PolymerType::rna;
+  case ResidueKind::carbohydrate:
+    return polymer == PolymerType::none ||
+           polymer == PolymerType::carbohydrate;
+  case ResidueKind::solvent:
+  case ResidueKind::ion:
+  case ResidueKind::ligand: return polymer == PolymerType::none;
+  }
+  return false;
+}
+
 }  // namespace
 
 std::size_t column_size(const AtomPropertyColumn& column) {
@@ -152,6 +185,11 @@ operation::Result<ResidueIndex> TopologyBuilder::add_residue(
     return operation::Result<ResidueIndex>::failure(
         invalid("residue name must not be empty", "use UNK when unknown"));
   }
+  if (!valid_residue_semantics(residue.kind, residue.polymer_type,
+                               residue.chemical_origin)) {
+    return operation::Result<ResidueIndex>::failure(
+        invalid("residue kind, polymer type and annotation origin are inconsistent"));
+  }
   const ResidueIndex index{residues_.size()};
   residues_.push_back(std::move(residue));
   return operation::Result<ResidueIndex>::success(index);
@@ -167,6 +205,11 @@ operation::Result<AtomIndex> TopologyBuilder::add_atom(AtomRecord atom) {
         invalid("atomic number must be in the range 0-118",
                 "use zero for an unknown element"));
   }
+  if (atom.isotope_mass_number.has_value() &&
+      *atom.isotope_mass_number == 0U) {
+    return operation::Result<AtomIndex>::failure(
+        invalid("isotope mass number must be positive when present"));
+  }
   if (atom.residue.value >= residues_.size()) {
     return operation::Result<AtomIndex>::failure(
         invalid("atom references an unknown residue",
@@ -181,6 +224,35 @@ operation::Result<AtomIndex> TopologyBuilder::add_atom(AtomRecord atom) {
   atoms_.push_back(std::move(atom));
   atom_ids_.push_back(AtomId{next_atom_id_++});
   return operation::Result<AtomIndex>::success(index);
+}
+
+std::optional<operation::Error> TopologyBuilder::set_atom(
+    AtomIndex atom, AtomRecord replacement) {
+  if (!has_atom(atom)) return invalid("atom edit target is out of range");
+  if (replacement.name.empty()) return invalid("atom name must not be empty");
+  if (replacement.atomic_number > 118U)
+    return invalid("atomic number must be in the range 0-118");
+  if (replacement.residue.value >= residues_.size())
+    return invalid("atom references an unknown residue");
+  if (replacement.isotope_mass_number.has_value() &&
+      *replacement.isotope_mass_number == 0U)
+    return invalid("isotope mass number must be positive when present");
+  atoms_[atom.value] = std::move(replacement);
+  return std::nullopt;
+}
+
+std::optional<operation::Error> TopologyBuilder::set_residue(
+    ResidueIndex residue, ResidueRecord replacement) {
+  if (residue.value >= residues_.size())
+    return invalid("residue edit target is out of range");
+  if (replacement.name.empty())
+    return invalid("residue name must not be empty", "use UNK when unknown");
+  if (!valid_residue_semantics(replacement.kind, replacement.polymer_type,
+                               replacement.chemical_origin))
+    return invalid(
+        "residue kind, polymer type and annotation origin are inconsistent");
+  residues_[residue.value] = std::move(replacement);
+  return std::nullopt;
 }
 
 std::optional<operation::Error>
@@ -247,9 +319,13 @@ TopologyBuilder::retain_atoms(std::span<const AtomId> ordered_atom_ids) {
       continue;
     auto first = *old_to_new[bond.first.value];
     auto second = *old_to_new[bond.second.value];
-    if (second < first)
+    auto stereo = bond.stereo;
+    if (second < first) {
       std::swap(first, second);
-    next_bonds.push_back(Bond{first, second, bond.order});
+      stereo = reversed_stereo(stereo);
+    }
+    next_bonds.push_back(Bond{first, second, bond.order, bond.query,
+                              stereo, bond.order_origin});
     next_bond_ids.push_back(bond_ids_[index]);
   }
   const auto remap_atom = [&old_to_new](AtomIndex atom) {
@@ -320,8 +396,14 @@ std::optional<operation::Error> TopologyBuilder::add_bond(Bond bond) {
   if (!distinct(bond.first, bond.second)) {
     return invalid("bond endpoints must be different atoms");
   }
+  if ((bond.order == BondOrder::query) !=
+      (bond.query != BondQuery::none)) {
+    return invalid(
+        "query bond order and query constraint must be specified together");
+  }
   if (bond.second < bond.first) {
     std::swap(bond.first, bond.second);
+    bond.stereo = reversed_stereo(bond.stereo);
   }
   const auto duplicate = std::find_if(
       bonds_.begin(), bonds_.end(), [&bond](const Bond& candidate) {
@@ -336,6 +418,34 @@ std::optional<operation::Error> TopologyBuilder::add_bond(Bond bond) {
     return invalid("bond identity space is exhausted");
   bonds_.push_back(bond);
   bond_ids_.push_back(BondId{next_bond_id_++});
+  return std::nullopt;
+}
+
+std::optional<operation::Error> TopologyBuilder::set_residue_semantics(
+    ResidueIndex residue, ResidueKind kind, PolymerType polymer_type,
+    ChemicalAnnotationOrigin origin) {
+  if (residue.value >= residues_.size())
+    return invalid("residue semantics target is out of range");
+  if (!valid_residue_semantics(kind, polymer_type, origin)) {
+    return invalid("residue kind and polymer type are inconsistent");
+  }
+  auto &target = residues_[residue.value];
+  target.kind = kind;
+  target.polymer_type = polymer_type;
+  target.chemical_origin = origin;
+  return std::nullopt;
+}
+
+std::optional<operation::Error> TopologyBuilder::set_bond_semantics(
+    std::size_t bond_index, BondOrder order, BondQuery query,
+    ChemicalAnnotationOrigin origin) {
+  if (bond_index >= bonds_.size())
+    return invalid("bond semantics target is out of range");
+  if ((order == BondOrder::query) != (query != BondQuery::none))
+    return invalid("query bond order and constraint must be specified together");
+  bonds_[bond_index].order = order;
+  bonds_[bond_index].query = query;
+  bonds_[bond_index].order_origin = origin;
   return std::nullopt;
 }
 

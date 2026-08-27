@@ -74,7 +74,9 @@ displacement, norm, unit과 PBC mode를 포함한다. JSON은 `data.table.column
 native list, CSV는 같은 column order를 사용한다. Command-level fields에는 selection/endpoints,
 inclusive range, stride, precision, requested unit과 PBC/missing policy를 보존한다.
 
-Task cancellation은 각 frame read 전에 확인하며 progress callback은 성공한 row마다 0..1 fraction을
-보고한다. 현재 frame 내부 계산은 synchronous이고 partial result streaming, parallel reduction, plot,
-result object persistence는 후속 범위다. Frame loop는 아직 single-threaded이며 한 frame 내부의 spatial
-kernel만 pairwise quadratic scan을 피한다.
+Task cancellation은 각 frame/cell read 전에 확인하며 progress callback은 성공한 row/cell마다 0..1 fraction을
+보고한다. RMSD/RMSF와 RMSD matrix는 persistent result와 versioned line/heatmap plot projection을 만들며 JSON/CSV
+export를 공유한다. CSV에서 제외되는 provenance/plot metadata는 loss report에 기록한다. Desktop의 RMSD matrix는
+bounded background worker에서 실행되고 generation과 object/system/topology/coordinate-source/cache identity를 owner-thread
+commit 직전에 검사한다. Progress/cancel control을 제공하고 stale/cancel/error는 partial result를 publish하지 않는다.
+Frame loop는 아직 single-threaded이며 한 frame 내부 spatial kernel만 pairwise quadratic scan을 피한다.

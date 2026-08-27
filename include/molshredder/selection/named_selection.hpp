@@ -24,12 +24,14 @@ class NamedSelections {
  public:
   [[nodiscard]] std::optional<operation::Error> set(
       std::string name, Expression expression, bool dynamic,
-      const model::Topology& topology);
+      const model::Topology& topology,
+      const EvaluationContext& context = {});
 
   [[nodiscard]] std::optional<operation::Error> erase(std::string_view name);
 
   [[nodiscard]] operation::Result<Mask> evaluate(
-      std::string_view name, const model::Topology& topology) const;
+      std::string_view name, const model::Topology& topology,
+      const EvaluationContext& context = {}) const;
 
   [[nodiscard]] std::vector<NamedSelectionInfo> list() const;
 
@@ -48,6 +50,7 @@ class NamedSelections {
 
   [[nodiscard]] operation::Result<Mask> evaluate_impl(
       std::string_view name, const model::Topology& topology,
+      const EvaluationContext& context,
       std::vector<std::string>& stack) const;
 
   std::map<std::string, Entry, std::less<>> entries_;

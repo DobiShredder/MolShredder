@@ -40,10 +40,13 @@ component의 atom count가 다르면 생성할 수 없다. Shared immutable owne
 snapshot이나 decoded frame을 사용하는 동안 그 lifetime을 보장한다.
 
 Workspace의 `PersistentAnalysisResult`는 molecular object와 별도 lifetime을 가진 immutable calculation
-snapshot이다. Source object/topology snapshot reference, typed response/table, algorithm/unit/PBC/
-missing-data provenance와 optional overlay를 stable result ID에 묶는다. Object 삭제나 topology mutation은
-결과를 지우지 않고 source status만 stale로 바꾼다. 상세 계약은
+snapshot이다. Source object/topology와 coordinate-source/display revision, typed response/table,
+algorithm/version, input/output unit, precision, PBC, missing-data 및 numerical-tolerance provenance와 optional
+overlay를 stable result ID에 묶는다. Object 삭제나 topology/coordinate/method revision 변경은 결과를 지우지 않고
+구분된 source status만 stale로 바꾼다. 상세 계약은
 [Persistent analysis results](ANALYSIS_RESULTS.md)에 둔다.
+Schema v1 result를 v2로 migration할 때 원본에 없던 revision/tolerance는 zero default를 실제
+과학적 값으로 해석하지 않고 별도 known flag로 unknown을 보존한다.
 
 ## Topology와 property
 
@@ -56,9 +59,15 @@ atom 수와 같은 길이의 column으로 저장한다. 현재 property type은 
 알 수 없는 source-level metadata는 정렬된 map에 보존해 후속 format reader가 정보 손실 없이
 round-trip할 수 있게 한다.
 
-Connectivity는 bond order를 가진 bond와 angle, dihedral, improper를 명시적으로 표현한다.
+Connectivity는 bond order/query/stereo/origin을 가진 bond와 angle, dihedral, improper를 명시적으로 표현한다.
 Builder는 존재하지 않는 atom, self/degenerate term과 canonical 방향까지 고려한 duplicate를
 거부한다. Atom은 유효한 residue를 참조해야 하며 atomic number는 0(unknown)부터 118까지다.
+Isotope/radical/atom parity/formal-charge presence와 annotation origin도 core atom field로 보존한다.
+정확한 지원 범위는 [Chemical semantics contract](CHEMICAL_SEMANTICS.md)에 둔다.
+Residue는 source identity 외에 component kind, polymer type과 chemical annotation origin을 가진다. Component
+kind와 polymer membership은 독립적이며 free amino acid처럼 amino-acid kind이면서 non-polymer일 수 있다.
+이 normalized snapshot은 read-only canonical `object chemistry` operation으로 조회하며 GUI, CLI와
+Python이 동일 schema를 사용한다. Frontend는 chemistry count를 다시 계산하지 않는다.
 
 ## Coordinate frame과 source
 

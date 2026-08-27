@@ -1,4 +1,6 @@
 #include "molshredder/application/analysis_result.hpp"
+#include "molshredder/analysis/sasa.hpp"
+#include "molshredder/analysis/rdf.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -73,18 +75,58 @@ bool finite(model::Vec3d value) {
          std::isfinite(value.z);
 }
 
+bool valid_scientific_policy(const ScientificResultContract& scientific) {
+  const auto pbc_valid = scientific.pbc_policy == "raw" ||
+                         scientific.pbc_policy == "minimum-image" ||
+                         scientific.pbc_policy == "not_applicable";
+  const auto pbc_requirement_valid =
+      scientific.pbc_cell_required ==
+      (scientific.pbc_policy == "minimum-image");
+  const auto missing_valid = scientific.missing_data_policy == "error" ||
+         scientific.missing_data_policy == "skip";
+  return pbc_valid && pbc_requirement_valid && missing_valid &&
+         scientific.calculation_precision == "float64" &&
+         scientific.presentation_precision <= 15U;
+}
+
+bool valid_scientific_contract(const ScientificResultContract& scientific) {
+  return scientific.schema_version == kScientificResultContractSchemaVersion &&
+         scientific.topology.schema_version ==
+             model::kTopologyReferenceSchemaVersion &&
+         scientific.topology.object_id != 0U &&
+         scientific.topology.topology_version != 0U &&
+         (!scientific.coordinate_revision_known ||
+          (scientific.coordinate_source_revision != 0U &&
+           scientific.coordinate_revision != 0U)) &&
+         (scientific.coordinate_scope == "current_frame" ||
+          scientific.coordinate_scope == "trajectory_range") &&
+         !scientific.algorithm.empty() &&
+         !scientific.algorithm_version.empty() &&
+         !scientific.input_coordinate_unit.empty() &&
+         !scientific.output_unit.empty() &&
+         !scientific.calculation_precision.empty() &&
+         !scientific.pbc_policy.empty() &&
+         !scientific.missing_data_policy.empty() &&
+         (!scientific.tolerance_known ||
+          (std::isfinite(scientific.tolerance.absolute) &&
+           scientific.tolerance.absolute >= 0.0 &&
+           std::isfinite(scientific.tolerance.relative) &&
+           scientific.tolerance.relative >= 0.0 &&
+           !scientific.tolerance.unit.empty())) &&
+         valid_scientific_policy(scientific);
+}
+
 bool valid_provenance(const AnalysisResultProvenance& provenance,
                       bool require_time) {
-  return provenance.source.schema_version ==
-             model::kTopologyReferenceSchemaVersion &&
-         provenance.source.object_id != 0U &&
-         provenance.source.topology_version != 0U &&
+  const auto& scientific = provenance.scientific;
+  return valid_scientific_contract(scientific) &&
          !provenance.canonical_command.empty() &&
-         !provenance.algorithm.empty() &&
-         !provenance.algorithm_version.empty() &&
-         !provenance.coordinate_unit.empty() &&
-         !provenance.pbc_policy.empty() &&
-         !provenance.missing_data_policy.empty() &&
+         (scientific.coordinate_scope != "trajectory_range" ||
+          (provenance.frame_first.has_value() &&
+           provenance.frame_last.has_value() &&
+           provenance.frame_stride.has_value() &&
+           *provenance.frame_first <= *provenance.frame_last &&
+           *provenance.frame_stride > 0U)) &&
          (!require_time || valid_utc_timestamp(provenance.created_at_utc));
 }
 
@@ -93,23 +135,40 @@ bool valid_overlay(const PersistentAnalysisResult& record) {
     return finite(point->position) && !point->label.empty();
   const auto* distance =
       std::get_if<DistanceAnalysisOverlay>(&record.overlay);
-  if (distance == nullptr) return !record.overlay_visible;
-  return distance->first.snapshot.schema_version ==
+  if (distance != nullptr)
+    return distance->first.snapshot.schema_version ==
              model::kTopologyReferenceSchemaVersion &&
          distance->second.snapshot.schema_version ==
              model::kTopologyReferenceSchemaVersion &&
          distance->first.snapshot.object_id ==
-             record.provenance.source.object_id &&
+             record.provenance.scientific.topology.object_id &&
          distance->second.snapshot.object_id ==
-             record.provenance.source.object_id &&
+             record.provenance.scientific.topology.object_id &&
          distance->first.snapshot.topology_version ==
-             record.provenance.source.topology_version &&
+             record.provenance.scientific.topology.topology_version &&
          distance->second.snapshot.topology_version ==
-             record.provenance.source.topology_version &&
+             record.provenance.scientific.topology.topology_version &&
          distance->first.atom_id.value != 0U &&
          distance->second.atom_id.value != 0U &&
          finite(distance->first_position) && finite(distance->second_position) &&
          !distance->label.empty();
+  const auto* geometry =
+      std::get_if<GeometryAnalysisOverlay>(&record.overlay);
+  if (geometry == nullptr) return !record.overlay_visible;
+  if ((geometry->atoms.size() != 3U && geometry->atoms.size() != 4U) ||
+      geometry->positions.size() != geometry->atoms.size() ||
+      geometry->label.empty() ||
+      !std::ranges::all_of(geometry->positions, finite))
+    return false;
+  return std::ranges::all_of(geometry->atoms, [&](const auto& atom) {
+    return atom.snapshot.schema_version ==
+               model::kTopologyReferenceSchemaVersion &&
+           atom.snapshot.object_id ==
+               record.provenance.scientific.topology.object_id &&
+           atom.snapshot.topology_version ==
+               record.provenance.scientific.topology.topology_version &&
+           atom.atom_id.value != 0U;
+  });
 }
 
 command::Value optional_index(const std::optional<std::size_t>& value) {
@@ -147,6 +206,23 @@ command::Value overlay_value(const PersistentAnalysisResult& record) {
          command::Value::Array{distance->second_position.x,
                                distance->second_position.y,
                                distance->second_position.z}}};
+  }
+  if (const auto* geometry =
+          std::get_if<GeometryAnalysisOverlay>(&record.overlay)) {
+    command::Value::Array atom_ids;
+    command::Value::Array positions;
+    atom_ids.reserve(geometry->atoms.size());
+    positions.reserve(geometry->positions.size());
+    for (const auto& atom : geometry->atoms)
+      atom_ids.emplace_back(atom.atom_id.value);
+    for (const auto position : geometry->positions)
+      positions.emplace_back(command::Value::Array{position.x, position.y,
+                                                    position.z});
+    return command::Value::Object{
+        {"atom_ids", std::move(atom_ids)},
+        {"kind", geometry->atoms.size() == 3U ? "angle" : "dihedral"},
+        {"label", geometry->label},
+        {"positions", std::move(positions)}};
   }
   return nullptr;
 }
@@ -302,7 +378,7 @@ std::optional<operation::Error> AnalysisResultStore::restore(
         record.result_id >= snapshot.next_result_id ||
         !valid_name(record.name) ||
         std::find(names.begin(), names.end(), record.name) != names.end() ||
-        record.provenance.source.object_id == 0U ||
+        record.provenance.scientific.topology.object_id == 0U ||
         !valid_provenance(record.provenance, true) ||
         !valid_overlay(record)) {
       return invalid("analysis result snapshot contains an invalid record");
@@ -315,11 +391,83 @@ std::optional<operation::Error> AnalysisResultStore::restore(
   return std::nullopt;
 }
 
+std::optional<operation::Error> AnalysisResultStore::restore(
+    const LegacyAnalysisResultStoreSnapshotV1& snapshot) {
+  if (snapshot.schema_version != 1U || snapshot.next_result_id == 0U)
+    return invalid("legacy analysis result snapshot schema or next ID is invalid");
+  AnalysisResultStoreSnapshot migrated;
+  migrated.next_result_id = snapshot.next_result_id;
+  migrated.records.reserve(snapshot.records.size());
+  for (const auto& legacy : snapshot.records) {
+    const auto& source = legacy.provenance;
+    if (legacy.schema_version != 1U || legacy.result_id == 0U ||
+        source.source.schema_version !=
+            model::kTopologyReferenceSchemaVersion ||
+        source.source.object_id == 0U ||
+        source.source.topology_version == 0U ||
+        source.canonical_command.empty() || source.algorithm.empty() ||
+        source.algorithm_version.empty() || source.coordinate_unit.empty() ||
+        source.pbc_policy.empty() || source.missing_data_policy.empty() ||
+        !valid_utc_timestamp(source.created_at_utc))
+      return invalid("legacy analysis result snapshot contains an invalid record");
+    unsigned int presentation_precision{};
+    if (const auto found = legacy.response.fields.find("precision");
+        found != legacy.response.fields.end()) {
+      if (const auto* value = std::get_if<std::uint64_t>(&found->second.data);
+          value != nullptr && *value <= 15U)
+        presentation_precision = static_cast<unsigned int>(*value);
+    }
+    const auto trajectory_scope =
+        legacy.kind == AnalysisResultKind::rmsd_series ||
+        legacy.kind == AnalysisResultKind::rmsd_matrix ||
+        legacy.kind == AnalysisResultKind::rmsf_series ||
+        legacy.kind == AnalysisResultKind::contact_series;
+    ScientificResultContract contract{
+        kScientificResultContractSchemaVersion,
+        source.source,
+        0U,
+        0U,
+        false,
+        trajectory_scope ? "trajectory_range" : "current_frame",
+        source.algorithm,
+        source.algorithm_version,
+        source.coordinate_unit,
+        source.coordinate_unit,
+        "float64",
+        presentation_precision,
+        source.pbc_policy,
+        source.pbc_policy == "minimum-image",
+        source.missing_data_policy,
+        {0.0, 0.0, {}},
+        false};
+    AnalysisResultProvenance provenance{
+        std::move(contract),
+        source.object_name,
+        source.canonical_command,
+        source.canonical_arguments,
+        source.frame_first,
+        source.frame_last,
+        source.frame_stride,
+        source.created_at_utc};
+    migrated.records.push_back(
+        {kAnalysisResultSchemaVersion, legacy.result_id, legacy.name,
+         legacy.kind, std::move(provenance), legacy.response,
+         legacy.export_table, legacy.overlay, legacy.overlay_visible});
+  }
+  return restore(migrated);
+}
+
 std::string_view to_string(AnalysisResultKind kind) noexcept {
   switch (kind) {
     case AnalysisResultKind::center: return "center";
     case AnalysisResultKind::distance: return "distance";
+    case AnalysisResultKind::angle: return "angle";
+    case AnalysisResultKind::dihedral: return "dihedral";
+    case AnalysisResultKind::sasa: return "sasa";
+    case AnalysisResultKind::rdf: return "rdf";
+    case AnalysisResultKind::rmsd_matrix: return "rmsd_matrix";
     case AnalysisResultKind::rmsd_series: return "rmsd_series";
+    case AnalysisResultKind::rmsf_series: return "rmsf_series";
     case AnalysisResultKind::contacts: return "contacts";
     case AnalysisResultKind::contact_series: return "contact_series";
   }
@@ -329,38 +477,157 @@ std::string_view to_string(AnalysisResultKind kind) noexcept {
 std::string_view to_string(AnalysisSourceStatus status) noexcept {
   switch (status) {
     case AnalysisSourceStatus::current: return "current";
+    case AnalysisSourceStatus::coordinate_changed: return "coordinate_changed";
     case AnalysisSourceStatus::topology_changed: return "topology_changed";
+    case AnalysisSourceStatus::method_changed: return "method_changed";
     case AnalysisSourceStatus::object_deleted: return "object_deleted";
   }
   return "object_deleted";
 }
 
+std::string_view current_analysis_algorithm_version(
+    AnalysisResultKind kind) noexcept {
+  switch (kind) {
+    case AnalysisResultKind::center: return "molshredder-center-v1";
+    case AnalysisResultKind::distance: return "molshredder-distance-v1";
+    case AnalysisResultKind::angle: return "molshredder-angle-v1";
+    case AnalysisResultKind::dihedral: return "molshredder-dihedral-v1";
+    case AnalysisResultKind::sasa:
+      return analysis::kSasaAlgorithmVersion;
+    case AnalysisResultKind::rdf:
+      return analysis::kRdfAlgorithmVersion;
+    case AnalysisResultKind::rmsd_matrix:
+      return "molshredder-rmsd-matrix-v1";
+    case AnalysisResultKind::rmsd_series:
+      return "molshredder-rmsd-series-v1";
+    case AnalysisResultKind::rmsf_series:
+      return "molshredder-rmsf-series-v1";
+    case AnalysisResultKind::contacts: return "molshredder-contacts-v1";
+    case AnalysisResultKind::contact_series:
+      return "molshredder-contact-series-v1";
+  }
+  return {};
+}
+
+std::optional<command::Value::Object> analysis_plot_projection(
+    AnalysisResultKind kind,const command::Table& table) {
+  const auto column=[&](std::string_view name)->std::optional<std::size_t>{
+    const auto found=std::find(table.columns.begin(),table.columns.end(),name);
+    if(found==table.columns.end()) return std::nullopt;
+    return static_cast<std::size_t>(std::distance(table.columns.begin(),found));
+  };
+  std::string plot_kind="line";
+  std::string x_name; std::string y_name; std::string value_name;
+  if(kind==AnalysisResultKind::rdf) { x_name="center"; value_name="value"; }
+  else if(kind==AnalysisResultKind::rmsd_series) { x_name="frame"; value_name="rmsd"; }
+  else if(kind==AnalysisResultKind::rmsf_series) { x_name="atom_index"; value_name="rmsf"; }
+  else if(kind==AnalysisResultKind::rmsd_matrix) {
+    plot_kind="heatmap"; x_name="first_frame"; y_name="second_frame"; value_name="rmsd";
+  } else return std::nullopt;
+  const auto x=column(x_name); const auto value=column(value_name);
+  const auto y=y_name.empty()?std::optional<std::size_t>{}:column(y_name);
+  if(!x.has_value()||!value.has_value()||(!y_name.empty()&&!y.has_value())) return std::nullopt;
+  command::Value::Array samples;
+  samples.reserve(table.rows.size());
+  for(const auto& row:table.rows) {
+    const auto maximum=std::max({*x,*value,y.value_or(0U)});
+    if(row.size()<=maximum) return std::nullopt;
+    command::Value::Array sample{row[*x]};
+    if(y.has_value()) sample.push_back(row[*y]);
+    sample.push_back(row[*value]);
+    samples.emplace_back(std::move(sample));
+  }
+  command::Value::Object result{{"kind",plot_kind},{"schema_version",1U},
+                                {"value_label",value_name},{"x_label",x_name},
+                                {"samples",std::move(samples)}};
+  if(!y_name.empty()) result.emplace("y_label",y_name);
+  return result;
+}
+
+AnalysisSourceStatus assess_analysis_result(
+    const PersistentAnalysisResult& record,
+    const std::optional<model::TopologySnapshotReference>& current_topology,
+    std::optional<std::uint64_t> current_coordinate_source_revision,
+    std::optional<std::uint64_t> current_coordinate_revision,
+    std::string_view current_algorithm_version) noexcept {
+  if (!current_topology.has_value()) return AnalysisSourceStatus::object_deleted;
+  const auto& contract = record.provenance.scientific;
+  if (current_topology->object_id != contract.topology.object_id)
+    return AnalysisSourceStatus::object_deleted;
+  if (current_topology->topology_version != contract.topology.topology_version)
+    return AnalysisSourceStatus::topology_changed;
+  if (!contract.coordinate_revision_known)
+    return AnalysisSourceStatus::coordinate_changed;
+  if (!current_coordinate_source_revision.has_value() ||
+      *current_coordinate_source_revision !=
+          contract.coordinate_source_revision)
+    return AnalysisSourceStatus::coordinate_changed;
+  if (contract.coordinate_scope == "current_frame" &&
+      (!current_coordinate_revision.has_value() ||
+       *current_coordinate_revision != contract.coordinate_revision))
+    return AnalysisSourceStatus::coordinate_changed;
+  if (current_algorithm_version.empty() ||
+      current_algorithm_version != contract.algorithm_version)
+    return AnalysisSourceStatus::method_changed;
+  return AnalysisSourceStatus::current;
+}
+
+operation::Result<command::Value::Object> scientific_contract_fields(
+    const ScientificResultContract& scientific) {
+  if (!valid_scientific_contract(scientific))
+    return operation::Result<command::Value::Object>::failure(
+        invalid("scientific result contract is incomplete or inconsistent"));
+  return operation::Result<command::Value::Object>::success({
+      {"absolute_tolerance", scientific.tolerance.absolute},
+      {"algorithm", scientific.algorithm},
+      {"algorithm_version", scientific.algorithm_version},
+      {"calculation_precision", scientific.calculation_precision},
+      {"contract_schema_version", scientific.schema_version},
+      {"coordinate_revision", scientific.coordinate_revision},
+      {"coordinate_revision_known", scientific.coordinate_revision_known},
+      {"coordinate_scope", scientific.coordinate_scope},
+      {"coordinate_source_revision",
+       scientific.coordinate_source_revision},
+      {"input_coordinate_unit", scientific.input_coordinate_unit},
+      {"missing_data_policy", scientific.missing_data_policy},
+      {"object_id", scientific.topology.object_id},
+      {"output_unit", scientific.output_unit},
+      {"pbc_cell_required", scientific.pbc_cell_required},
+      {"pbc_policy", scientific.pbc_policy},
+      {"presentation_precision",
+       static_cast<std::uint64_t>(scientific.presentation_precision)},
+      {"relative_tolerance", scientific.tolerance.relative},
+      {"tolerance_unit", scientific.tolerance.unit},
+      {"tolerance_known", scientific.tolerance_known},
+      {"topology_version", scientific.topology.topology_version}});
+}
+
 command::Response analysis_result_response(
     const PersistentAnalysisResult& record, AnalysisSourceStatus status) {
   const auto& provenance = record.provenance;
-  command::Value::Object fields{
-      {"algorithm", provenance.algorithm},
-      {"algorithm_version", provenance.algorithm_version},
+  const auto& scientific = provenance.scientific;
+  auto fields = scientific_contract_fields(scientific).value();
+  fields.insert({
       {"canonical_arguments", arguments_value(provenance.canonical_arguments)},
       {"canonical_command", provenance.canonical_command},
-      {"coordinate_unit", provenance.coordinate_unit},
+      {"coordinate_unit", scientific.output_unit},
       {"created_at_utc", provenance.created_at_utc},
       {"frame_first", optional_index(provenance.frame_first)},
       {"frame_last", optional_index(provenance.frame_last)},
       {"frame_stride", optional_index(provenance.frame_stride)},
       {"kind", std::string{to_string(record.kind)}},
-      {"missing_data_policy", provenance.missing_data_policy},
+      {"missing_data_policy", scientific.missing_data_policy},
       {"name", record.name},
-      {"object_id", provenance.source.object_id},
       {"object_name_snapshot", provenance.object_name},
       {"original_fields", record.response.fields},
       {"overlay", overlay_value(record)},
       {"overlay_visible", record.overlay_visible},
-      {"pbc_policy", provenance.pbc_policy},
       {"result_id", record.result_id},
       {"schema_version", record.schema_version},
       {"source_status", std::string{to_string(status)}},
-      {"topology_version", provenance.source.topology_version}};
+      {"topology_version", scientific.topology.topology_version}});
+  if(const auto plot=analysis_plot_projection(record.kind,record.export_table);plot.has_value())
+    fields.insert_or_assign("plot",*plot);
   return {"analysis result " + std::to_string(record.result_id),
           std::move(fields), record.response.table};
 }
@@ -431,10 +698,15 @@ operation::Result<AnalysisResultExportReport> export_analysis_result(
              path.string(),
          {}});
   }
+  std::vector<std::string> losses;
+  if(format==operation::OutputFormat::csv) {
+    losses.push_back("scientific provenance is not represented in CSV columns");
+    if(analysis_plot_projection(record.kind,record.export_table).has_value())
+      losses.push_back("plot projection metadata is not represented in CSV columns");
+  }
   return operation::Result<AnalysisResultExportReport>::success(
-      {record.result_id, path,
-       format == operation::OutputFormat::json ? "json" : "csv",
-       static_cast<std::uint64_t>(serialized.value().size())});
+      {record.result_id,path,format==operation::OutputFormat::json?"json":"csv",
+       static_cast<std::uint64_t>(serialized.value().size()),std::move(losses)});
 }
 
 render::RenderPacket build_analysis_overlay_packet(
@@ -443,6 +715,7 @@ render::RenderPacket build_analysis_overlay_packet(
   packet.provenance.emplace("analysis_overlay", "persistent-result-v1");
   constexpr render::ColorRgba point_color{1.0F, 0.72F, 0.05F, 1.0F};
   constexpr render::ColorRgba distance_color{0.15F, 0.9F, 1.0F, 1.0F};
+  constexpr render::ColorRgba geometry_color{1.0F, 0.38F, 0.72F, 1.0F};
   constexpr std::size_t dash_count = 16U;
   for (const auto& record : records) {
     if (!record.overlay_visible) continue;
@@ -455,7 +728,28 @@ render::RenderPacket build_analysis_overlay_packet(
       continue;
     }
     const auto* distance = std::get_if<DistanceAnalysisOverlay>(&record.overlay);
-    if (distance == nullptr) continue;
+    if (distance == nullptr) {
+      const auto* geometry =
+          std::get_if<GeometryAnalysisOverlay>(&record.overlay);
+      if (geometry == nullptr) continue;
+      for (std::size_t index = 1U; index < geometry->positions.size(); ++index) {
+        packet.lines.push_back({geometry->positions[index - 1U],
+                                geometry->positions[index], geometry_color,
+                                geometry_color, 2.0F, 0U});
+      }
+      model::Vec3d anchor{};
+      for (const auto position : geometry->positions) {
+        anchor.x += position.x;
+        anchor.y += position.y;
+        anchor.z += position.z;
+        packet.spheres.push_back({position, 0.10, geometry_color, 0U});
+        render::include(packet.bounds, position, 0.10);
+      }
+      const auto divisor = static_cast<double>(geometry->positions.size());
+      anchor = {anchor.x / divisor, anchor.y / divisor, anchor.z / divisor};
+      packet.labels.push_back({anchor, geometry->label, geometry_color, 0U});
+      continue;
+    }
     const auto delta = model::Vec3d{
         distance->second_position.x - distance->first_position.x,
         distance->second_position.y - distance->first_position.y,

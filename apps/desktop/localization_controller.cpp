@@ -75,20 +75,52 @@ QVariantMap LocalizationController::actionMetadata(
   if ((action->surfaces &
        gui::surface_mask(gui::ActionSurface::command_palette)) != 0U)
     surfaces.push_back(QStringLiteral("command-palette"));
+  if ((action->surfaces & gui::surface_mask(gui::ActionSurface::panel)) != 0U)
+    surfaces.push_back(QStringLiteral("panel"));
+  if ((action->surfaces &
+       gui::surface_mask(gui::ActionSurface::context_menu)) != 0U)
+    surfaces.push_back(QStringLiteral("context-menu"));
+  QStringList requirements;
+  if ((action->requirements &
+       gui::requirement_mask(gui::ActionRequirement::workspace)) != 0U)
+    requirements.push_back(QStringLiteral("workspace"));
+  if ((action->requirements &
+       gui::requirement_mask(gui::ActionRequirement::selection)) != 0U)
+    requirements.push_back(QStringLiteral("selection"));
+  if ((action->requirements &
+       gui::requirement_mask(gui::ActionRequirement::trajectory)) != 0U)
+    requirements.push_back(QStringLiteral("trajectory"));
+  if ((action->requirements &
+       gui::requirement_mask(gui::ActionRequirement::volume)) != 0U)
+    requirements.push_back(QStringLiteral("volume"));
   return {{QStringLiteral("id"), QString::fromUtf8(action->id)},
           {QStringLiteral("command"),
            QString::fromUtf8(action->command_name)},
+          {QStringLiteral("alternateCommand"),
+           QString::fromUtf8(action->alternate_command_name)},
           {QStringLiteral("menu"), QString::fromUtf8(action->menu)},
           {QStringLiteral("label"),
            QString::fromUtf8(action->label_source)},
           {QStringLiteral("status"),
            QString::fromUtf8(action->status_source)},
+          {QStringLiteral("error"),
+           QString::fromUtf8(action->error_source)},
+          {QStringLiteral("keywords"),
+           QString::fromUtf8(action->keywords_source)},
+          {QStringLiteral("unavailable"),
+           QString::fromUtf8(action->unavailable_source)},
           {QStringLiteral("shortcut"),
            QString::fromUtf8(action->shortcut)},
+          {QStringLiteral("helpTarget"),
+           QString::fromUtf8(action->help_target)},
+          {QStringLiteral("parameterGroup"),
+           QString::fromUtf8(action->parameter_group)},
           {QStringLiteral("order"), action->order},
           {QStringLiteral("surfaces"), surfaces},
+          {QStringLiteral("requirements"), requirements},
           {QStringLiteral("checkable"), action->checkable},
-          {QStringLiteral("requiresWorkspace"), action->requires_workspace}};
+          {QStringLiteral("requiresWorkspace"),
+           requirements.contains(QStringLiteral("workspace"))}};
 }
 
 QString LocalizationController::translateUi(const QString& source) const {

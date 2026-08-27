@@ -109,6 +109,54 @@ private:
   std::vector<FormatLoss> losses_;
 };
 
+void add_residue_semantics_loss(const model::Topology &topology,
+                                LossCollector &losses,
+                                std::string_view format) {
+  const auto count = static_cast<std::uint64_t>(std::ranges::count_if(
+      topology.residues(), [](const model::ResidueRecord &residue) {
+        return residue.chemical_origin !=
+               model::ChemicalAnnotationOrigin::unspecified;
+      }));
+  losses.add("residue_semantics", count,
+             std::string{format} +
+                 " output does not preserve normalized residue/polymer classification");
+}
+
+void add_unrepresented_chemical_semantics(
+    const model::Topology &topology, LossCollector &losses,
+    std::string_view format, bool formal_charge_is_unrepresented) {
+  std::uint64_t explicit_zero_charges{};
+  std::uint64_t isotopes{};
+  std::uint64_t radicals{};
+  std::uint64_t atom_stereo{};
+  for (const auto &atom : topology.atoms()) {
+    explicit_zero_charges +=
+        formal_charge_is_unrepresented && atom.formal_charge_present &&
+                atom.formal_charge == 0
+            ? 1U
+            : 0U;
+    isotopes += atom.isotope_mass_number.has_value() ? 1U : 0U;
+    radicals += atom.radical != model::RadicalState::none ? 1U : 0U;
+    atom_stereo +=
+        atom.stereo_parity != model::AtomStereoParity::unspecified ? 1U : 0U;
+  }
+  std::uint64_t query_bonds{};
+  std::uint64_t bond_stereo{};
+  for (const auto &bond : topology.bonds()) {
+    query_bonds += bond.order == model::BondOrder::query ? 1U : 0U;
+    bond_stereo += bond.stereo != model::BondStereo::none ? 1U : 0U;
+  }
+  const auto prefix = std::string{format} + " output does not preserve ";
+  losses.add("formal_charge", explicit_zero_charges,
+             prefix + "explicit zero formal-charge presence");
+  losses.add("isotope", isotopes, prefix + "isotope mass number");
+  losses.add("radical", radicals, prefix + "radical state");
+  losses.add("atom_stereo", atom_stereo, prefix + "atom stereo parity");
+  losses.add("query_bond", query_bonds, prefix + "query bond constraints");
+  losses.add("bond_stereo", bond_stereo, prefix + "bond stereo");
+  add_residue_semantics_loss(topology, losses, format);
+}
+
 std::vector<std::size_t>
 selected_frames(const model::CoordinateSource &coordinates,
                 const StructureWriteOptions &options,
@@ -238,6 +286,7 @@ void collect_topology_losses(const model::Topology &topology,
   losses.add(
       "atom_name", names,
       "XYZ writes element symbols and does not preserve distinct atom names");
+  add_unrepresented_chemical_semantics(topology, losses, "XYZ", true);
 }
 
 operation::Result<StructureWriteReport>
@@ -648,6 +697,7 @@ write_pqr(std::ostream &output, const model::Topology &topology,
   losses.add("source_metadata",
              static_cast<std::uint64_t>(topology.source_metadata().size()),
              "PQR does not preserve topology source metadata");
+  add_unrepresented_chemical_semantics(topology, losses, "PQR", true);
   losses.add(
       "coordinate_precision",
       static_cast<std::uint64_t>(topology.atom_count()) * 3U,
@@ -915,6 +965,7 @@ write_pdb(std::ostream &output, const model::Topology &topology,
   const auto reference_cell = frame_cell(*first_frame.value());
 
   LossCollector losses;
+  add_residue_semantics_loss(topology, losses, "PDB");
   if (!preserve_serials) {
     losses.add("atom_serial", static_cast<std::uint64_t>(topology.atom_count()),
                "PDB export normalized invalid or duplicate atom serials to "
@@ -1110,10 +1161,13 @@ write_pdb(std::ostream &output, const model::Topology &topology,
 
   std::map<std::int64_t, std::vector<std::int64_t>> adjacency;
   std::uint64_t bond_order_losses{};
+  std::uint64_t bond_stereo_losses{};
   for (const auto &bond : topology.bonds()) {
     adjacency[serials[bond.first.value]].push_back(serials[bond.second.value]);
     if (bond.order != model::BondOrder::unknown)
       ++bond_order_losses;
+    if (bond.stereo != model::BondStereo::none)
+      ++bond_stereo_losses;
   }
   for (auto &[source, targets] : adjacency) {
     std::sort(targets.begin(), targets.end());
@@ -1140,6 +1194,8 @@ write_pdb(std::ostream &output, const model::Topology &topology,
   losses.add(
       "bond_order", bond_order_losses,
       "PDB CONECT output preserves endpoints but not explicit bond order");
+  losses.add("bond_stereo", bond_stereo_losses,
+             "PDB CONECT output does not preserve bond stereo");
   losses.add("higher_connectivity",
              static_cast<std::uint64_t>(topology.angles().size() +
                                         topology.dihedrals().size() +
@@ -1156,6 +1212,21 @@ write_pdb(std::ostream &output, const model::Topology &topology,
   losses.add("frame_metadata", other_frame_fields,
              "PDB output does not preserve arbitrary typed frame metadata");
   std::uint64_t other_atom_properties{};
+  std::uint64_t isotope_losses{};
+  std::uint64_t radical_losses{};
+  std::uint64_t atom_stereo_losses{};
+  for (const auto &atom : topology.atoms()) {
+    isotope_losses += atom.isotope_mass_number.has_value() ? 1U : 0U;
+    radical_losses += atom.radical != model::RadicalState::none ? 1U : 0U;
+    atom_stereo_losses +=
+        atom.stereo_parity != model::AtomStereoParity::unspecified ? 1U : 0U;
+  }
+  losses.add("isotope", isotope_losses,
+             "PDB ATOM/HETATM output does not preserve isotope mass number");
+  losses.add("radical", radical_losses,
+             "PDB ATOM/HETATM output does not preserve radical state");
+  losses.add("atom_stereo", atom_stereo_losses,
+             "PDB ATOM/HETATM output does not preserve atom stereo parity");
   for (const auto &name : topology.properties().names()) {
     if (name != "pdb.is_hetero" && name != "pqr.is_hetero") {
       ++other_atom_properties;
@@ -1185,8 +1256,8 @@ write_pdb(std::ostream &output, const model::Topology &topology,
       static_cast<std::uint64_t>(position), losses.take()});
 }
 
-std::uint64_t mol_bond_type(model::BondOrder order) {
-  switch (order) {
+std::uint64_t mol_bond_type(const model::Bond &bond) {
+  switch (bond.order) {
   case model::BondOrder::single:
     return 1U;
   case model::BondOrder::double_bond:
@@ -1195,10 +1266,30 @@ std::uint64_t mol_bond_type(model::BondOrder order) {
     return 3U;
   case model::BondOrder::aromatic:
     return 4U;
+  case model::BondOrder::query:
+    switch (bond.query) {
+    case model::BondQuery::single_or_double: return 5U;
+    case model::BondQuery::single_or_aromatic: return 6U;
+    case model::BondQuery::double_or_aromatic: return 7U;
+    case model::BondQuery::any: return 8U;
+    case model::BondQuery::none: return 0U;
+    }
+    return 0U;
   case model::BondOrder::amide:
   case model::BondOrder::zero:
   case model::BondOrder::unknown:
     return 0U;
+  }
+  return 0U;
+}
+
+std::uint64_t mol_bond_stereo(model::BondStereo stereo) {
+  switch (stereo) {
+  case model::BondStereo::none: return 0U;
+  case model::BondStereo::up: return 1U;
+  case model::BondStereo::cis_or_trans: return 3U;
+  case model::BondStereo::either: return 4U;
+  case model::BondStereo::down: return 6U;
   }
   return 0U;
 }
@@ -1273,6 +1364,9 @@ write_molfile(std::ostream &output, const model::Topology &topology,
           : 1.0;
   std::vector<std::string> coordinate_fields;
   coordinate_fields.reserve(topology.atom_count() * 3U);
+  std::vector<std::int64_t> normalized_stereo(topology.atom_count());
+  std::vector<std::int64_t> normalized_isotope(topology.atom_count());
+  std::vector<std::int64_t> normalized_radical(topology.atom_count());
   for (std::size_t index = 0; index < topology.atom_count(); ++index) {
     if (!frame.atom_present(index)) {
       return operation::Result<StructureWriteReport>::failure(
@@ -1297,9 +1391,33 @@ write_molfile(std::ostream &output, const model::Topology &topology,
     }
     const auto mass =
         mass_difference == nullptr ? 0 : (*mass_difference)[index];
-    const auto parity = stereo_parity == nullptr ? 0 : (*stereo_parity)[index];
-    const auto isotope = isotope_mass == nullptr ? 0 : (*isotope_mass)[index];
-    const auto radical_value = radical == nullptr ? 0 : (*radical)[index];
+    const auto &atom = topology.atoms()[index];
+    const auto legacy_parity =
+        stereo_parity == nullptr ? 0 : (*stereo_parity)[index];
+    const auto legacy_isotope =
+        isotope_mass == nullptr ? 0 : (*isotope_mass)[index];
+    const auto legacy_radical = radical == nullptr ? 0 : (*radical)[index];
+    const auto core_parity = static_cast<std::int64_t>(atom.stereo_parity);
+    const auto core_isotope = static_cast<std::int64_t>(
+        atom.isotope_mass_number.value_or(0U));
+    const auto core_radical = static_cast<std::int64_t>(atom.radical);
+    if ((core_parity != 0 && legacy_parity != 0 &&
+         core_parity != legacy_parity) ||
+        (core_isotope != 0 && legacy_isotope != 0 &&
+         core_isotope != legacy_isotope) ||
+        (core_radical != 0 && legacy_radical != 0 &&
+         core_radical != legacy_radical)) {
+      return operation::Result<StructureWriteReport>::failure(invalid(
+          "core and legacy MOL/SDF chemical annotations disagree at atom " +
+          std::to_string(index + 1U)));
+    }
+    const auto parity = core_parity != 0 ? core_parity : legacy_parity;
+    const auto isotope = core_isotope != 0 ? core_isotope : legacy_isotope;
+    const auto radical_value =
+        core_radical != 0 ? core_radical : legacy_radical;
+    normalized_stereo[index] = parity;
+    normalized_isotope[index] = isotope;
+    normalized_radical[index] = radical_value;
     if (mass < -3 || mass > 4 || parity < 0 || parity > 3 || isotope < 0 ||
         (radical_value < 0 || radical_value > 3)) {
       return operation::Result<StructureWriteReport>::failure(
@@ -1308,10 +1426,10 @@ write_molfile(std::ostream &output, const model::Topology &topology,
     }
   }
   for (const auto &bond : topology.bonds()) {
-    if (mol_bond_type(bond.order) == 0U) {
+    if (mol_bond_type(bond) == 0U) {
       return operation::Result<StructureWriteReport>::failure(invalid(
           "MOL/SDF cannot export an unknown or format-specific bond order",
-          "assign single/double/triple/aromatic order first"));
+          "assign a V2000 concrete or query bond type first"));
     }
   }
 
@@ -1343,7 +1461,7 @@ write_molfile(std::ostream &output, const model::Topology &topology,
             : std::string{detail::element_symbol(atomic_number)};
     const auto mass =
         mass_difference == nullptr ? 0 : (*mass_difference)[index];
-    const auto parity = stereo_parity == nullptr ? 0 : (*stereo_parity)[index];
+    const auto parity = normalized_stereo[index];
     output << coordinate_fields[index * 3U]
            << coordinate_fields[index * 3U + 1U]
            << coordinate_fields[index * 3U + 2U] << ' ' << std::left
@@ -1354,20 +1472,22 @@ write_molfile(std::ostream &output, const model::Topology &topology,
   for (const auto &bond : topology.bonds()) {
     output << std::setw(3) << bond.first.value + 1U << std::setw(3)
            << bond.second.value + 1U << std::setw(3)
-           << mol_bond_type(bond.order) << std::setw(3) << 0 << "  0  0  0\n";
+           << mol_bond_type(bond) << std::setw(3)
+           << mol_bond_stereo(bond.stereo) << "  0  0  0\n";
   }
   std::vector<std::pair<std::size_t, std::int64_t>> charges;
   std::vector<std::pair<std::size_t, std::int64_t>> isotopes;
   std::vector<std::pair<std::size_t, std::int64_t>> radicals;
   for (std::size_t index = 0; index < topology.atom_count(); ++index) {
-    if (topology.atoms()[index].formal_charge != 0) {
+    if (topology.atoms()[index].formal_charge_present ||
+        topology.atoms()[index].formal_charge != 0) {
       charges.emplace_back(index + 1U, topology.atoms()[index].formal_charge);
     }
-    if (isotope_mass != nullptr && (*isotope_mass)[index] != 0) {
-      isotopes.emplace_back(index + 1U, (*isotope_mass)[index]);
+    if (normalized_isotope[index] != 0) {
+      isotopes.emplace_back(index + 1U, normalized_isotope[index]);
     }
-    if (radical != nullptr && (*radical)[index] != 0) {
-      radicals.emplace_back(index + 1U, (*radical)[index]);
+    if (normalized_radical[index] != 0) {
+      radicals.emplace_back(index + 1U, normalized_radical[index]);
     }
   }
   write_m_property(output, "CHG", charges);
@@ -1425,6 +1545,7 @@ write_molfile(std::ostream &output, const model::Topology &topology,
   }
 
   LossCollector losses;
+  add_residue_semantics_loss(topology, losses, "MOL/SDF");
   losses.add("residue_identity",
              static_cast<std::uint64_t>(topology.residue_count()),
              "MOL V2000 does not store residue, chain or segment identity");
@@ -1498,6 +1619,7 @@ std::string_view mol2_bond_type(model::BondOrder order) {
     return "am";
   case model::BondOrder::zero:
   case model::BondOrder::unknown:
+  case model::BondOrder::query:
     return {};
   }
   return {};
@@ -1835,6 +1957,7 @@ write_g96(std::ostream &output, const model::Topology &topology,
   }
   losses.add("atom_properties", other_properties,
              "G96 does not store arbitrary static atom properties");
+  add_unrepresented_chemical_semantics(topology, losses, "G96", true);
   const auto position = output.tellp();
   if (position < std::streampos{}) {
     return operation::Result<StructureWriteReport>::failure(
@@ -2076,6 +2199,7 @@ write_gro(std::ostream &output, const model::Topology &topology,
   }
   losses.add("atom_properties", other_properties,
              "GRO does not store arbitrary static atom properties");
+  add_unrepresented_chemical_semantics(topology, losses, "GRO", true);
   const auto position = output.tellp();
   if (position < std::streampos{}) {
     return operation::Result<StructureWriteReport>::failure(
@@ -2186,6 +2310,10 @@ write_mol2(std::ostream &output, const model::Topology &topology,
     if (mol2_bond_type(bond.order).empty()) {
       return operation::Result<StructureWriteReport>::failure(
           invalid("MOL2 cannot export a bond with unknown kind/order"));
+    }
+    if (bond.stereo != model::BondStereo::none) {
+      return operation::Result<StructureWriteReport>::failure(invalid(
+          "MOL2 writer cannot represent core bond stereo without loss"));
     }
   }
 
@@ -2471,19 +2599,33 @@ write_mol2(std::ostream &output, const model::Topology &topology,
   }
 
   LossCollector losses;
+  add_residue_semantics_loss(topology, losses, "MOL2");
   std::uint64_t formal_charges{};
   std::uint64_t alternate_locations{};
+  std::uint64_t isotope_losses{};
+  std::uint64_t radical_losses{};
+  std::uint64_t atom_stereo_losses{};
   for (const auto &atom : topology.atoms()) {
-    if (atom.formal_charge != 0)
+    if (atom.formal_charge_present || atom.formal_charge != 0)
       ++formal_charges;
     if (!atom.alternate_location.empty())
       ++alternate_locations;
+    isotope_losses += atom.isotope_mass_number.has_value() ? 1U : 0U;
+    radical_losses += atom.radical != model::RadicalState::none ? 1U : 0U;
+    atom_stereo_losses +=
+        atom.stereo_parity != model::AtomStereoParity::unspecified ? 1U : 0U;
   }
   losses.add(
       "formal_charge", formal_charges,
       "MOL2 writer currently preserves partial rather than formal charge");
   losses.add("alternate_location", alternate_locations,
              "MOL2 does not preserve alternate-location identity");
+  losses.add("isotope", isotope_losses,
+             "MOL2 writer does not preserve isotope mass number");
+  losses.add("radical", radical_losses,
+             "MOL2 writer does not preserve radical state");
+  losses.add("atom_stereo", atom_stereo_losses,
+             "MOL2 writer does not preserve atom stereo parity");
   losses.add("higher_connectivity",
              static_cast<std::uint64_t>(topology.angles().size() +
                                         topology.dihedrals().size() +
@@ -2772,6 +2914,7 @@ write_psf(std::ostream &output, const model::Topology &topology,
   }
   losses.add("atom_properties", other_properties,
              "PSF preserves atom type, charge, mass and unused field only");
+  add_unrepresented_chemical_semantics(topology, losses, "PSF", true);
   std::uint64_t unmodeled_sections{};
   for (const auto &[name, unused_value] : topology.source_metadata()) {
     static_cast<void>(unused_value);

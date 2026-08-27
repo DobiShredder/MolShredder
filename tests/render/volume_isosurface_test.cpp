@@ -96,6 +96,15 @@ int main() {
                        empty.value().bounds.empty,
                    "out-of-range levels must produce a valid empty packet");
 
+  request.style.level = 0.5;
+  request.memory_budget_bytes = 1U;
+  const auto budget = render::build_isosurface(request);
+  passed &= expect(!budget.has_value() &&
+                       budget.error().code ==
+                           operation::ErrorCode::resource_exhausted,
+                   "isosurface working memory budget must fail explicitly");
+  request.memory_budget_bytes = std::numeric_limits<std::size_t>::max();
+
   request.style.level = std::numeric_limits<double>::quiet_NaN();
   passed &= expect(!render::build_isosurface(request).has_value(),
                    "non-finite levels must fail validation");

@@ -91,6 +91,7 @@ struct ParsedAtom {
   bool hetero{};
   std::uint8_t atomic_number{};
   std::int32_t formal_charge{};
+  bool formal_charge_present{};
   Vec3d position;
   std::optional<double> occupancy;
   std::optional<double> b_factor;
@@ -225,6 +226,7 @@ Result<ParsedAtom> parse_atom(std::string_view line, std::size_t line_number,
   atom.hetero = hetero;
   atom.atomic_number = element.value();
   atom.formal_charge = charge.value();
+  atom.formal_charge_present = !trim(field(line, 78, 2)).empty();
   atom.position = Vec3d{x.value(), y.value(), z.value()};
   atom.occupancy = occupancy.value();
   atom.b_factor = b_factor.value();
@@ -453,7 +455,10 @@ Result<StructureDocument> read_pdb(std::string_view content,
     const auto added = builder.add_atom(AtomRecord{
         atom.identity.atom_name, atom.atomic_number, residue->second,
         atom.identity.alternate_location, atom.formal_charge,
-        atom.identity.serial});
+        atom.identity.serial, std::nullopt,
+        model::AtomStereoParity::unspecified, model::RadicalState::none,
+        atom.formal_charge_present,
+        model::ChemicalAnnotationOrigin::explicit_input});
     if (!added.has_value()) {
       return Result<StructureDocument>::failure(added.error());
     }
@@ -480,7 +485,9 @@ Result<StructureDocument> read_pdb(std::string_view content,
     }
     if (const auto error = builder.add_bond(
             Bond{AtomIndex{endpoints.first}, AtomIndex{endpoints.second},
-                 BondOrder::unknown});
+                 BondOrder::unknown, model::BondQuery::none,
+                 model::BondStereo::none,
+                 model::ChemicalAnnotationOrigin::explicit_input});
         error.has_value()) {
       return Result<StructureDocument>::failure(*error);
     }

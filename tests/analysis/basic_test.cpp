@@ -193,6 +193,69 @@ int main() {
                             .has_value(),
                    "missing and out-of-range distance endpoints must fail");
 
+  const auto right_angle = analysis::atom_angle(
+      *fixture.frame, model::AtomIndex{1U}, model::AtomIndex{0U},
+      model::AtomIndex{2U});
+  passed &= expect(right_angle.has_value() &&
+                       near(right_angle.value().angle_degrees, 90.0) &&
+                       right_angle.value().boundary ==
+                           analysis::DistanceBoundary::raw,
+                   "atan2 angle must return the analytic right angle");
+  const auto signed_dihedral_frame = model::CoordinateFrame::create(
+      model::CoordinateBuffer{std::vector<model::Vec3d>{
+          {1.0, 0.0, 0.0}, {0.0, 0.0, 0.0}, {0.0, 1.0, 0.0},
+          {0.0, 1.0, 1.0}}});
+  const auto negative_dihedral = analysis::atom_dihedral(
+      *signed_dihedral_frame.value(), model::AtomIndex{0U},
+      model::AtomIndex{1U}, model::AtomIndex{2U}, model::AtomIndex{3U});
+  passed &= expect(negative_dihedral.has_value() &&
+                       near(negative_dihedral.value().angle_degrees, -90.0),
+                   "projected-vector atan2 must preserve dihedral sign");
+
+  auto periodic_metadata = model::FrameMetadata{};
+  periodic_metadata.unit_cell = model::UnitCell{{10.0, 0.0, 0.0},
+                                                 {0.0, 10.0, 0.0},
+                                                 {0.0, 0.0, 10.0}};
+  const auto periodic_frame = model::CoordinateFrame::create(
+      model::CoordinateBuffer{std::vector<model::Vec3d>{
+          {1.0, 0.0, 0.0}, {9.0, 0.0, 0.0}, {9.0, 1.0, 0.0},
+          {9.0, 1.0, 1.0}}},
+      std::nullopt, {}, periodic_metadata);
+  const auto periodic_angle = analysis::atom_angle(
+      *periodic_frame.value(), model::AtomIndex{0U}, model::AtomIndex{1U},
+      model::AtomIndex{2U}, analysis::DistanceBoundary::minimum_image);
+  const auto periodic_dihedral = analysis::atom_dihedral(
+      *periodic_frame.value(), model::AtomIndex{0U}, model::AtomIndex{1U},
+      model::AtomIndex{2U}, model::AtomIndex{3U},
+      analysis::DistanceBoundary::minimum_image);
+  passed &= expect(periodic_angle.has_value() &&
+                       near(periodic_angle.value().angle_degrees, 90.0) &&
+                       periodic_dihedral.has_value() &&
+                       near(periodic_dihedral.value().angle_degrees, -90.0),
+                   "minimum-image geometry must unwrap each consecutive bond");
+
+  const auto collinear_frame = model::CoordinateFrame::create(
+      model::CoordinateBuffer{std::vector<model::Vec3d>{
+          {0.0, 0.0, 0.0}, {1.0, 0.0, 0.0}, {2.0, 0.0, 0.0},
+          {3.0, 1.0, 0.0}}});
+  passed &= expect(
+      !analysis::atom_angle(*fixture.frame, model::AtomIndex{0U},
+                            model::AtomIndex{0U}, model::AtomIndex{1U})
+           .has_value() &&
+          !analysis::atom_angle(*fixture.frame, model::AtomIndex{0U},
+                                model::AtomIndex{1U}, model::AtomIndex{3U})
+               .has_value() &&
+          !analysis::atom_angle(*fixture.frame, model::AtomIndex{0U},
+                                model::AtomIndex{1U}, model::AtomIndex{2U},
+                                analysis::DistanceBoundary::minimum_image)
+               .has_value() &&
+          !analysis::atom_dihedral(
+               *collinear_frame.value(), model::AtomIndex{0U},
+               model::AtomIndex{1U}, model::AtomIndex{2U},
+               model::AtomIndex{3U})
+               .has_value(),
+      "duplicate, missing-cell, missing-atom and collinear geometry must fail");
+
   const auto cancellation_frame = model::CoordinateFrame::create(
       model::CoordinateBuffer{std::vector<model::Vec3d>{
           {1.0e16, 0.0, 0.0}, {1.0, 0.0, 0.0}, {-1.0e16, 0.0, 0.0}}});

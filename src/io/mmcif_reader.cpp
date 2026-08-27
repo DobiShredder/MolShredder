@@ -649,7 +649,10 @@ Result<StructureData> build_structure(const CifBlock &block,
     }
     const auto added = builder.add_atom(AtomRecord{
         atom->atom_name, atom->atomic_number, residue->second,
-        atom->identity.alternate_location, atom->formal_charge, numeric_id});
+        atom->identity.alternate_location, atom->formal_charge, numeric_id,
+        std::nullopt, model::AtomStereoParity::unspecified,
+        model::RadicalState::none, atom->formal_charge_present,
+        model::ChemicalAnnotationOrigin::explicit_input});
     if (!added.has_value()) {
       return Result<StructureData>::failure(added.error());
     }
@@ -722,7 +725,9 @@ Result<StructureData> build_structure(const CifBlock &block,
         }
       }
       if (const auto error = builder.add_bond(model::Bond{
-              AtomIndex{endpoints.first}, AtomIndex{endpoints.second}, order});
+              AtomIndex{endpoints.first}, AtomIndex{endpoints.second}, order,
+              model::BondQuery::none, model::BondStereo::none,
+              model::ChemicalAnnotationOrigin::explicit_input});
           error.has_value()) {
         return Result<StructureData>::failure(*error);
       }

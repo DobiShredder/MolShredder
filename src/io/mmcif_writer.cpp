@@ -370,6 +370,7 @@ std::string bond_order(model::BondOrder order) {
   case model::BondOrder::amide:
   case model::BondOrder::zero:
   case model::BondOrder::unknown:
+  case model::BondOrder::query:
     return "?";
   }
   return "?";
@@ -738,6 +739,8 @@ write_mmcif(std::ostream &output, const model::Topology &topology,
 
   std::uint64_t amide_bonds{};
   std::uint64_t zero_order_bonds{};
+  std::uint64_t query_bonds{};
+  std::uint64_t bond_stereo_losses{};
   if (!topology.bonds().empty()) {
     output << "loop_\n"
            << "_struct_conn.id\n"
@@ -799,6 +802,10 @@ write_mmcif(std::ostream &output, const model::Topology &topology,
         ++amide_bonds;
       if (bond.order == model::BondOrder::zero)
         ++zero_order_bonds;
+      if (bond.order == model::BondOrder::query)
+        ++query_bonds;
+      if (bond.stereo != model::BondStereo::none)
+        ++bond_stereo_losses;
     }
     output << "#\n";
   }
@@ -832,6 +839,10 @@ write_mmcif(std::ostream &output, const model::Topology &topology,
   losses.add("zero_bond_order", zero_order_bonds,
              "PDBx struct_conn has no native zero value-order code; endpoint "
              "is preserved with unknown order");
+  losses.add("query_bond", query_bonds,
+             "PDBx struct_conn output does not preserve V2000 query bond constraints");
+  losses.add("bond_stereo", bond_stereo_losses,
+             "PDBx struct_conn output does not preserve core bond stereo");
   losses.add("higher_connectivity",
              static_cast<std::uint64_t>(topology.angles().size() +
                                         topology.dihedrals().size() +
@@ -849,6 +860,30 @@ write_mmcif(std::ostream &output, const model::Topology &topology,
   losses.add("frame_metadata", other_frame_fields,
              "mmCIF output does not preserve arbitrary typed frame metadata");
   std::uint64_t other_atom_properties{};
+  std::uint64_t isotope_losses{};
+  std::uint64_t radical_losses{};
+  std::uint64_t atom_stereo_losses{};
+  for (const auto &atom : topology.atoms()) {
+    isotope_losses += atom.isotope_mass_number.has_value() ? 1U : 0U;
+    radical_losses += atom.radical != model::RadicalState::none ? 1U : 0U;
+    atom_stereo_losses +=
+        atom.stereo_parity != model::AtomStereoParity::unspecified ? 1U : 0U;
+  }
+  losses.add("isotope", isotope_losses,
+             "mmCIF atom_site output does not preserve isotope mass number");
+  losses.add("radical", radical_losses,
+             "mmCIF atom_site output does not preserve radical state");
+  losses.add("atom_stereo", atom_stereo_losses,
+             "mmCIF atom_site output does not preserve atom stereo parity");
+  const auto residue_semantics_losses = static_cast<std::uint64_t>(
+      std::ranges::count_if(topology.residues(),
+                            [](const model::ResidueRecord &residue) {
+                              return residue.chemical_origin !=
+                                     model::ChemicalAnnotationOrigin::unspecified;
+                            }));
+  losses.add(
+      "residue_semantics", residue_semantics_losses,
+      "mmCIF output does not preserve normalized residue/polymer classification");
   for (const auto &name : topology.properties().names()) {
     if (name != "mmcif.atom_site_id" && name != "mmcif.label_asym_id" &&
         name != "mmcif.label_seq_id" && name != "mmcif.label_entity_id" &&

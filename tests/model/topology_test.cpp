@@ -46,6 +46,10 @@ int main() {
       AtomRecord{"X", 119, residue.value(), "", 0, std::nullopt});
   passed &= expect(!invalid_element.has_value(),
                    "atomic number above 118 must fail");
+  const auto invalid_isotope = builder.add_atom(AtomRecord{
+      "X", 6, residue.value(), "", 0, std::nullopt, std::uint16_t{0}});
+  passed &= expect(!invalid_isotope.has_value(),
+                   "present isotope mass number zero must fail");
 
   const std::vector<AtomRecord> atoms{
       {"N", 7, residue.value(), "", 0, 101},
@@ -67,7 +71,9 @@ int main() {
 
   passed &= expect(!builder.add_bond(
                         Bond{atom_indices[1], atom_indices[0],
-                             BondOrder::single})
+                             BondOrder::single, BondQuery::none,
+                             BondStereo::up,
+                             ChemicalAnnotationOrigin::explicit_input})
                         .has_value(),
                    "valid reversed bond must canonicalize and add");
   passed &= expect(builder.add_bond(
@@ -83,6 +89,12 @@ int main() {
                        Bond{atom_indices[0], AtomIndex{99}, BondOrder::single})
                        .has_value(),
                    "bond with unknown atom must fail");
+  const auto malformed_query = builder.add_bond(
+      Bond{atom_indices[2], atom_indices[3], BondOrder::query});
+  passed &= expect(
+      malformed_query.has_value() &&
+          malformed_query->message.find("query") != std::string::npos,
+      "query bond order without an exact query constraint must fail");
   passed &= expect(!builder.add_angle(
                         Angle{atom_indices[0], atom_indices[1], atom_indices[2]})
                         .has_value(),
@@ -177,8 +189,11 @@ int main() {
                      "topology version and counts must be preserved");
     passed &= expect(topology.bonds().size() == 1 &&
                          topology.bonds()[0].first.value == 0 &&
-                         topology.bonds()[0].second.value == 1,
-                     "bond endpoints must use canonical stable indices");
+                         topology.bonds()[0].second.value == 1 &&
+                         topology.bonds()[0].stereo == BondStereo::down &&
+                         topology.bonds()[0].order_origin ==
+                             ChemicalAnnotationOrigin::explicit_input,
+                     "bond canonicalization must preserve directional stereo and origin");
     passed &= expect(
         topology.atom_ids() ==
                 std::vector<AtomId>{{1U}, {2U}, {3U}, {4U}} &&
@@ -257,6 +272,9 @@ int main() {
               remapped.value()->bond_ids() == std::vector<BondId>{{1U}} &&
               remapped.value()->bonds()[0].first == AtomIndex{1U} &&
               remapped.value()->bonds()[0].second == AtomIndex{2U} &&
+              remapped.value()->bonds()[0].stereo == BondStereo::up &&
+              remapped.value()->bonds()[0].order_origin ==
+                  ChemicalAnnotationOrigin::explicit_input &&
               remapped.value()->angles().empty() &&
               remapped.value()->dihedrals().empty() &&
               remapped.value()->impropers().empty() &&
@@ -332,6 +350,31 @@ int main() {
           after_reinsertion.value()->atom_ids() ==
               std::vector<AtomId>{{1U}, {3U}},
       "deleted atom identities must never be reused by a later insertion");
+
+  auto property_editor = TopologyBuilder::from(*insertion_target.value());
+  auto edited_atom = insertion_target.value()->atoms().front();
+  edited_atom.name = "CA";
+  edited_atom.formal_charge = 1;
+  edited_atom.formal_charge_present = true;
+  edited_atom.chemical_origin = ChemicalAnnotationOrigin::user_override;
+  auto edited_residue = insertion_target.value()->residues().front();
+  edited_residue.name = "LIG";
+  edited_residue.kind = ResidueKind::ligand;
+  edited_residue.chemical_origin = ChemicalAnnotationOrigin::user_override;
+  const auto atom_edit_error =
+      property_editor.set_atom(AtomIndex{0U}, edited_atom);
+  const auto residue_edit_error =
+      property_editor.set_residue(ResidueIndex{0U}, edited_residue);
+  const auto property_edited = property_editor.build();
+  passed &= expect(
+      !atom_edit_error.has_value() && !residue_edit_error.has_value() &&
+          property_edited.has_value() &&
+          property_edited.value()->atom_ids() ==
+              insertion_target.value()->atom_ids() &&
+          property_edited.value()->atoms().front().name == "CA" &&
+          property_edited.value()->atoms().front().formal_charge == 1 &&
+          property_edited.value()->residues().front().name == "LIG",
+      "atom/residue property edits must preserve stable identity and validate chemistry before build");
 
   return passed ? 0 : 1;
 }

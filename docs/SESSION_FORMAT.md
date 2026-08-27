@@ -1,55 +1,92 @@
-# Foundation session format
+# MolShredder session format
 
-현재 session은 application state 전체를 dump하는 형식이 아니라 canonical command journal을 versioned
-문서로 저장하고 replay하는 foundation skeleton이다. Schema version 1의 text 형식은 다음과 같다.
+MolShredder session은 schema 2의 versioned canonical-operation journal이다. 파일 확장자는 `.msess`이며 object와
+trajectory/volume 원본을 복제하지 않고 경로로 참조한다. Session load는 새 `Workspace`에서 허용된 operation만 모두
+replay한 뒤 성공한 candidate를 한 번에 publish한다.
 
 ```text
-molshredder-session 1
+molshredder-session 2
 generator 0.1.0
+metadata invoke "session metadata" --key "ui.visible-panels" --value "analysis,views"
 invoke "load" --file-format "pdb" --name "protein" --path "input.pdb"
 invoke "select" --expression "chain A" --name "chain_a" --update "false"
 invoke "show" --representation "spheres" --selection "@chain_a"
-invoke "traj load" --cache-mib "256" --file-format "dcd" --mapping "index" --path "run.dcd"
-invoke "traj range" --direction "forward" --first "0" --last "500" --mode "loop" --stride "5"
-invoke "traj speed" --fps "30"
-invoke "traj frame" --frame "250"
+invoke "scene store" --name "active site"
+invoke "movie configure" --fps "24" --frames "120" --loop "true"
+invoke "movie keyframe" --frame "1" --scene "active site"
 invoke "view set" --distance "25" --target-x "3"
-invoke "view store" --name "active site close-up"
-invoke "stereo set" --anaglyph-mode "optimized" --angle-scale "2.1" --enabled "true" --mode "side_by_side" --shift-percent "2" --swap-eyes "false"
+invoke "stereo set" --enabled "false"
 ```
 
-첫 줄은 session schema version, 둘째 줄은 작성한 MolShredder version이다. 이후 각 non-empty line은
-`command::serialize()`가 만든 canonical invocation 하나다. Arguments는 key 순서로 결정적으로
-직렬화되고 quote, backslash, newline과 tab escape를 지원한다. Alias나 생략된 default가 아니라
-registry normalization 이후 invocation을 기록하는 것이 producer의 책임이다.
+Arguments는 registry normalization 이후 key 순서로 직렬화되며 quote, backslash, newline과 tab escape를 지원한다.
+성공한 persistent mutation만 journal에 들어간다. Query, export, session file operation, failed operation과 dynamic
+Python/process launch는 저장하지 않는다. Product replay는 현재 Registry의 allowlist를 문서 전체에 먼저 적용하므로
+untrusted session에 들어 있는 query/export/script/process command는 Workspace나 filesystem을 변경하기 전에 거부된다.
 
-`parse_session()`은 schema 1만 받고 unknown version, malformed header/generator와 잘못된 canonical
-line을 명시적으로 거부한다. `replay_session()`은 기존 Dispatcher를 통해 순서대로 command를 실행해
-GUI/CLI/Python과 동일한 validation/kernel을 사용한다. Cancellation은 command 사이에서 확인하고
-실패에는 1-based command 번호를 포함한다.
+## 보존 상태
 
-## 현재 한계
+Journal replay와 trailing camera/stereo snapshot은 다음 상태를 재구성한다.
 
-- Load command가 원본 file path를 참조하므로 session은 self-contained가 아니다. File 이동, 내용
-  변경 또는 삭제 시 replay가 실패할 수 있다.
-- Replay는 아직 transactional하지 않다. N번째 command가 실패하면 앞의 N-1개 mutation은 적용된
-  상태로 남으므로 caller는 새 Workspace에서 replay해야 한다.
-- Camera와 named-view state는 journal에 canonical `view set/store/recall` command가 명시된 경우 재현된다.
-  `view import-pymol`의 18-value text와 optional duration/hand도 canonical invocation으로 replay된다. Replay는
-  wall-clock transition을 기다리지 않고 command가 즉시 commit한 endpoint를 복원한다.
-  Product-facing `serialize_session(document, workspace)` overload는 현재 camera 17개 field와 stereo 6개 field를
-  trailing `view set`/`stereo set` pair로 자동 추가한다. 기존 complete pair는 교체해 반복 저장 시 중복하지 않는다.
-  Partial `view set`과 앞선 journal은 보존한다.
-  Transient center marker, UI layout, raw molecular data, external file hash와 unknown future field는 저장하지 않는다.
-  Active trajectory frame은 canonical `traj frame` command가 있는 경우
-  재현되지만 external topology/trajectory path가 그대로 유효해야 한다.
-- Schema migration, atomic file I/O, compression, embedded/relative asset policy와 GUI save/open action은
-  후속 session vertical slice에서 추가한다.
+- object, stable identity, visibility, molecular/volume source와 active object
+- representation, render setting, named/dynamic selection과 current molecular/trajectory state
+- persistent measurement/analysis result, overlay visibility와 scientific provenance
+- trajectory attachment/range/speed/frame, volume presentation 및 editing/build/undo/redo history
+- camera, projection, clipping, stereo와 named view
+- full-Workspace named scene collection과 typed scene/trajectory movie timeline
+- Desktop의 안정적으로 식별되는 visible workflow panel 목록 (`ui.visible-panels` extension)
 
-이 skeleton의 목적은 command/session round-trip과 migration boundary를 먼저 검증하는 것이다. 향후
-container manifest를 추가하더라도 canonical command journal은 provenance와 재현 기록으로 유지한다.
+Named scene은 저장 시점의 detached `Workspace` snapshot을 보유한다. Recall은 scene collection, current journal과 movie
+track을 보존하면서 snapshot을 failure-atomically publish한다. Movie keyframe은 scene name과 0-based trajectory frame만
+허용하며 임의 command나 script 문자열을 실행하지 않는다. Movie frame은 1-based이고 최대 1,000,000 frame,
+frame rate는 `(0, 240]` 범위다.
 
-Final view snapshot은 의도적으로 camera/stereo-only다. Workspace의 object, representation, measurement, named-view inventory,
-trajectory frame 또는 PyMOL scene channel을 검사해 암묵적으로 직렬화하지 않는다. 이들 상태는 각자의 canonical journal
-command 또는 향후 명시적인 full-scene/container schema가 담당한다. 따라서 camera snapshot 성공을 full scene 저장 지원으로
-해석하면 안 된다.
+Schema 2 metadata는 core가 모르는 extension key/value도 deterministic map order로 lossless round-trip한다. Desktop은
+현재 visible panel 목록만 해석한다. Window geometry, transient dialog, hover/focus, center marker, GPU cache와 running task는
+의도적으로 저장하지 않는다.
+
+## Migration, relink와 recovery
+
+`parse_session()`은 schema 1 journal을 source schema version과 migration note가 있는 schema 2 document로 결정적으로
+migration한다. Duplicate/malformed metadata, malformed invocation과 unknown future schema는 replay 전에 거부한다.
+
+`session load`는 `load`, `traj load`, `volume load`의 실제로 누락된 singular `path`만 relink 대상으로 보고한다.
+`--relink-original`과 `--relink-target`은 한 exact mapping pair이며 target regular file을 canonicalize한다. Prefix,
+basename, directory scan 같은 heuristic은 사용하지 않는다.
+
+Primary가 없거나 truncated/corrupt인 경우에만 사용자가 명시한 `--recovery`를 같은 byte budget으로 검사한다. 주변
+directory를 자동 검색하지 않으며 response에는 source path, primary error, recovery 여부, source/current schema,
+migration note와 relink count가 포함된다.
+
+## File transaction과 autosave
+
+`session save`와 `session autosave`는 기본 64 MiB, 최대 1024 MiB의 bounded serialization을 사용한다. Manual save는
+같은 directory에 complete candidate를 만든다. 기존 regular file이 있으면 고유 backup으로 stage하고 candidate를
+publish하며, publish 실패 시 이전 파일을 복원한다.
+
+Autosave는 explicit primary/recovery 두 generation을 같은 existing directory에서 관리한다. 새 candidate가 완전히
+기록된 뒤 이전 primary를 recovery로 rotate하고 candidate를 primary로 publish한다. 어느 단계든 실패하면 이전
+generation을 복원한다. Desktop은 session path가 설정된 동안 2분 간격으로 autosave하며 현재 visible panel 목록도 함께
+저장한다.
+
+## Canonical operations
+
+```text
+scene list|store|recall|delete|clear
+movie status|configure|keyframe|seek|play|pause|step|clear
+session save --path FILE [--ui-visible-panels IDS] [--maximum-mib 64]
+session autosave --path FILE --recovery FILE [--ui-visible-panels IDS] [--maximum-mib 64]
+session load --path FILE [--recovery FILE]
+             [--relink-original OLD --relink-target NEW] [--maximum-mib 64]
+```
+
+GUI, CLI와 Python `invoke()`는 위 operation과 structured result/error를 공유한다. `.msess`는 MolShredder native format이며
+PyMOL PSE/PSW와 호환된다고 주장하지 않는다.
+
+## 명시적 한계
+
+- Session은 self-contained container가 아니다. External file content hash, embedded asset, compression과 relative asset
+  manifest는 아직 없다.
+- Exact relink는 한 pair만 지원하며 batch mapping UI는 아직 없다.
+- PyMOL의 independent scene channel flag, thumbnail/message, arbitrary movie command 및 aligned object-matrix animation 전체와
+  parity를 주장하지 않는다.
+- Schema 1→2 migration만 현재 지원한다.

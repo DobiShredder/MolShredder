@@ -15,7 +15,8 @@ int main(int argc, char* argv[]) {
   if (argc < 2 || argc > 3) {
     std::cerr << "usage: gui_probe version|info|com|view|view-origin-position|projection|view-reset|clip|"
                  "get-clip|move|turn|stereo|pymol-view|state-all|orient-all|representation-visibility|render-setting "
-                 "|object-lifecycle|load-batch "
+                 "|object-lifecycle|object-chemistry|object-perception|object-perception-apply|object-chemistry-after-perception|load-batch "
+                 "|selection-numeric|selection-numeric-error|selection-spatial|session-workflow "
                  "[fixture]\n";
     return 2;
   }
@@ -126,6 +127,43 @@ int main(int argc, char* argv[]) {
       return 2;
     }
     action.command_name = "object list";
+  } else if (scenario == "edit-workflow") {
+    if (argc != 3) {
+      std::cerr << "edit-workflow requires a structure fixture\n";
+      return 2;
+    }
+    action.command_name = "edit history";
+  } else if (scenario == "molecule-builder") {
+    if (argc != 2) {
+      std::cerr << "molecule-builder takes no fixture\n";
+      return 2;
+    }
+    action.command_name = "edit history";
+  } else if (scenario == "object-chemistry") {
+    if (argc != 3) {
+      std::cerr << "object-chemistry requires a structure fixture\n";
+      return 2;
+    }
+    action.command_name = "object chemistry";
+  } else if (scenario == "object-perception") {
+    if (argc != 3) {
+      std::cerr << "object-perception requires a structure fixture\n";
+      return 2;
+    }
+    action.command_name = "object perceive-chemistry";
+  } else if (scenario == "object-perception-apply") {
+    if (argc != 3) {
+      std::cerr << "object-perception-apply requires a structure fixture\n";
+      return 2;
+    }
+    action.command_name = "object perceive-chemistry";
+    action.parameters = {{"apply", "true"}};
+  } else if (scenario == "object-chemistry-after-perception") {
+    if (argc != 3) {
+      std::cerr << "object-chemistry-after-perception requires a structure fixture\n";
+      return 2;
+    }
+    action.command_name = "object chemistry";
   } else if (scenario == "load-batch") {
     if (argc != 3) {
       std::cerr << "load-batch requires a structure fixture\n";
@@ -135,6 +173,37 @@ int main(int argc, char* argv[]) {
     action.parameters = {{"file-format", "pdb"},
                          {"names", "batch-one;batch-two"},
                          {"paths", std::string{argv[2]} + ";" + argv[2]}};
+  } else if (scenario == "selection-numeric") {
+    if (argc != 3) {
+      std::cerr << "selection-numeric requires a structure fixture\n";
+      return 2;
+    }
+    action.command_name = "show";
+    action.parameters = {{"representation", "spheres"},
+                         {"selection", "@numeric_atoms"}};
+  } else if (scenario == "selection-numeric-error") {
+    if (argc != 3) {
+      std::cerr << "selection-numeric-error requires a structure fixture\n";
+      return 2;
+    }
+    action.command_name = "select";
+    action.parameters = {{"expression", "formal_charge / 0 > 1"},
+                         {"name", "bad_numeric"},
+                         {"update", "true"}};
+  } else if (scenario == "selection-spatial") {
+    if (argc != 3) {
+      std::cerr << "selection-spatial requires a structure fixture\n";
+      return 2;
+    }
+    action.command_name = "show";
+    action.parameters = {{"representation", "lines"},
+                         {"selection", "@spatial_atoms"}};
+  } else if (scenario == "session-workflow") {
+    if (argc != 3) {
+      std::cerr << "session-workflow requires a structure fixture\n";
+      return 2;
+    }
+    action.command_name = "movie status";
   } else {
     std::cerr << "unsupported probe scenario\n";
     return 2;
@@ -147,8 +216,112 @@ int main(int argc, char* argv[]) {
   std::vector<std::string> lifecycle_results;
   if (scenario == "state-all" || scenario == "orient-all" ||
       scenario == "representation-visibility" ||
-      scenario == "render-setting" || scenario == "object-lifecycle") {
-    if (scenario == "object-lifecycle") {
+      scenario == "render-setting" || scenario == "object-lifecycle" ||
+      scenario == "edit-workflow" ||
+      scenario == "session-workflow" ||
+      scenario == "molecule-builder" ||
+      scenario == "object-chemistry" || scenario == "object-perception" ||
+      scenario == "object-perception-apply" ||
+      scenario == "object-chemistry-after-perception") {
+    if (scenario == "session-workflow") {
+      const std::array<molshredder::gui::Action, 9U> setup{
+          molshredder::gui::Action{"load", {{"name", "session-object"},
+                                             {"path", argv[2]}}},
+          molshredder::gui::Action{"show", {{"representation", "spheres"},
+                                             {"selection", "all"}}},
+          molshredder::gui::Action{"scene store", {{"name", "baseline"}}},
+          molshredder::gui::Action{"movie configure", {{"fps", "24"},
+                                                        {"frames", "3"},
+                                                        {"loop", "true"}}},
+          molshredder::gui::Action{"movie keyframe", {{"frame", "2"},
+                                                       {"scene", "baseline"}}},
+          molshredder::gui::Action{"object visibility", {{"id", "1"},
+                                                          {"visible", "false"}}},
+          molshredder::gui::Action{"movie seek", {{"frame", "2"}}},
+          molshredder::gui::Action{"movie play", {}},
+          molshredder::gui::Action{"movie pause", {}}};
+      for (const auto &setup_action : setup) {
+        const auto setup_outcome = gui.trigger(setup_action, context);
+        if (!setup_outcome.succeeded()) {
+          std::cerr << "session workflow setup failed\n";
+          return 2;
+        }
+        const auto setup_rendered = molshredder::command::render(
+            setup_outcome.envelope,
+            molshredder::operation::OutputFormat::json);
+        if (!setup_rendered.has_value()) return 2;
+        lifecycle_results.push_back(setup_rendered.value());
+      }
+    } else if (scenario == "molecule-builder") {
+      const std::array<molshredder::gui::Action, 9U> setup{
+          molshredder::gui::Action{
+              "build molecule",
+              {{"name", "carbonyl"},
+               {"atoms", "C,6,0,0,0,0;O,8,1.2,0,0,0"},
+               {"bonds", "1,2,double"},
+               {"residue-name", "LIG"}, {"chain", "A"},
+               {"residue-number", "1"}, {"unit", "angstrom"},
+               {"memory-budget-bytes", "1048576"}}},
+          molshredder::gui::Action{"edit undo", {}},
+          molshredder::gui::Action{"edit redo", {}},
+          molshredder::gui::Action{
+              "edit atom-properties",
+              {{"atom-id", "1"}, {"name", "C1"},
+               {"formal-charge", "1"},
+               {"expected-topology-version", "1"},
+               {"expected-coordinate-source-revision", "1"}}},
+          molshredder::gui::Action{
+              "edit residue-properties",
+              {{"atom-id", "1"}, {"name", "CRB"}, {"chain", "B"},
+               {"residue-number", "7"},
+               {"expected-topology-version", "2"},
+               {"expected-coordinate-source-revision", "2"}}},
+          molshredder::gui::Action{
+              "edit bond-order",
+              {{"bond-id", "1"}, {"order", "single"},
+               {"expected-topology-version", "3"},
+               {"expected-coordinate-source-revision", "3"}}},
+          molshredder::gui::Action{"edit undo", {}},
+          molshredder::gui::Action{"edit redo", {}},
+          molshredder::gui::Action{"object chemistry", {}}};
+      for (const auto &setup_action : setup) {
+        const auto setup_outcome = gui.trigger(setup_action, context);
+        if (!setup_outcome.succeeded()) {
+          std::cerr << "molecule builder workflow setup failed\n";
+          return 2;
+        }
+        const auto setup_rendered = molshredder::command::render(
+            setup_outcome.envelope,
+            molshredder::operation::OutputFormat::json);
+        if (!setup_rendered.has_value()) return 2;
+        lifecycle_results.push_back(setup_rendered.value());
+      }
+    } else if (scenario == "edit-workflow") {
+      const std::array<molshredder::gui::Action, 4U> setup{
+          molshredder::gui::Action{"load", {{"name", "editable"},
+                                             {"path", argv[2]}}},
+          molshredder::gui::Action{
+              "edit atom-position",
+              {{"atom-id", "1"},
+               {"x", "9"}, {"y", "8"}, {"z", "7"},
+               {"expected-topology-version", "1"},
+               {"expected-coordinate-source-revision", "1"},
+               {"unit", "angstrom"}}},
+          molshredder::gui::Action{"edit undo", {}},
+          molshredder::gui::Action{"edit redo", {}}};
+      for (const auto &setup_action : setup) {
+        const auto setup_outcome = gui.trigger(setup_action, context);
+        if (!setup_outcome.succeeded()) {
+          std::cerr << "edit workflow setup failed\n";
+          return 2;
+        }
+        const auto setup_rendered = molshredder::command::render(
+            setup_outcome.envelope,
+            molshredder::operation::OutputFormat::json);
+        if (!setup_rendered.has_value()) return 2;
+        lifecycle_results.push_back(setup_rendered.value());
+      }
+    } else if (scenario == "object-lifecycle") {
       const std::array<molshredder::gui::Action, 9U> setup{
           molshredder::gui::Action{"load", {{"name", "alpha"},
                                              {"path", argv[2]}}},
@@ -181,6 +354,26 @@ int main(int argc, char* argv[]) {
           return 2;
         }
         lifecycle_results.push_back(setup_rendered.value());
+      }
+    } else if (scenario == "object-chemistry" ||
+               scenario == "object-perception" ||
+               scenario == "object-perception-apply" ||
+               scenario == "object-chemistry-after-perception") {
+      const auto loaded = gui.trigger(
+          {"load", {{"file-format", "sdf"}, {"path", argv[2]}}}, context);
+      const auto activated =
+          gui.trigger({"object activate", {{"id", "1"}}}, context);
+      if (!loaded.succeeded() || !activated.succeeded()) {
+        std::cerr << "chemical semantics fixture setup failed\n";
+        return 2;
+      }
+      if (scenario == "object-chemistry-after-perception") {
+        const auto applied = gui.trigger(
+            {"object perceive-chemistry", {{"apply", "true"}}}, context);
+        if (!applied.succeeded()) {
+          std::cerr << "chemical perception apply setup failed\n";
+          return 2;
+        }
       }
     } else {
     const auto loaded = gui.trigger(
@@ -226,6 +419,50 @@ int main(int argc, char* argv[]) {
         return 2;
       }
     }
+    }
+  }
+  if (scenario == "selection-numeric" ||
+      scenario == "selection-numeric-error" ||
+      scenario == "selection-spatial") {
+    const auto loaded = gui.trigger(
+        {"load", {{"file-format", "pdb"}, {"path", argv[2]}}}, context);
+    if (!loaded.succeeded()) {
+      std::cerr << "numeric selection fixture load failed\n";
+      return 2;
+    }
+    if (scenario == "selection-numeric") {
+      const auto selected = gui.trigger(
+          {"select",
+           {{"expression", "formal_charge > 0 or index * 2 = 4"},
+            {"name", "numeric_atoms"},
+            {"update", "true"}}},
+          context);
+      if (!selected.succeeded()) {
+        std::cerr << "numeric selection setup failed\n";
+        return 2;
+      }
+    } else if (scenario == "selection-spatial") {
+      const auto numeric_selected = gui.trigger(
+          {"select",
+           {{"expression", "formal_charge > 0 or index * 2 = 4"},
+            {"name", "numeric_atoms"},
+            {"update", "true"}}},
+          context);
+      const auto numeric_shown = gui.trigger(
+          {"show", {{"representation", "spheres"},
+                    {"selection", "@numeric_atoms"}}},
+          context);
+      const auto selected = gui.trigger(
+          {"select",
+           {{"expression", "index 1 around 2"},
+            {"name", "spatial_atoms"},
+            {"update", "true"}}},
+          context);
+      if (!numeric_selected.succeeded() || !numeric_shown.succeeded() ||
+          !selected.succeeded()) {
+        std::cerr << "spatial selection setup failed\n";
+        return 2;
+      }
     }
   }
   const auto outcome = gui.trigger(action, context);

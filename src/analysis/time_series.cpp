@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <map>
 #include <string>
 #include <tuple>
@@ -325,6 +326,72 @@ operation::Result<std::vector<RmsdSeriesRow>> rmsd_series(
   }
   return operation::Result<std::vector<RmsdSeriesRow>>::success(
       std::move(rows));
+}
+
+operation::Result<RmsdMatrixResult> rmsd_matrix(
+    const RmsdMatrixRequest& request,operation::TaskContext& context) {
+  if(const auto failure=validate_range(request.source,request.range);failure.has_value())
+    return operation::Result<RmsdMatrixResult>::failure(*failure);
+  if(const auto failure=validate_alignment_series_inputs(
+         request.source->atom_count(),request.selected,request.fit_selected,
+         request.weights);failure.has_value())
+    return operation::Result<RmsdMatrixResult>::failure(*failure);
+  if(request.frame_pair_budget==0U)
+    return operation::Result<RmsdMatrixResult>::failure(invalid("RMSD matrix frame-pair budget must be positive"));
+  RmsdMatrixResult result;
+  std::size_t frame_index=request.range.first;
+  while(true) {
+    result.frame_indices.push_back(frame_index);
+    if(frame_index==request.range.last || !next_frame(frame_index,request.range)) break;
+  }
+  const auto n=result.frame_indices.size();
+  if(n==std::numeric_limits<std::size_t>::max() ||
+     (n>0U && n>std::numeric_limits<std::size_t>::max()/(n+1U)))
+    return operation::Result<RmsdMatrixResult>::failure(invalid("RMSD matrix dimensions overflow"));
+  const auto unique_pairs=(n*(n+1U))/2U;
+  if(unique_pairs>request.frame_pair_budget)
+    return operation::Result<RmsdMatrixResult>::failure(
+        operation::Error{operation::ErrorCode::resource_exhausted,
+          "RMSD matrix frame-pair budget is smaller than the requested upper triangle",
+          "reduce the frame range or increase frame-pair-budget"});
+  result.upper_triangle.reserve(unique_pairs);
+  for(std::size_t row=0;row<n;++row) {
+    if(context.cancellation.is_cancelled())
+      return operation::Result<RmsdMatrixResult>::failure(
+          operation::Error{operation::ErrorCode::cancelled,"RMSD matrix calculation cancelled",{}});
+    const auto reference=request.source->read_frame(result.frame_indices[row]);
+    if(!reference.has_value())
+      return operation::Result<RmsdMatrixResult>::failure(frame_failure(result.frame_indices[row],reference.error()));
+    if(row==0U) result.coordinate_unit=reference.value()->metadata().coordinate_unit;
+    for(std::size_t column=row;column<n;++column) {
+      if(context.cancellation.is_cancelled())
+        return operation::Result<RmsdMatrixResult>::failure(
+            operation::Error{operation::ErrorCode::cancelled,"RMSD matrix calculation cancelled",{}});
+      const auto mobile=request.source->read_frame(result.frame_indices[column]);
+      if(!mobile.has_value())
+        return operation::Result<RmsdMatrixResult>::failure(frame_failure(result.frame_indices[column],mobile.error()));
+      RigidTransform transform;
+      std::size_t fit_pairs{};
+      if(row==column) {
+        transform.input_scale=unit_scale(mobile.value()->metadata().coordinate_unit,
+                                         reference.value()->metadata().coordinate_unit);
+      } else {
+        const auto fitted=frame_fit(*reference.value(),*mobile.value(),request.fit_selected,
+                                    request.weights,request.fit,request.missing_atom_policy);
+        if(!fitted.has_value())
+          return operation::Result<RmsdMatrixResult>::failure(frame_failure(result.frame_indices[column],fitted.error()));
+        transform=fitted.value().transform; fit_pairs=fitted.value().paired_atom_count;
+      }
+      const auto rmsd=calculate_rmsd({reference.value().get(),mobile.value().get(),
+          request.selected,request.weights,request.missing_atom_policy,transform});
+      if(!rmsd.has_value())
+        return operation::Result<RmsdMatrixResult>::failure(frame_failure(result.frame_indices[column],rmsd.error()));
+      result.upper_triangle.push_back({result.frame_indices[row],result.frame_indices[column],rmsd.value(),fit_pairs});
+      ++result.evaluated_frame_pair_count;
+      progress(context,result.upper_triangle.size(),unique_pairs,"rmsd-matrix");
+    }
+  }
+  return operation::Result<RmsdMatrixResult>::success(std::move(result));
 }
 
 operation::Result<RmsfSeriesResult> rmsf_series(

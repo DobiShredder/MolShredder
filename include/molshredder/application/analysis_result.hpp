@@ -20,28 +20,62 @@
 
 namespace molshredder::application {
 
-inline constexpr unsigned int kAnalysisResultSchemaVersion = 1U;
+inline constexpr unsigned int kAnalysisResultSchemaVersion = 2U;
+inline constexpr unsigned int kScientificResultContractSchemaVersion = 1U;
 
 enum class AnalysisResultKind {
   center,
   distance,
+  angle,
+  dihedral,
+  sasa,
+  rdf,
+  rmsd_matrix,
   rmsd_series,
+  rmsf_series,
   contacts,
   contact_series
 };
 
-enum class AnalysisSourceStatus { current, topology_changed, object_deleted };
+enum class AnalysisSourceStatus {
+  current,
+  coordinate_changed,
+  topology_changed,
+  method_changed,
+  object_deleted
+};
+
+struct NumericalToleranceContract {
+  double absolute{};
+  double relative{};
+  std::string unit;
+};
+
+struct ScientificResultContract {
+  unsigned int schema_version{kScientificResultContractSchemaVersion};
+  model::TopologySnapshotReference topology;
+  std::uint64_t coordinate_source_revision{};
+  std::uint64_t coordinate_revision{};
+  bool coordinate_revision_known{true};
+  std::string coordinate_scope;
+  std::string algorithm;
+  std::string algorithm_version;
+  std::string input_coordinate_unit;
+  std::string output_unit;
+  std::string calculation_precision;
+  unsigned int presentation_precision{};
+  std::string pbc_policy;
+  bool pbc_cell_required{};
+  std::string missing_data_policy;
+  NumericalToleranceContract tolerance;
+  bool tolerance_known{true};
+};
 
 struct AnalysisResultProvenance {
-  model::TopologySnapshotReference source;
+  ScientificResultContract scientific;
   std::string object_name;
   std::string canonical_command;
   command::Arguments canonical_arguments;
-  std::string algorithm;
-  std::string algorithm_version;
-  std::string coordinate_unit;
-  std::string pbc_policy;
-  std::string missing_data_policy;
   std::optional<std::size_t> frame_first;
   std::optional<std::size_t> frame_last;
   std::optional<std::size_t> frame_stride;
@@ -61,9 +95,15 @@ struct DistanceAnalysisOverlay {
   std::string label;
 };
 
+struct GeometryAnalysisOverlay {
+  std::vector<model::AtomReference> atoms;
+  std::vector<model::Vec3d> positions;
+  std::string label;
+};
+
 using AnalysisOverlay =
     std::variant<std::monostate, PointAnalysisOverlay,
-                 DistanceAnalysisOverlay>;
+                 DistanceAnalysisOverlay, GeometryAnalysisOverlay>;
 
 struct PersistentAnalysisResult {
   unsigned int schema_version{kAnalysisResultSchemaVersion};
@@ -93,11 +133,46 @@ struct AnalysisResultStoreSnapshot {
   std::vector<PersistentAnalysisResult> records;
 };
 
+struct LegacyAnalysisResultProvenanceV1 {
+  model::TopologySnapshotReference source;
+  std::string object_name;
+  std::string canonical_command;
+  command::Arguments canonical_arguments;
+  std::string algorithm;
+  std::string algorithm_version;
+  std::string coordinate_unit;
+  std::string pbc_policy;
+  std::string missing_data_policy;
+  std::optional<std::size_t> frame_first;
+  std::optional<std::size_t> frame_last;
+  std::optional<std::size_t> frame_stride;
+  std::string created_at_utc;
+};
+
+struct LegacyPersistentAnalysisResultV1 {
+  unsigned int schema_version{1U};
+  std::uint64_t result_id{};
+  std::string name;
+  AnalysisResultKind kind{AnalysisResultKind::center};
+  LegacyAnalysisResultProvenanceV1 provenance;
+  command::Response response;
+  command::Table export_table;
+  AnalysisOverlay overlay;
+  bool overlay_visible{};
+};
+
+struct LegacyAnalysisResultStoreSnapshotV1 {
+  unsigned int schema_version{1U};
+  std::uint64_t next_result_id{1U};
+  std::vector<LegacyPersistentAnalysisResultV1> records;
+};
+
 struct AnalysisResultExportReport {
   std::uint64_t result_id{};
   std::filesystem::path path;
   std::string format;
   std::uint64_t byte_count{};
+  std::vector<std::string> losses;
 };
 
 class AnalysisResultStore {
@@ -125,6 +200,8 @@ class AnalysisResultStore {
   [[nodiscard]] AnalysisResultStoreSnapshot snapshot() const;
   [[nodiscard]] std::optional<operation::Error> restore(
       const AnalysisResultStoreSnapshot& snapshot);
+  [[nodiscard]] std::optional<operation::Error> restore(
+      const LegacyAnalysisResultStoreSnapshotV1& snapshot);
 
  private:
   TimestampProvider timestamp_provider_;
@@ -134,6 +211,21 @@ class AnalysisResultStore {
 
 [[nodiscard]] std::string_view to_string(AnalysisResultKind kind) noexcept;
 [[nodiscard]] std::string_view to_string(AnalysisSourceStatus status) noexcept;
+[[nodiscard]] std::string_view current_analysis_algorithm_version(
+    AnalysisResultKind kind) noexcept;
+
+[[nodiscard]] std::optional<command::Value::Object>
+analysis_plot_projection(AnalysisResultKind kind,const command::Table& table);
+
+[[nodiscard]] AnalysisSourceStatus assess_analysis_result(
+    const PersistentAnalysisResult& record,
+    const std::optional<model::TopologySnapshotReference>& current_topology,
+    std::optional<std::uint64_t> current_coordinate_source_revision,
+    std::optional<std::uint64_t> current_coordinate_revision,
+    std::string_view current_algorithm_version) noexcept;
+
+[[nodiscard]] operation::Result<command::Value::Object>
+scientific_contract_fields(const ScientificResultContract& contract);
 
 [[nodiscard]] command::Response analysis_result_response(
     const PersistentAnalysisResult& record, AnalysisSourceStatus status);

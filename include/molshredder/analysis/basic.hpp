@@ -56,6 +56,32 @@ struct AtomDistanceResult {
   operation::LengthUnit coordinate_unit{operation::LengthUnit::angstrom};
 };
 
+struct AtomAngleResult {
+  model::AtomIndex first;
+  model::AtomIndex vertex;
+  model::AtomIndex third;
+  model::Vec3d first_position;
+  model::Vec3d vertex_position;
+  model::Vec3d third_position;
+  double angle_degrees{};
+  operation::LengthUnit coordinate_unit{operation::LengthUnit::angstrom};
+  DistanceBoundary boundary{DistanceBoundary::raw};
+};
+
+struct AtomDihedralResult {
+  model::AtomIndex first;
+  model::AtomIndex second;
+  model::AtomIndex third;
+  model::AtomIndex fourth;
+  model::Vec3d first_position;
+  model::Vec3d second_position;
+  model::Vec3d third_position;
+  model::Vec3d fourth_position;
+  double angle_degrees{};
+  operation::LengthUnit coordinate_unit{operation::LengthUnit::angstrom};
+  DistanceBoundary boundary{DistanceBoundary::raw};
+};
+
 [[nodiscard]] operation::Result<MassValues> masses_from_property(
     const model::Topology& topology, std::string_view property_name = "mass");
 
@@ -68,6 +94,16 @@ struct AtomDistanceResult {
 [[nodiscard]] operation::Result<AtomDistanceResult> atom_distance(
     const model::CoordinateFrame& frame, model::AtomIndex first,
     model::AtomIndex second,
+    DistanceBoundary boundary = DistanceBoundary::raw);
+
+[[nodiscard]] operation::Result<AtomAngleResult> atom_angle(
+    const model::CoordinateFrame& frame, model::AtomIndex first,
+    model::AtomIndex vertex, model::AtomIndex third,
+    DistanceBoundary boundary = DistanceBoundary::raw);
+
+[[nodiscard]] operation::Result<AtomDihedralResult> atom_dihedral(
+    const model::CoordinateFrame& frame, model::AtomIndex first,
+    model::AtomIndex second, model::AtomIndex third, model::AtomIndex fourth,
     DistanceBoundary boundary = DistanceBoundary::raw);
 
 }  // namespace molshredder::analysis

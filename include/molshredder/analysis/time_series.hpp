@@ -50,6 +50,20 @@ struct RmsdSeriesRow {
   std::size_t fit_paired_atom_count{};
 };
 
+struct RmsdMatrixCell {
+  std::size_t first_frame{};
+  std::size_t second_frame{};
+  RmsdResult rmsd;
+  std::size_t fit_paired_atom_count{};
+};
+
+struct RmsdMatrixResult {
+  operation::LengthUnit coordinate_unit{operation::LengthUnit::angstrom};
+  std::vector<std::size_t> frame_indices;
+  std::vector<RmsdMatrixCell> upper_triangle;
+  std::uint64_t evaluated_frame_pair_count{};
+};
+
 struct RmsfAtomRow {
   model::AtomIndex atom;
   std::size_t observation_count{};
@@ -131,6 +145,17 @@ struct RmsdSeriesRequest {
   MissingAtomPolicy missing_atom_policy{MissingAtomPolicy::error};
 };
 
+struct RmsdMatrixRequest {
+  std::shared_ptr<const model::CoordinateSource> source;
+  SeriesRange range;
+  std::span<const std::uint8_t> selected;
+  std::span<const std::uint8_t> fit_selected;
+  std::span<const double> weights;
+  FitMode fit{FitMode::rigid};
+  MissingAtomPolicy missing_atom_policy{MissingAtomPolicy::error};
+  std::uint64_t frame_pair_budget{1'000'000U};
+};
+
 struct RmsfSeriesRequest {
   std::shared_ptr<const model::CoordinateSource> source;
   std::size_t reference_frame{};
@@ -181,6 +206,9 @@ distance_series(const DistanceSeriesRequest& request,
 
 [[nodiscard]] operation::Result<std::vector<RmsdSeriesRow>> rmsd_series(
     const RmsdSeriesRequest& request, operation::TaskContext& context);
+
+[[nodiscard]] operation::Result<RmsdMatrixResult> rmsd_matrix(
+    const RmsdMatrixRequest& request, operation::TaskContext& context);
 
 [[nodiscard]] operation::Result<RmsfSeriesResult> rmsf_series(
     const RmsfSeriesRequest& request, operation::TaskContext& context);

@@ -1,7 +1,7 @@
 # Localization
 
 MolShredder Desktop은 영어(`en`)와 한국어(`ko`)를 기본 지원한다. 첫 실행은 OS locale을 사용하고,
-지원하지 않는 locale은 영어로 fallback한다. Toolbar의 언어 control은 실행 중 언어를 바꾸고 선택을
+지원하지 않는 locale은 영어로 fallback한다. Help > Language는 실행 중 언어를 바꾸고 선택을
 application setting에 저장한다. 개발 및 smoke test에서는 다음처럼 명시할 수 있다.
 
 ```bash
@@ -27,8 +27,13 @@ error code와 structured context를 제공하고 frontend가 사용자 설명을
 번역 문자열의 `%1`, `%2` placeholder는 원문과 동일하게 유지해야 하며 catalog test가 누락, 빈 번역,
 중복과 placeholder drift를 거부한다.
 
-현재 catalog는 QML UI chrome 및 action metadata source 154개를 포함한다. `gui::ActionMetadata`의 label/status도
-catalog drift 검사에 포함되므로 menu, toolbar와 command palette가 같은 번역 source를 사용한다. Typed operation에서
+현재 catalog는 QML UI chrome 및 action metadata source 415개를 포함하며 release `.qm`도 415개 모두를 포함한다.
+Qt-free `gui::ActionMetadata`의 label/status/error/search keyword/unavailable reason은
+`apps/desktop/action_translation_sources.cpp`의 extraction marker로 Qt Linguist에 전달된다. Catalog test는 action source와
+marker를 exact-set으로 비교하므로 `lupdate`가 동적 metadata를 `vanished`로 처리할 수 없다. Menu, toolbar와 command
+palette는 같은 번역 source와 remediation을 사용한다. Typed operation에서
 전달되는 동적 status/error detail은 stable
 code/context의 presentation mapping이 아직 없어 일부 영어로 표시될 수 있다. 이를 한국어 지원 완료로 과장하지 않으며,
-후속 action migration에서 code별 번역과 remediation catalog를 연결한다.
+Action metadata row와 QML/command-palette projection도 exact-set으로 검사하므로 검색 가능한 action을
+catalog 또는 palette 한쪽에만 추가할 수 없다. 후속 error-code migration에서 code별 번역과 remediation catalog를
+연결한다.

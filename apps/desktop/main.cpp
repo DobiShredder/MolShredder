@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
@@ -165,17 +166,24 @@ int main(int argc, char *argv[]) {
   bool save_smoke = false;
   bool script_smoke = false;
   bool script_cancel_smoke = false;
+  bool isolated_script_smoke = false;
   bool graphics_info_smoke = false;
   bool system_info_panel_smoke = false;
   bool named_view_smoke = false;
+  bool session_smoke = false;
   bool stereo_smoke = false;
   bool anaglyph_smoke = false;
   bool interleaved_smoke = false;
   bool representation_visibility_smoke = false;
   bool render_setting_smoke = false;
+  bool edit_smoke = false;
+  bool builder_smoke = false;
   bool analysis_smoke = false;
   bool daily_workflow_smoke = false;
   bool information_architecture_smoke = false;
+  bool volume_slice_smoke = false;
+  bool molecular_surface_smoke = false;
+  bool direct_volume_smoke = false;
   std::optional<QString> redirected_render_smoke;
   std::optional<QString> screenshot;
   std::vector<QString> open_paths;
@@ -220,12 +228,16 @@ int main(int argc, char *argv[]) {
       script_smoke = true;
     } else if (argument == "--script-cancel-smoke") {
       script_cancel_smoke = true;
+    } else if (argument == "--isolated-script-smoke") {
+      isolated_script_smoke = true;
     } else if (argument == "--graphics-info-smoke") {
       graphics_info_smoke = true;
     } else if (argument == "--system-info-panel-smoke") {
       system_info_panel_smoke = true;
     } else if (argument == "--named-view-smoke") {
       named_view_smoke = true;
+    } else if (argument == "--session-smoke") {
+      session_smoke = true;
     } else if (argument == "--stereo-smoke") {
       stereo_smoke = true;
     } else if (argument == "--anaglyph-smoke") {
@@ -236,6 +248,12 @@ int main(int argc, char *argv[]) {
       representation_visibility_smoke = true;
     } else if (argument == "--render-setting-smoke") {
       render_setting_smoke = true;
+    } else if (argument == "--edit-smoke") {
+      edit_smoke = true;
+      smoke = true;
+    } else if (argument == "--builder-smoke") {
+      builder_smoke = true;
+      smoke = true;
     } else if (argument == "--analysis-smoke") {
       analysis_smoke = true;
     } else if (argument == "--daily-workflow-smoke") {
@@ -243,6 +261,15 @@ int main(int argc, char *argv[]) {
       smoke = true;
     } else if (argument == "--information-architecture-smoke") {
       information_architecture_smoke = true;
+      smoke = true;
+    } else if (argument == "--volume-slice-smoke") {
+      volume_slice_smoke = true;
+      smoke = true;
+    } else if (argument == "--molecular-surface-smoke") {
+      molecular_surface_smoke = true;
+      smoke = true;
+    } else if (argument == "--direct-volume-smoke") {
+      direct_volume_smoke = true;
       smoke = true;
     } else if (argument.starts_with("--redirected-render-smoke=")) {
       const auto value =
@@ -340,54 +367,600 @@ int main(int argc, char *argv[]) {
   if (viewport == nullptr)
     return EXIT_FAILURE;
   if (information_architecture_smoke) {
-    const auto metadata = localization.actionMetadata(QStringLiteral("file.open"));
-    auto *action =
+    const auto open_metadata =
+        localization.actionMetadata(QStringLiteral("file.open"));
+    const auto save_metadata =
+        localization.actionMetadata(QStringLiteral("file.save"));
+    const auto open_session_metadata =
+        localization.actionMetadata(QStringLiteral("file.open-session"));
+    const auto save_session_metadata =
+        localization.actionMetadata(QStringLiteral("file.save-session"));
+    const auto attach_metadata =
+        localization.actionMetadata(QStringLiteral("trajectory.attach"));
+    const auto script_metadata =
+        localization.actionMetadata(QStringLiteral("tools.run-script"));
+    const auto object_metadata =
+        localization.actionMetadata(QStringLiteral("object.panel"));
+    const auto select_expression_metadata =
+        localization.actionMetadata(QStringLiteral("select.expression"));
+    const auto select_metadata =
+        localization.actionMetadata(QStringLiteral("select.all"));
+    const auto playback_metadata =
+        localization.actionMetadata(QStringLiteral("trajectory.play-pause"));
+    const auto show_metadata =
+        localization.actionMetadata(QStringLiteral("represent.show"));
+    const auto hide_metadata =
+        localization.actionMetadata(QStringLiteral("represent.hide"));
+    const auto as_metadata =
+        localization.actionMetadata(QStringLiteral("represent.as"));
+    const auto toggle_metadata =
+        localization.actionMetadata(QStringLiteral("represent.toggle"));
+    const auto named_scenes_metadata =
+        localization.actionMetadata(QStringLiteral("scene.named-scenes"));
+    const auto movie_metadata =
+        localization.actionMetadata(QStringLiteral("scene.movie"));
+    auto *open_action =
         window->findChild<QObject *>(QStringLiteral("fileOpenAction"));
+    auto *save_action =
+        window->findChild<QObject *>(QStringLiteral("fileSaveAction"));
+    auto *open_session_action = window->findChild<QObject *>(
+        QStringLiteral("fileOpenSessionAction"));
+    auto *save_session_action = window->findChild<QObject *>(
+        QStringLiteral("fileSaveSessionAction"));
+    auto *attach_action =
+        window->findChild<QObject *>(QStringLiteral("trajectoryAttachAction"));
+    auto *script_action =
+        window->findChild<QObject *>(QStringLiteral("runScriptAction"));
+    auto *lines_action =
+        window->findChild<QObject *>(QStringLiteral("representLinesAction"));
+    auto *spheres_action = window->findChild<QObject *>(
+        QStringLiteral("representSpheresAction"));
+    auto *ribbon_action =
+        window->findChild<QObject *>(QStringLiteral("representRibbonAction"));
+    auto *settings_action =
+        window->findChild<QObject *>(QStringLiteral("renderSettingsAction"));
+    auto *analyze_action =
+        window->findChild<QObject *>(QStringLiteral("analyzePanelAction"));
+    auto *views_action =
+        window->findChild<QObject *>(QStringLiteral("sceneViewsAction"));
+    auto *named_scenes_action =
+        window->findChild<QObject *>(QStringLiteral("namedScenesAction"));
+    auto *movie_action =
+        window->findChild<QObject *>(QStringLiteral("movieTimelineAction"));
+    auto *system_action = window->findChild<QObject *>(
+        QStringLiteral("systemInformationAction"));
+    auto *object_action =
+        window->findChild<QObject *>(QStringLiteral("objectPanelAction"));
+    auto *select_expression_action = window->findChild<QObject *>(
+        QStringLiteral("selectExpressionAction"));
+    auto *select_action =
+        window->findChild<QObject *>(QStringLiteral("selectAllAction"));
+    auto *playback_action = window->findChild<QObject *>(
+        QStringLiteral("trajectoryPlaybackAction"));
+    auto *palette_action = window->findChild<QObject *>(
+        QStringLiteral("showCommandPaletteAction"));
+    auto *show_action =
+        window->findChild<QObject *>(QStringLiteral("representShowAction"));
+    auto *hide_action =
+        window->findChild<QObject *>(QStringLiteral("representHideAction"));
+    auto *as_action =
+        window->findChild<QObject *>(QStringLiteral("representAsAction"));
+    auto *toggle_action = window->findChild<QObject *>(
+        QStringLiteral("representToggleAction"));
     auto *menu_bar =
         window->findChild<QObject *>(QStringLiteral("mainMenuBar"));
-    auto *menu_item =
+    auto *compact_toolbar =
+        window->findChild<QObject *>(QStringLiteral("compactToolbar"));
+    const auto menu_names =
+        std::array{QStringLiteral("fileMenu"), QStringLiteral("editMenu"),
+                   QStringLiteral("objectMenu"), QStringLiteral("selectMenu"),
+                   QStringLiteral("representMenu"),
+                   QStringLiteral("analyzeMenu"),
+                   QStringLiteral("trajectoryMenu"),
+                   QStringLiteral("sceneMenu"), QStringLiteral("toolsMenu"),
+                   QStringLiteral("helpMenu")};
+    const auto all_menus_present =
+        std::ranges::all_of(menu_names, [window](const QString &name) {
+          return window->findChild<QObject *>(name) != nullptr;
+        });
+    auto *open_menu_item =
         window->findChild<QObject *>(QStringLiteral("fileOpenMenuItem"));
-    auto *toolbar_button =
+    auto *save_menu_item =
+        window->findChild<QObject *>(QStringLiteral("fileSaveMenuItem"));
+    auto *open_session_menu_item = window->findChild<QObject *>(
+        QStringLiteral("fileOpenSessionMenuItem"));
+    auto *save_session_menu_item = window->findChild<QObject *>(
+        QStringLiteral("fileSaveSessionMenuItem"));
+    auto *attach_menu_item = window->findChild<QObject *>(
+        QStringLiteral("trajectoryAttachMenuItem"));
+    auto *script_menu_item =
+        window->findChild<QObject *>(QStringLiteral("runScriptMenuItem"));
+    auto *lines_menu_item = window->findChild<QObject *>(
+        QStringLiteral("representLinesMenuItem"));
+    auto *ribbon_menu_item = window->findChild<QObject *>(
+        QStringLiteral("representRibbonMenuItem"));
+    auto *settings_menu_item = window->findChild<QObject *>(
+        QStringLiteral("renderSettingsMenuItem"));
+    auto *analyze_menu_item = window->findChild<QObject *>(
+        QStringLiteral("analyzePanelMenuItem"));
+    auto *views_menu_item =
+        window->findChild<QObject *>(QStringLiteral("sceneViewsMenuItem"));
+    auto *named_scenes_menu_item = window->findChild<QObject *>(
+        QStringLiteral("namedScenesMenuItem"));
+    auto *movie_menu_item = window->findChild<QObject *>(
+        QStringLiteral("movieTimelineMenuItem"));
+    auto *system_menu_item = window->findChild<QObject *>(
+        QStringLiteral("systemInformationMenuItem"));
+    auto *object_menu_item =
+        window->findChild<QObject *>(QStringLiteral("objectPanelMenuItem"));
+    auto *select_expression_menu_item = window->findChild<QObject *>(
+        QStringLiteral("selectExpressionMenuItem"));
+    auto *select_menu_item =
+        window->findChild<QObject *>(QStringLiteral("selectAllMenuItem"));
+    auto *playback_menu_item = window->findChild<QObject *>(
+        QStringLiteral("trajectoryPlaybackMenuItem"));
+    auto *show_menu_item = window->findChild<QObject *>(
+        QStringLiteral("representShowMenuItem"));
+    auto *hide_menu_item = window->findChild<QObject *>(
+        QStringLiteral("representHideMenuItem"));
+    auto *as_menu_item =
+        window->findChild<QObject *>(QStringLiteral("representAsMenuItem"));
+    auto *toggle_menu_item = window->findChild<QObject *>(
+        QStringLiteral("representToggleMenuItem"));
+    auto *open_toolbar =
         window->findChild<QObject *>(QStringLiteral("fileOpenToolbarButton"));
+    auto *save_toolbar =
+        window->findChild<QObject *>(QStringLiteral("fileSaveToolbarButton"));
+    auto *attach_toolbar = window->findChild<QObject *>(
+        QStringLiteral("trajectoryAttachToolbarButton"));
+    auto *lines_toolbar = window->findChild<QObject *>(
+        QStringLiteral("representLinesToolbarButton"));
+    auto *analyze_toolbar = window->findChild<QObject *>(
+        QStringLiteral("analyzePanelToolbarButton"));
+    auto *views_toolbar = window->findChild<QObject *>(
+        QStringLiteral("sceneViewsToolbarButton"));
     auto *palette =
         window->findChild<QObject *>(QStringLiteral("commandPaletteOverlay"));
-    auto *palette_entry =
+    auto *open_palette =
         window->findChild<QObject *>(QStringLiteral("commandPaletteFileOpen"));
-    const auto palette_opened = QMetaObject::invokeMethod(
-        window, "openCommandPalette", Qt::DirectConnection);
-    const auto expected_label = localization.currentLanguage() ==
-                                        QStringLiteral("ko")
-                                    ? QStringLiteral("열기")
-                                    : QStringLiteral("Open");
-    const auto metadata_surfaces =
-        metadata.value(QStringLiteral("surfaces")).toStringList();
-    const auto passed =
-        metadata.value(QStringLiteral("id")).toString() ==
-            QStringLiteral("file.open") &&
-        metadata.value(QStringLiteral("command")).toString() ==
+    auto *save_palette =
+        window->findChild<QObject *>(QStringLiteral("commandPaletteFileSave"));
+    auto *open_session_palette = window->findChild<QObject *>(
+        QStringLiteral("commandPaletteFileOpenSession"));
+    auto *save_session_palette = window->findChild<QObject *>(
+        QStringLiteral("commandPaletteFileSaveSession"));
+    auto *attach_palette = window->findChild<QObject *>(
+        QStringLiteral("commandPaletteTrajectoryAttach"));
+    auto *script_palette =
+        window->findChild<QObject *>(QStringLiteral("commandPaletteRunScript"));
+    auto *lines_palette = window->findChild<QObject *>(
+        QStringLiteral("commandPaletteRepresentLines"));
+    auto *ribbon_palette = window->findChild<QObject *>(
+        QStringLiteral("commandPaletteRepresentRibbon"));
+    auto *settings_palette = window->findChild<QObject *>(
+        QStringLiteral("commandPaletteRenderSettings"));
+    auto *analyze_palette = window->findChild<QObject *>(
+        QStringLiteral("commandPaletteAnalyzePanel"));
+    auto *views_palette = window->findChild<QObject *>(
+        QStringLiteral("commandPaletteSceneViews"));
+    auto *named_scenes_palette = window->findChild<QObject *>(
+        QStringLiteral("commandPaletteNamedScenes"));
+    auto *movie_palette = window->findChild<QObject *>(
+        QStringLiteral("commandPaletteMovieTimeline"));
+    auto *system_palette = window->findChild<QObject *>(
+        QStringLiteral("commandPaletteSystemInformation"));
+    auto *object_palette = window->findChild<QObject *>(
+        QStringLiteral("commandPaletteObjectPanel"));
+    auto *select_expression_palette = window->findChild<QObject *>(
+        QStringLiteral("commandPaletteSelectExpression"));
+    auto *select_palette = window->findChild<QObject *>(
+        QStringLiteral("commandPaletteSelectAll"));
+    auto *playback_palette = window->findChild<QObject *>(
+        QStringLiteral("commandPaletteTrajectoryPlayback"));
+    auto *show_palette = window->findChild<QObject *>(
+        QStringLiteral("commandPaletteRepresentShow"));
+    auto *hide_palette = window->findChild<QObject *>(
+        QStringLiteral("commandPaletteRepresentHide"));
+    auto *as_palette = window->findChild<QObject *>(
+        QStringLiteral("commandPaletteRepresentAs"));
+    auto *toggle_palette = window->findChild<QObject *>(
+        QStringLiteral("commandPaletteRepresentToggle"));
+    auto *palette_scroll =
+        window->findChild<QObject *>(QStringLiteral("commandPaletteScroll"));
+    auto *settings_panel =
+        window->findChild<QObject *>(QStringLiteral("renderSettingsOverlay"));
+    auto *analyze_panel =
+        window->findChild<QObject *>(QStringLiteral("analysisOverlay"));
+    auto *views_panel =
+        window->findChild<QObject *>(QStringLiteral("viewsOverlay"));
+    auto *system_panel =
+        window->findChild<QObject *>(QStringLiteral("systemInfoOverlay"));
+    auto *object_panel =
+        window->findChild<QObject *>(QStringLiteral("objectPanel"));
+    auto *select_expression_panel = window->findChild<QObject *>(
+        QStringLiteral("selectionExpressionOverlay"));
+    auto *trajectory_panel =
+        window->findChild<QObject *>(QStringLiteral("trajectoryPanel"));
+    auto *trajectory_import_panel = window->findChild<QObject *>(
+        QStringLiteral("trajectoryImportOverlay"));
+    auto *playback_panel_button = window->findChild<QObject *>(
+        QStringLiteral("trajectoryPlaybackPanelButton"));
+    auto *select_context_item = window->findChild<QObject *>(
+        QStringLiteral("selectAllContextMenuItem"));
+    auto *playback_context_item = window->findChild<QObject *>(
+        QStringLiteral("trajectoryPlaybackContextMenuItem"));
+    auto *viewport_context_menu = window->findChild<QObject *>(
+        QStringLiteral("viewportContextMenu"));
+    auto *show_context_item = window->findChild<QObject *>(
+        QStringLiteral("representShowContextMenuItem"));
+    auto *hide_context_item = window->findChild<QObject *>(
+        QStringLiteral("representHideContextMenuItem"));
+    auto *as_context_item = window->findChild<QObject *>(
+        QStringLiteral("representAsContextMenuItem"));
+    auto *toggle_context_item = window->findChild<QObject *>(
+        QStringLiteral("representToggleContextMenuItem"));
+    const auto palette_opened =
+        palette_action != nullptr && QMetaObject::invokeMethod(
+                                         palette_action, "trigger",
+                                         Qt::DirectConnection);
+    const auto all_surfaces =
+        QStringList{QStringLiteral("menu"), QStringLiteral("toolbar"),
+                    QStringLiteral("command-palette")};
+    const auto menu_palette =
+        QStringList{QStringLiteral("menu"), QStringLiteral("command-palette")};
+    const auto menu_panel_palette =
+        QStringList{QStringLiteral("menu"), QStringLiteral("command-palette"),
+                    QStringLiteral("panel")};
+    const auto menu_toolbar_panel_palette = QStringList{
+        QStringLiteral("menu"), QStringLiteral("toolbar"),
+        QStringLiteral("command-palette"), QStringLiteral("panel")};
+    const auto menu_context_palette =
+        QStringList{QStringLiteral("menu"), QStringLiteral("command-palette"),
+                    QStringLiteral("context-menu")};
+    const auto menu_panel_context_palette = QStringList{
+        QStringLiteral("menu"), QStringLiteral("command-palette"),
+        QStringLiteral("panel"), QStringLiteral("context-menu")};
+    const auto workspace = QStringList{QStringLiteral("workspace")};
+    const auto korean =
+        localization.currentLanguage() == QStringLiteral("ko");
+    const auto shared = [](QObject *surface, const char *property,
+                           QObject *action) {
+      return surface != nullptr &&
+             surface->property(property).value<QObject *>() == action;
+    };
+    const auto unavailable_before_load =
+        save_palette != nullptr && attach_palette != nullptr &&
+        save_palette->property("translatedStatus").toString() ==
+            localization.translateUi(
+                save_metadata.value(QStringLiteral("unavailable")).toString()) &&
+        attach_palette->property("translatedStatus").toString() ==
+            localization.translateUi(attach_metadata
+                                         .value(QStringLiteral("unavailable"))
+                                         .toString());
+    const auto action_ids = std::array{
+        QStringLiteral("file.open"), QStringLiteral("file.save"),
+        QStringLiteral("file.open-session"),
+        QStringLiteral("file.save-session"),
+        QStringLiteral("trajectory.attach"),
+        QStringLiteral("tools.run-script"),
+        QStringLiteral("represent.lines"),
+        QStringLiteral("represent.sticks"),
+        QStringLiteral("represent.spheres"),
+        QStringLiteral("represent.ribbon"),
+        QStringLiteral("represent.cartoon"),
+        QStringLiteral("represent.settings"),
+        QStringLiteral("analyze.open-panel"),
+        QStringLiteral("scene.views"),
+        QStringLiteral("scene.named-scenes"), QStringLiteral("scene.movie"),
+        QStringLiteral("help.system-information"),
+        QStringLiteral("object.panel"),
+        QStringLiteral("select.expression"), QStringLiteral("select.all"),
+        QStringLiteral("trajectory.play-pause"),
+        QStringLiteral("represent.show"), QStringLiteral("represent.hide"),
+        QStringLiteral("represent.as"), QStringLiteral("represent.toggle")};
+    const auto localized_catalog_complete =
+        std::ranges::all_of(action_ids, [&localization](const QString &id) {
+          const auto metadata = localization.actionMetadata(id);
+          return metadata.value(QStringLiteral("id")).toString() == id &&
+                 !localization
+                      .translateUi(metadata.value(QStringLiteral("label"))
+                                       .toString())
+                      .isEmpty() &&
+                 !localization
+                      .translateUi(metadata.value(QStringLiteral("status"))
+                                       .toString())
+                      .isEmpty() &&
+                 !localization
+                      .translateUi(metadata.value(QStringLiteral("error"))
+                                       .toString())
+                      .isEmpty();
+        });
+    auto passed =
+        localized_catalog_complete &&
+        open_metadata.value(QStringLiteral("command")).toString() ==
             QStringLiteral("load") &&
-        metadata.value(QStringLiteral("shortcut")).toString() ==
-            QStringLiteral("standard.open") &&
-        metadata_surfaces ==
-            QStringList{QStringLiteral("menu"), QStringLiteral("toolbar"),
-                        QStringLiteral("command-palette")} &&
-        action != nullptr && menu_bar != nullptr && menu_item != nullptr &&
-        toolbar_button != nullptr && palette != nullptr &&
-        palette_entry != nullptr && palette_opened &&
-        action->property("text").toString() == expected_label &&
-        !action->property("shortcut").toString().isEmpty() &&
-        toolbar_button->property("actionId").toString() ==
-            QStringLiteral("file.open") &&
+        save_metadata.value(QStringLiteral("command")).toString() ==
+            QStringLiteral("save") &&
+        open_session_metadata.value(QStringLiteral("command")).toString() ==
+            QStringLiteral("session load") &&
+        save_session_metadata.value(QStringLiteral("command")).toString() ==
+            QStringLiteral("session save") &&
+        attach_metadata.value(QStringLiteral("command")).toString() ==
+            QStringLiteral("traj load") &&
+        script_metadata.value(QStringLiteral("command")).toString() ==
+            QStringLiteral("script run") &&
+        object_metadata.value(QStringLiteral("command")).toString() ==
+            QStringLiteral("object list") &&
+        select_expression_metadata.value(QStringLiteral("command")).toString() ==
+            QStringLiteral("select") &&
+        select_metadata.value(QStringLiteral("command")).toString() ==
+            QStringLiteral("select") &&
+        playback_metadata.value(QStringLiteral("command")).toString() ==
+            QStringLiteral("traj play") &&
+        playback_metadata.value(QStringLiteral("alternateCommand")).toString() ==
+            QStringLiteral("traj pause") &&
+        show_metadata.value(QStringLiteral("command")).toString() ==
+            QStringLiteral("show") &&
+        hide_metadata.value(QStringLiteral("command")).toString() ==
+            QStringLiteral("hide") &&
+        as_metadata.value(QStringLiteral("command")).toString() ==
+            QStringLiteral("as") &&
+        toggle_metadata.value(QStringLiteral("command")).toString() ==
+            QStringLiteral("toggle") &&
+        named_scenes_metadata.value(QStringLiteral("command")).toString() ==
+            QStringLiteral("scene list") &&
+        movie_metadata.value(QStringLiteral("command")).toString() ==
+            QStringLiteral("movie status") &&
+        open_metadata.value(QStringLiteral("surfaces")).toStringList() ==
+            all_surfaces &&
+        save_metadata.value(QStringLiteral("surfaces")).toStringList() ==
+            all_surfaces &&
+        open_session_metadata.value(QStringLiteral("surfaces")).toStringList() ==
+            menu_panel_palette &&
+        save_session_metadata.value(QStringLiteral("surfaces")).toStringList() ==
+            menu_panel_palette &&
+        attach_metadata.value(QStringLiteral("surfaces")).toStringList() ==
+            menu_toolbar_panel_palette &&
+        script_metadata.value(QStringLiteral("surfaces")).toStringList() ==
+            menu_palette &&
+        object_metadata.value(QStringLiteral("surfaces")).toStringList() ==
+            menu_panel_palette &&
+        select_expression_metadata.value(QStringLiteral("surfaces"))
+                .toStringList() == menu_panel_palette &&
+        select_metadata.value(QStringLiteral("surfaces")).toStringList() ==
+            menu_context_palette &&
+        playback_metadata.value(QStringLiteral("surfaces")).toStringList() ==
+            menu_panel_context_palette &&
+        show_metadata.value(QStringLiteral("surfaces")).toStringList() ==
+            menu_context_palette &&
+        hide_metadata.value(QStringLiteral("surfaces")).toStringList() ==
+            menu_context_palette &&
+        as_metadata.value(QStringLiteral("surfaces")).toStringList() ==
+            menu_context_palette &&
+        toggle_metadata.value(QStringLiteral("surfaces")).toStringList() ==
+            menu_context_palette &&
+        named_scenes_metadata.value(QStringLiteral("surfaces")).toStringList() ==
+            menu_panel_palette &&
+        movie_metadata.value(QStringLiteral("surfaces")).toStringList() ==
+            menu_panel_palette &&
+        save_metadata.value(QStringLiteral("requirements")).toStringList() ==
+            workspace &&
+        attach_metadata.value(QStringLiteral("requirements")).toStringList() ==
+            workspace &&
+        open_action != nullptr && save_action != nullptr &&
+        open_session_action != nullptr && save_session_action != nullptr &&
+        attach_action != nullptr && script_action != nullptr &&
+        lines_action != nullptr && spheres_action != nullptr &&
+        ribbon_action != nullptr && settings_action != nullptr &&
+        analyze_action != nullptr && views_action != nullptr &&
+        named_scenes_action != nullptr && movie_action != nullptr &&
+        system_action != nullptr && object_action != nullptr &&
+        select_expression_action != nullptr && select_action != nullptr &&
+        playback_action != nullptr &&
+        palette_action != nullptr && viewport_context_menu != nullptr &&
+        show_action != nullptr && hide_action != nullptr &&
+        as_action != nullptr && toggle_action != nullptr &&
+        menu_bar != nullptr && all_menus_present && palette != nullptr &&
+        compact_toolbar != nullptr &&
+        compact_toolbar->property("actionIdSequence").toString() ==
+            QStringLiteral("file.open,trajectory.attach,file.save,scene.views,"
+                           "analyze.open-panel,represent.lines,represent.sticks,"
+                           "represent.spheres,represent.cartoon") &&
+        compact_toolbar->property("projectedActionCount").toInt() == 9 &&
+        palette_opened &&
         palette->property("visible").toBool() &&
-        palette_entry->property("actionId").toString() ==
-            QStringLiteral("file.open") &&
-        menu_item->property("action").value<QObject *>() == action;
+        open_action->property("text").toString() ==
+            (korean ? QStringLiteral("열기") : QStringLiteral("Open")) &&
+        save_action->property("text").toString() ==
+            (korean ? QStringLiteral("저장") : QStringLiteral("Save")) &&
+        attach_action->property("text").toString() ==
+            (korean ? QStringLiteral("Trajectory 연결")
+                    : QStringLiteral("Attach Trajectory")) &&
+        script_action->property("text").toString() ==
+            (korean ? QStringLiteral("스크립트 실행")
+                    : QStringLiteral("Run Script")) &&
+        !open_action->property("shortcut").toString().isEmpty() &&
+        !save_action->property("shortcut").toString().isEmpty() &&
+        !select_action->property("shortcut").toString().isEmpty() &&
+        !playback_action->property("shortcut").toString().isEmpty() &&
+        !palette_action->property("shortcut").toString().isEmpty() &&
+        !save_action->property("enabled").toBool() &&
+        open_session_action->property("enabled").toBool() &&
+        !save_session_action->property("enabled").toBool() &&
+        !attach_action->property("enabled").toBool() &&
+        !lines_action->property("enabled").toBool() &&
+        !object_action->property("enabled").toBool() &&
+        !select_expression_action->property("enabled").toBool() &&
+        !select_action->property("enabled").toBool() &&
+        !playback_action->property("enabled").toBool() &&
+        !show_action->property("enabled").toBool() &&
+        !hide_action->property("enabled").toBool() &&
+        !as_action->property("enabled").toBool() &&
+        !toggle_action->property("enabled").toBool() &&
+        !analyze_action->property("enabled").toBool() &&
+        !views_action->property("enabled").toBool() &&
+        !named_scenes_action->property("enabled").toBool() &&
+        !movie_action->property("enabled").toBool() &&
+        settings_action->property("enabled").toBool() &&
+        system_action->property("enabled").toBool() &&
+        script_action->property("enabled").toBool() &&
+        unavailable_before_load &&
+        shared(open_menu_item, "action", open_action) &&
+        shared(save_menu_item, "action", save_action) &&
+        shared(open_session_menu_item, "action", open_session_action) &&
+        shared(save_session_menu_item, "action", save_session_action) &&
+        shared(attach_menu_item, "action", attach_action) &&
+        shared(script_menu_item, "action", script_action) &&
+        shared(lines_menu_item, "action", lines_action) &&
+        shared(ribbon_menu_item, "action", ribbon_action) &&
+        shared(settings_menu_item, "action", settings_action) &&
+        shared(analyze_menu_item, "action", analyze_action) &&
+        shared(views_menu_item, "action", views_action) &&
+        shared(named_scenes_menu_item, "action", named_scenes_action) &&
+        shared(movie_menu_item, "action", movie_action) &&
+        shared(system_menu_item, "action", system_action) &&
+        shared(object_menu_item, "action", object_action) &&
+        shared(select_expression_menu_item, "action",
+               select_expression_action) &&
+        shared(select_menu_item, "action", select_action) &&
+        shared(playback_menu_item, "action", playback_action) &&
+        shared(show_menu_item, "action", show_action) &&
+        shared(hide_menu_item, "action", hide_action) &&
+        shared(as_menu_item, "action", as_action) &&
+        shared(toggle_menu_item, "action", toggle_action) &&
+        shared(open_toolbar, "action", open_action) &&
+        shared(save_toolbar, "action", save_action) &&
+        shared(attach_toolbar, "action", attach_action) &&
+        shared(lines_toolbar, "action", lines_action) &&
+        shared(analyze_toolbar, "action", analyze_action) &&
+        shared(views_toolbar, "action", views_action) &&
+        open_palette != nullptr && save_palette != nullptr &&
+        attach_palette != nullptr && script_palette != nullptr &&
+        shared(open_palette, "commandAction", open_action) &&
+        shared(save_palette, "commandAction", save_action) &&
+        shared(open_session_palette, "commandAction", open_session_action) &&
+        shared(save_session_palette, "commandAction", save_session_action) &&
+        shared(attach_palette, "commandAction", attach_action) &&
+        shared(script_palette, "commandAction", script_action) &&
+        shared(lines_palette, "commandAction", lines_action) &&
+        shared(ribbon_palette, "commandAction", ribbon_action) &&
+        shared(settings_palette, "commandAction", settings_action) &&
+        shared(analyze_palette, "commandAction", analyze_action) &&
+        shared(views_palette, "commandAction", views_action) &&
+        shared(named_scenes_palette, "commandAction", named_scenes_action) &&
+        shared(movie_palette, "commandAction", movie_action) &&
+        shared(system_palette, "commandAction", system_action) &&
+        shared(object_palette, "commandAction", object_action) &&
+        shared(select_expression_palette, "commandAction",
+               select_expression_action) &&
+        shared(select_palette, "commandAction", select_action) &&
+        shared(playback_palette, "commandAction", playback_action) &&
+        shared(show_palette, "commandAction", show_action) &&
+        shared(hide_palette, "commandAction", hide_action) &&
+        shared(as_palette, "commandAction", as_action) &&
+        shared(toggle_palette, "commandAction", toggle_action) &&
+        shared(settings_panel, "entryAction", settings_action) &&
+        shared(analyze_panel, "entryAction", analyze_action) &&
+        shared(views_panel, "entryAction", views_action) &&
+        shared(system_panel, "entryAction", system_action) &&
+        shared(object_panel, "entryAction", object_action) &&
+        shared(select_expression_panel, "entryAction",
+               select_expression_action) &&
+        shared(trajectory_import_panel, "entryAction", attach_action) &&
+        shared(trajectory_panel, "entryAction", playback_action) &&
+        shared(playback_panel_button, "action", playback_action) &&
+        shared(select_context_item, "action", select_action) &&
+        shared(playback_context_item, "action", playback_action) &&
+        shared(show_context_item, "action", show_action) &&
+        shared(hide_context_item, "action", hide_action) &&
+        shared(as_context_item, "action", as_action) &&
+        shared(toggle_context_item, "action", toggle_action) &&
+        palette_scroll != nullptr &&
+        palette_scroll->property("contentHeight").toReal() >
+            palette_scroll->property("height").toReal();
+    if (passed && open_paths.size() == 1U) {
+      passed = viewport->loadStructure(QUrl::fromLocalFile(open_paths.front()));
+      QCoreApplication::processEvents();
+      const auto select_triggered = QMetaObject::invokeMethod(
+          select_action, "trigger", Qt::DirectConnection);
+      const auto lines_triggered = QMetaObject::invokeMethod(
+          lines_action, "trigger", Qt::DirectConnection);
+      passed = passed && save_action->property("enabled").toBool() &&
+               open_session_action->property("enabled").toBool() &&
+               save_session_action->property("enabled").toBool() &&
+               attach_action->property("enabled").toBool() &&
+               lines_action->property("enabled").toBool() &&
+               object_action->property("enabled").toBool() &&
+               select_expression_action->property("enabled").toBool() &&
+               select_action->property("enabled").toBool() &&
+               !playback_action->property("enabled").toBool() &&
+               show_action->property("enabled").toBool() &&
+               hide_action->property("enabled").toBool() &&
+               as_action->property("enabled").toBool() &&
+               toggle_action->property("enabled").toBool() &&
+               analyze_action->property("enabled").toBool() &&
+               views_action->property("enabled").toBool() &&
+               named_scenes_action->property("enabled").toBool() &&
+               movie_action->property("enabled").toBool() &&
+               QMetaObject::invokeMethod(select_expression_action, "trigger",
+                                         Qt::DirectConnection) &&
+               select_triggered && lines_triggered;
+      QCoreApplication::processEvents();
+      passed = passed &&
+               viewport->selectionText() == QStringLiteral("All atoms selected") &&
+               lines_action->property("checked").toBool() &&
+               QMetaObject::invokeMethod(settings_action, "trigger",
+                                         Qt::DirectConnection) &&
+               QMetaObject::invokeMethod(analyze_action, "trigger",
+                                         Qt::DirectConnection) &&
+               QMetaObject::invokeMethod(views_action, "trigger",
+                                         Qt::DirectConnection) &&
+               QMetaObject::invokeMethod(system_action, "trigger",
+                                         Qt::DirectConnection);
+      QCoreApplication::processEvents();
+      passed = passed && settings_panel->property("visible").toBool() &&
+               analyze_panel->property("visible").toBool() &&
+               views_panel->property("visible").toBool() &&
+               system_panel->property("visible").toBool();
+      passed = passed &&
+               select_expression_panel->property("visible").toBool();
+      bool selection_defined{};
+      passed = passed && QMetaObject::invokeMethod(
+                             viewport, "defineSelection",
+                             Qt::DirectConnection,
+                             Q_RETURN_ARG(bool, selection_defined),
+                             Q_ARG(QString, QStringLiteral("focus")),
+                             Q_ARG(QString, QStringLiteral("b < 30")),
+                             Q_ARG(bool, true)) &&
+               selection_defined &&
+               viewport->selectionText() ==
+                   QStringLiteral("Selection defined · focus · b < 30");
+      if (passed && trajectory.has_value()) {
+        passed = viewport->loadTrajectory(QUrl::fromLocalFile(*trajectory),
+                                          trajectory_coordinate_unit,
+                                          trajectory_mapping) &&
+                 viewport->waitForTrajectoryTask(10000);
+        QCoreApplication::processEvents();
+        passed = passed && playback_action->property("enabled").toBool() &&
+                 QMetaObject::invokeMethod(playback_action, "trigger",
+                                           Qt::DirectConnection);
+        QCoreApplication::processEvents();
+        passed = passed && viewport->trajectoryPlaying() &&
+                 playback_action->property("checked").toBool();
+        trajectory.reset();
+      } else {
+        passed = false;
+      }
+      open_paths.clear();
+    } else {
+      passed = false;
+    }
     if (!passed) {
       qCritical("MolShredder information architecture smoke failed");
       return EXIT_FAILURE;
     }
-    qInfo("MolShredder information architecture ready: action=file.open "
-          "command=load surfaces=menu,toolbar,command-palette language=%s",
+    qInfo("MolShredder information architecture ready: actions=25 "
+          "availability=workspace surfaces=shared language=%s",
           qUtf8Printable(localization.currentLanguage()));
   }
   // Automated exits can stop the GUI event loop while the native window and
@@ -527,6 +1100,143 @@ int main(int argc, char *argv[]) {
     qCritical("%s", viewport->statusText().toUtf8().constData());
     return EXIT_FAILURE;
   }
+  if (volume_slice_smoke) {
+    const auto sliced = viewport->hasVolume() &&
+                        viewport->setVolumeSlice(QStringLiteral("z"), 1U);
+    const auto &packet = viewport->renderPacket();
+    const auto pick = packet.pick_targets.begin();
+    if (sliced && pick != packet.pick_targets.end()) {
+      viewport->deliverPickResult(viewport->pickRequestRevision(),
+                                  viewport->packetRevision(), pick->first);
+    }
+    auto *panel =
+        window->findChild<QObject *>(QStringLiteral("volumePanel"));
+    const auto passed =
+        sliced && viewport->volumeMode() == QStringLiteral("slice") &&
+        viewport->volumeSliceAxis() == QStringLiteral("z") &&
+        viewport->volumeSliceIndex() == 1U &&
+        packet.mesh_vertices.size() == 4U &&
+        packet.mesh_triangles.size() == 2U &&
+        packet.pick_targets.size() == 1U &&
+        viewport->selectionText().contains(QStringLiteral("Volume")) &&
+        panel != nullptr &&
+        panel->property("actionId").toString() ==
+            QStringLiteral("represent.volume-slice") &&
+        panel->property("entryAction").value<QObject *>() != nullptr;
+    if (!passed) {
+      qCritical("MolShredder desktop volume slice smoke failed: %s",
+                viewport->statusText().toUtf8().constData());
+      return EXIT_FAILURE;
+    }
+    qInfo("MolShredder desktop volume slice ready: axis=z index=1 vertices=4 triangles=2 picking=volume canonical=shared panel=visible");
+  }
+  if (molecular_surface_smoke) {
+    const auto shown = viewport->setMolecularSurface(
+        QStringLiteral("vdw"), QStringLiteral("all"), 0.0, 0.5,
+        8U * 1024U * 1024U, 512U * 1024U * 1024U);
+    const auto &packet = viewport->renderPacket();
+    const auto pick = packet.pick_targets.begin();
+    if (shown && pick != packet.pick_targets.end()) {
+      viewport->deliverPickResult(viewport->pickRequestRevision(),
+                                  viewport->packetRevision(), pick->first);
+    }
+    QCoreApplication::processEvents();
+    auto *action = window->findChild<QObject *>(
+        QStringLiteral("representSurfaceAction"));
+    auto *panel = window->findChild<QObject *>(QStringLiteral("surfacePanel"));
+    const auto passed = shown && viewport->representation() ==
+                                     QStringLiteral("surface") &&
+                        !packet.mesh_vertices.empty() &&
+                        !packet.mesh_triangles.empty() &&
+                        !packet.pick_targets.empty() &&
+                        viewport->selectionText().contains(
+                            QStringLiteral("Atom 1")) &&
+                        action != nullptr && panel != nullptr &&
+                        panel->property("actionId").toString() ==
+                            QStringLiteral("represent.surface") &&
+                        panel->property("entryAction").value<QObject *>() !=
+                            nullptr;
+    if (!passed) {
+      qCritical("MolShredder desktop molecular surface smoke failed: shown=%d representation=%s vertices=%llu triangles=%llu picks=%llu selection=%s action=%d status=%s",
+                shown ? 1 : 0,
+                viewport->representation().toUtf8().constData(),
+                static_cast<unsigned long long>(packet.mesh_vertices.size()),
+                static_cast<unsigned long long>(packet.mesh_triangles.size()),
+                static_cast<unsigned long long>(packet.pick_targets.size()),
+                viewport->selectionText().toUtf8().constData(),
+                action != nullptr ? 1 : 0,
+                viewport->statusText().toUtf8().constData());
+      return EXIT_FAILURE;
+    }
+    qInfo("MolShredder desktop molecular surface workflow ready: kind=vdw picking=atom canonical=shared action=represent.surface");
+  }
+  if (direct_volume_smoke) {
+    const auto cancellation_started =
+        viewport->hasVolume() && viewport->setDirectVolume(
+                                     QStringLiteral("density"), 0.5, 4096U,
+                                     256U, 512U * 1024U * 1024U);
+    viewport->cancelDirectVolumeTask();
+    QCoreApplication::processEvents();
+    const auto cancelled =
+        cancellation_started && !viewport->volumeTaskRunning() &&
+        viewport->volumeTaskStage() == QStringLiteral("cancelled") &&
+        viewport->directVolumeData() == nullptr;
+    const auto shown = viewport->hasVolume() && viewport->setDirectVolume(
+        QStringLiteral("fire"), 0.5, 4096U, 256U,
+        512U * 1024U * 1024U);
+    const auto completed = shown && viewport->waitForDirectVolumeTask(5000);
+    const auto *data = viewport->directVolumeData();
+    auto *action = window->findChild<QObject *>(
+        QStringLiteral("directVolumeAction"));
+    auto *panel = window->findChild<QObject *>(QStringLiteral("volumePanel"));
+    auto *cancel_button = window->findChild<QObject *>(
+        QStringLiteral("directVolumeTaskCancelButton"));
+    const auto stereo_enabled = viewport->setStereo(
+        true, QStringLiteral("side_by_side"), false, 2.0, 2.1,
+        QStringLiteral("optimized"));
+    const auto passed = cancelled && shown && completed && data != nullptr &&
+                        viewport->volumeMode() == QStringLiteral("direct") &&
+                        !viewport->volumeTaskRunning() &&
+                        viewport->volumeTaskProgress() == 1.0 &&
+                        viewport->volumeTaskStage() ==
+                            QStringLiteral("complete") &&
+                        data->transfer_lookup.size() == 256U &&
+                        data->required_texture_bytes <=
+                            512U * 1024U * 1024U &&
+                        viewport->directVolumePickId() != 0U &&
+                        stereo_enabled && viewport->stereoEnabled() &&
+                        action != nullptr && panel != nullptr &&
+                        cancel_button != nullptr;
+    if (!passed) {
+      qCritical("MolShredder desktop direct volume smoke failed: cancelled=%d shown=%d completed=%d stereo=%d stage=%s status=%s",
+                cancelled ? 1 : 0, shown ? 1 : 0, completed ? 1 : 0,
+                stereo_enabled ? 1 : 0,
+                viewport->volumeTaskStage().toUtf8().constData(),
+                viewport->statusText().toUtf8().constData());
+      return EXIT_FAILURE;
+    }
+    qInfo("MolShredder desktop direct volume workflow ready: ramp=fire mode=post-classified picking=volume stereo=side_by_side canonical=shared action=represent.volume-render");
+    auto *direct_pick_retry = new QTimer{viewport};
+    direct_pick_retry->setInterval(60);
+    QObject::connect(
+        direct_pick_retry, &QTimer::timeout, viewport,
+        [viewport, direct_pick_retry, &application] {
+          if (viewport->selectionText().contains(QStringLiteral("Volume")) &&
+              viewport->volumeGpuState() == QStringLiteral("ready")) {
+            direct_pick_retry->stop();
+            qInfo("MolShredder direct volume GPU picking ready: target=volume state=ready");
+            application.quit();
+            return;
+          }
+          viewport->pickAt(viewport->width() * 0.5,
+                           viewport->height() * 0.5);
+        });
+    direct_pick_retry->start();
+    QTimer::singleShot(5000, &application, [&application] {
+      qCritical("MolShredder direct volume GPU picking timed out");
+      application.exit(EXIT_FAILURE);
+    });
+  }
   if (camera_smoke || analysis_smoke) {
     // QML object creation is synchronous, but the first layout pass is not.
     // Exercise viewport-dependent actions only after Qt has assigned its size;
@@ -592,49 +1302,212 @@ int main(int argc, char *argv[]) {
     }
     qInfo("MolShredder desktop render setting ready: typed=shared geometry=updated editor=visible");
   }
+  if (edit_smoke) {
+    const auto before = viewport->renderPacket();
+    const auto edited = viewport->editAtomPosition(1U, 9.0, 8.0, 7.0);
+    const auto edited_packet = viewport->renderPacket();
+    const auto moved = edited && !before.spheres.empty() &&
+                       !edited_packet.spheres.empty() &&
+                       edited_packet.spheres.front().center.x == 9.0F &&
+                       edited_packet.spheres.front().center.y == 8.0F &&
+                       edited_packet.spheres.front().center.z == 7.0F;
+    const auto undone = viewport->undoEdit();
+    const auto undo_packet = viewport->renderPacket();
+    const auto restored = undone && !undo_packet.spheres.empty() &&
+                          undo_packet.spheres.front().center ==
+                              before.spheres.front().center;
+    const auto redone = viewport->redoEdit();
+    const auto redo_packet = viewport->renderPacket();
+    const auto replayed = redone && !redo_packet.spheres.empty() &&
+                          redo_packet.spheres.front().center.x == 9.0F;
+    const auto opened = QMetaObject::invokeMethod(
+        window, "openCoordinateEditor", Qt::DirectConnection);
+    auto *overlay = window->findChild<QObject *>(
+        QStringLiteral("coordinateEditOverlay"));
+    auto *apply_button = window->findChild<QObject *>(
+        QStringLiteral("coordinateApplyButton"));
+    auto *undo_button = window->findChild<QObject *>(
+        QStringLiteral("coordinateUndoButton"));
+    auto *redo_button = window->findChild<QObject *>(
+        QStringLiteral("coordinateRedoButton"));
+    const auto history = viewport->editHistoryJson();
+    const auto passed = moved && restored && replayed && opened &&
+                        overlay != nullptr && apply_button != nullptr &&
+                        undo_button != nullptr && redo_button != nullptr &&
+                        overlay->property("visible").toBool() &&
+                        history.contains(QStringLiteral("\"undo_count\":1")) &&
+                        history.contains(QStringLiteral("\"redo_count\":0"));
+    if (!passed) {
+      qCritical("MolShredder desktop edit smoke failed: moved=%d restored=%d replayed=%d history=%s status=%s",
+                moved ? 1 : 0, restored ? 1 : 0, replayed ? 1 : 0,
+                history.toUtf8().constData(),
+                viewport->statusText().toUtf8().constData());
+      return EXIT_FAILURE;
+    }
+    qInfo("MolShredder desktop coordinate edit ready: apply=shared undo=shared redo=shared history=bounded editor=visible");
+  }
+  if (builder_smoke) {
+    const auto built = viewport->buildMolecule(
+        QStringLiteral("carbonyl"),
+        QStringLiteral("C,6,0,0,0,0;O,8,1.2,0,0,0"),
+        QStringLiteral("1,2,double"), QStringLiteral("LIG"),
+        QStringLiteral("A"), 1, QStringLiteral("angstrom"), 1048576U);
+    const auto object_count = viewport->objectItems().size();
+    const auto undone = viewport->undoEdit();
+    const auto removed_count = viewport->objectItems().size();
+    const auto redone = viewport->redoEdit();
+    const auto restored_count = viewport->objectItems().size();
+    const auto atom_edited = viewport->editAtomProperties(
+        1U, QStringLiteral("C1"), QStringLiteral("6"),
+        QStringLiteral("1"));
+    const auto residue_edited = viewport->editResidueProperties(
+        1U, QStringLiteral("CRB"), QStringLiteral("B"),
+        QStringLiteral("7"));
+    const auto bond_edited =
+        viewport->editBondOrder(1U, QStringLiteral("single"));
+    const auto bond_undone = viewport->undoEdit();
+    const auto bond_redone = viewport->redoEdit();
+    const auto malformed = viewport->buildMolecule(
+        QStringLiteral("invalid"), QStringLiteral("C,6,0,0,0,0"),
+        QStringLiteral("1,2,single"), QStringLiteral("LIG"),
+        QStringLiteral("A"), 1, QStringLiteral("angstrom"), 1048576U);
+    const auto opened = QMetaObject::invokeMethod(
+        window, "openMoleculeBuilder", Qt::DirectConnection);
+    auto *atom_properties_action = window->findChild<QObject *>(
+        QStringLiteral("atomPropertiesAction"));
+    const auto topology_opened =
+        atom_properties_action != nullptr &&
+        QMetaObject::invokeMethod(atom_properties_action, "trigger",
+                                  Qt::DirectConnection);
+    auto *overlay = window->findChild<QObject *>(
+        QStringLiteral("moleculeBuilderOverlay"));
+    auto *apply_button = window->findChild<QObject *>(
+        QStringLiteral("moleculeBuilderApplyButton"));
+    auto *topology_overlay = window->findChild<QObject *>(
+        QStringLiteral("topologyEditOverlay"));
+    auto *topology_apply_button = window->findChild<QObject *>(
+        QStringLiteral("topologyEditApplyButton"));
+    const auto chemistry = viewport->chemicalSemanticsJson();
+    const auto &packet = viewport->renderPacket();
+    const auto passed = built && undone && redone && atom_edited &&
+                        residue_edited && bond_edited && bond_undone &&
+                        bond_redone && !malformed &&
+                        object_count == 1 && removed_count == 0 &&
+                        restored_count == 1 &&
+                        viewport->objectItems().size() == object_count &&
+                        viewport->atomCount() == 2U &&
+                        packet.spheres.size() == 2U && opened &&
+                        overlay != nullptr && apply_button != nullptr &&
+                        overlay->property("visible").toBool() &&
+                        overlay->property("actionId").toString() ==
+                            QStringLiteral("build.molecule") &&
+                        topology_opened && topology_overlay != nullptr &&
+                        topology_apply_button != nullptr &&
+                        topology_overlay->property("visible").toBool() &&
+                        topology_overlay->property("actionId").toString() ==
+                            QStringLiteral("edit.atom-properties") &&
+                        chemistry.contains(
+                            QStringLiteral("\"topology_version\":4")) &&
+                        chemistry.contains(
+                            QStringLiteral("\"formal_charge_present_count\":2"));
+    if (!passed) {
+      qCritical("MolShredder desktop molecule builder smoke failed: built=%d undo=%d redo=%d atom=%d residue=%d bond=%d malformed=%d objects=%lld atoms=%llu status=%s",
+                built ? 1 : 0, undone ? 1 : 0, redone ? 1 : 0,
+                atom_edited ? 1 : 0, residue_edited ? 1 : 0,
+                bond_edited ? 1 : 0,
+                malformed ? 1 : 0,
+                static_cast<long long>(viewport->objectItems().size()),
+                static_cast<unsigned long long>(viewport->atomCount()),
+                viewport->statusText().toUtf8().constData());
+      return EXIT_FAILURE;
+    }
+    qInfo("MolShredder desktop molecule builder ready: residue=1 atoms=2 bonds=1 properties=atom-residue-bond canonical=shared undo=bounded panels=visible");
+  }
   if (analysis_smoke) {
+    const auto wait_for_analysis = [&] {
+      if (!viewport->analysisTaskRunning())
+        return viewport->analysisTaskStage() == QStringLiteral("complete");
+      QEventLoop wait;
+      QTimer timeout;
+      timeout.setSingleShot(true);
+      QObject::connect(&timeout, &QTimer::timeout, &wait, &QEventLoop::quit);
+      QObject::connect(
+          viewport,
+          &molshredder::desktop::MolecularViewport::analysisTaskChanged,
+          &wait, [&] {
+            if (!viewport->analysisTaskRunning()) wait.quit();
+          });
+      timeout.start(5000);
+      wait.exec();
+      return !viewport->analysisTaskRunning() &&
+             viewport->analysisTaskStage() == QStringLiteral("complete");
+    };
     const auto center = viewport->analyzeCenter(
         QStringLiteral("all"), QStringLiteral("com"),
         QStringLiteral("desktop-com"));
     const auto distance = viewport->analyzeDistance(
         QStringLiteral("index 1"), QStringLiteral("index 2"),
         QStringLiteral("raw"), QStringLiteral("desktop-distance"));
+    const auto sasa = viewport->analyzeSasa(
+        QStringLiteral("all"), 1.4, 256U, 100000U,
+        QStringLiteral("desktop-sasa"));
+    const auto sasa_complete = sasa && wait_for_analysis();
+    const auto rdf = viewport->analyzeRdf(
+        QStringLiteral("all"), QString{}, 5.0, 1.0,
+        QStringLiteral("count"), QStringLiteral("raw"), 100U,
+        QStringLiteral("desktop-rdf"));
+    const auto rdf_complete = rdf && wait_for_analysis();
     const auto detail = viewport->analysisResultJson(2U);
+    const auto sasa_detail = viewport->analysisResultJson(3U);
+    const auto rdf_detail = viewport->analysisResultJson(4U);
     const auto opened = QMetaObject::invokeMethod(
         window, "openAnalyze", Qt::DirectConnection);
     auto *overlay =
         window->findChild<QObject *>(QStringLiteral("analysisOverlay"));
+    auto *plot_canvas=
+        window->findChild<QObject *>(QStringLiteral("analysisPlotCanvas"));
+    auto *cancel_button=window->findChild<QObject *>(
+        QStringLiteral("analysisTaskCancelButton"));
+    auto *progress_text=window->findChild<QObject *>(
+        QStringLiteral("analysisTaskProgress"));
     const auto before_hide = viewport->renderPacket();
     const auto hidden = viewport->setAnalysisResultVisible(2U, false);
     const auto &after_hide = viewport->renderPacket();
     const auto passed =
-        center && distance && viewport->analysisItems().size() == 2U &&
+        center && distance && sasa_complete && rdf_complete &&
+        viewport->analysisItems().size() == 4U &&
         viewport->analysisLabelItems().size() == 1U &&
         before_hide.labels.size() == 2U && before_hide.lines.size() >= 8U &&
         after_hide.labels.size() == 1U && hidden &&
         detail.contains(QStringLiteral("molshredder-distance-v1")) &&
+        sasa_detail.contains(QStringLiteral(
+            "molshredder-shrake-rupley-fibonacci-v1")) &&
+        rdf_detail.contains(QStringLiteral("molshredder-rdf-histogram-v1")) &&
         detail.contains(QStringLiteral("source_status")) && opened &&
-        overlay != nullptr && overlay->property("visible").toBool();
+        overlay != nullptr && overlay->property("visible").toBool() &&
+        plot_canvas != nullptr && cancel_button != nullptr &&
+        progress_text != nullptr;
     if (!passed) {
       qCritical("MolShredder desktop analysis result smoke failed");
       return EXIT_FAILURE;
     }
-    qInfo("MolShredder desktop analysis ready: results=2 overlay=marker-dash-label canonical=shared panel=visible");
+    qInfo("MolShredder desktop analysis ready: results=4 overlay=marker-dash-label sasa-rdf=bounded canonical=shared panel=visible");
   }
   if (save_path.has_value() &&
       !viewport->saveStructure(QUrl::fromLocalFile(*save_path), save_all)) {
     qCritical("%s", viewport->statusText().toUtf8().constData());
     return EXIT_FAILURE;
   }
-  if ((script_smoke || script_cancel_smoke) && !script_path.has_value()) {
+  if ((script_smoke || script_cancel_smoke || isolated_script_smoke) &&
+      !script_path.has_value()) {
     qCritical("Desktop script smoke requires --script");
     return EXIT_FAILURE;
   }
-  if (script_smoke || script_cancel_smoke) {
+  if (script_smoke || script_cancel_smoke || isolated_script_smoke) {
     QObject::connect(
         viewport, &molshredder::desktop::MolecularViewport::scriptFinished,
         &application,
-        [viewport, script_smoke, script_cancel_smoke,
+        [viewport, script_smoke, script_cancel_smoke, isolated_script_smoke,
          &application](bool succeeded) {
           if (script_smoke) {
             const auto passed = succeeded && !viewport->scriptRunning() &&
@@ -663,6 +1536,20 @@ int main(int argc, char *argv[]) {
             }
             qInfo("MolShredder desktop Python script cancellation ready: "
                   "checkpoint=post-execution output=captured");
+          } else if (isolated_script_smoke) {
+            const auto passed =
+                succeeded && !viewport->scriptRunning() &&
+                viewport->objectItems().isEmpty() &&
+                viewport->scriptOutput().contains(
+                    QStringLiteral("gui-isolated-output"));
+            if (!passed) {
+              qCritical("MolShredder desktop isolated Python script smoke "
+                        "failed");
+              application.exit(EXIT_FAILURE);
+              return;
+            }
+            qInfo("MolShredder desktop isolated Python script ready: "
+                  "objects=0 output=captured parent=unchanged");
           }
           application.quit();
         });
@@ -672,7 +1559,8 @@ int main(int argc, char *argv[]) {
     });
   }
   if (script_path.has_value() &&
-      !viewport->runPythonScript(QUrl::fromLocalFile(*script_path))) {
+      !viewport->runPythonScript(QUrl::fromLocalFile(*script_path),
+                                 isolated_script_smoke)) {
     qCritical("%s", viewport->statusText().toUtf8().constData());
     return EXIT_FAILURE;
   }
@@ -899,6 +1787,67 @@ int main(int argc, char *argv[]) {
     qInfo("MolShredder desktop named view ready: stored=1 "
           "recalled=animated-exact panel=visible "
           "pymol18=animated-roundtrip");
+  }
+  if (session_smoke) {
+    QTemporaryDir session_directory;
+    const auto session_path =
+        session_directory.filePath(QStringLiteral("desktop.msess"));
+    const auto autosave_path =
+        session_directory.filePath(QStringLiteral("desktop.autosave.msess"));
+    const auto recovery_path = session_directory.filePath(
+        QStringLiteral("desktop.autosave.previous.msess"));
+    const auto scene_stored =
+        viewport->storeNamedScene(QStringLiteral("desktop baseline"));
+    const auto movie_configured = viewport->configureMovie(3U, 24.0, true);
+    const auto key_stored = viewport->setMovieKeyframe(
+        2U, QStringLiteral("desktop baseline"), -1);
+    const auto hidden = viewport->setObjectVisible(1U, false);
+    const auto movie_sought = viewport->seekMovie(2U);
+    const auto session_saved = viewport->saveSession(
+        QUrl::fromLocalFile(session_path), QStringLiteral("views"));
+    const auto hidden_after_save = viewport->setObjectVisible(1U, false);
+    const auto session_loaded = viewport->loadSession(
+        QUrl::fromLocalFile(session_path));
+    const auto first_autosave = viewport->autosaveSession(
+        QUrl::fromLocalFile(autosave_path),
+        QUrl::fromLocalFile(recovery_path));
+    const auto second_autosave = viewport->autosaveSession(
+        QUrl::fromLocalFile(autosave_path),
+        QUrl::fromLocalFile(recovery_path));
+    const auto invoked = QMetaObject::invokeMethod(
+        window, "restoreSessionVisiblePanels", Qt::DirectConnection);
+    auto *scene_list =
+        window->findChild<QObject *>(QStringLiteral("namedSceneList"));
+    auto *store_scene_button = window->findChild<QObject *>(
+        QStringLiteral("storeNamedSceneButton"));
+    auto *configure_movie_button = window->findChild<QObject *>(
+        QStringLiteral("configureMovieButton"));
+    auto *store_key_button = window->findChild<QObject *>(
+        QStringLiteral("storeMovieKeyframeButton"));
+    auto *play_movie_button = window->findChild<QObject *>(
+        QStringLiteral("playMovieButton"));
+    const auto movie = viewport->movieState();
+    const auto objects = viewport->objectItems();
+    if (!session_directory.isValid() || !scene_stored || !movie_configured ||
+        !key_stored || !hidden || !movie_sought || !session_saved ||
+        !hidden_after_save || !session_loaded || !first_autosave ||
+        !second_autosave || !invoked || scene_list == nullptr ||
+        store_scene_button == nullptr || configure_movie_button == nullptr ||
+        store_key_button == nullptr || play_movie_button == nullptr ||
+        viewport->sceneItems().size() != 1 ||
+        viewport->sessionVisiblePanels() != QStringLiteral("views") ||
+        !movie.value(QStringLiteral("configured")).toBool() ||
+        movie.value(QStringLiteral("currentFrame")).toULongLong() != 2U ||
+        movie.value(QStringLiteral("keyframeCount")).toULongLong() != 1U ||
+        objects.isEmpty() ||
+        !objects.front().toMap().value(QStringLiteral("visible")).toBool() ||
+        !QFileInfo::exists(session_path) || !QFileInfo::exists(autosave_path) ||
+        !QFileInfo::exists(recovery_path)) {
+      qCritical("MolShredder desktop session/movie smoke failed");
+      return EXIT_FAILURE;
+    }
+    qInfo("MolShredder desktop session ready: scenes=1 movie=typed "
+          "save-load=atomic autosave=rotated panel=visible");
   }
   if (stereo_smoke) {
     const auto enabled = viewport->setStereo(
@@ -1177,7 +2126,7 @@ int main(int argc, char *argv[]) {
         !seek_and_wait(1U) ||
         viewport->trajectoryMappingText() != trajectory_mapping ||
         window->findChild<QObject *>(
-            QStringLiteral("trajectoryMappingButton")) == nullptr) {
+            QStringLiteral("trajectoryMappingSelector")) == nullptr) {
       qCritical("MolShredder desktop H5MD trajectory smoke failed");
       return EXIT_FAILURE;
     }
@@ -1217,9 +2166,10 @@ int main(int argc, char *argv[]) {
       application.quit();
     });
   } else if (smoke && !picking_smoke && !trajectory_smoke && !script_smoke &&
-             !script_cancel_smoke && !graphics_info_smoke &&
+             !script_cancel_smoke && !isolated_script_smoke &&
+             !graphics_info_smoke &&
              !system_info_panel_smoke && !stereo_smoke && !anaglyph_smoke &&
-             !interleaved_smoke) {
+             !interleaved_smoke && !direct_volume_smoke) {
     QTimer::singleShot(1500, &application, &QCoreApplication::quit);
   }
   return application.exec();

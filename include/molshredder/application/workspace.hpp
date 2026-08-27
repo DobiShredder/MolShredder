@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstdint>
+#include <deque>
 #include <filesystem>
 #include <map>
 #include <memory>
@@ -14,10 +15,13 @@
 #include "molshredder/analysis/basic.hpp"
 #include "molshredder/analysis/contacts.hpp"
 #include "molshredder/analysis/principal_axes.hpp"
+#include "molshredder/analysis/rdf.hpp"
+#include "molshredder/analysis/sasa.hpp"
 #include "molshredder/analysis/secondary_structure.hpp"
 #include "molshredder/analysis/time_series.hpp"
 #include "molshredder/application/analysis_result.hpp"
 #include "molshredder/application/representation_visibility.hpp"
+#include "molshredder/command/registry.hpp"
 #include "molshredder/io/structure_reader.hpp"
 #include "molshredder/io/structure_writer.hpp"
 #include "molshredder/io/trajectory_reader.hpp"
@@ -25,6 +29,8 @@
 #include "molshredder/io/volume_reader.hpp"
 #include "molshredder/io/volume_writer.hpp"
 #include "molshredder/model/molecular_system.hpp"
+#include "molshredder/model/molecular_builder.hpp"
+#include "molshredder/model/chemical_perception.hpp"
 #include "molshredder/model/volume.hpp"
 #include "molshredder/operation/error.hpp"
 #include "molshredder/operation/result.hpp"
@@ -33,6 +39,10 @@
 #include "molshredder/render/representation.hpp"
 #include "molshredder/render/setting_store.hpp"
 #include "molshredder/render/volume_isosurface.hpp"
+#include "molshredder/render/volume_slice.hpp"
+#include "molshredder/render/transfer_function.hpp"
+#include "molshredder/render/direct_volume.hpp"
+#include "molshredder/render/molecular_surface.hpp"
 #include "molshredder/scene/scene.hpp"
 #include "molshredder/scene/camera.hpp"
 #include "molshredder/scene/stereo.hpp"
@@ -66,10 +76,29 @@ struct WorkspaceObject {
   std::uint64_t id{};
   scene::NodeId scene_node;
   std::shared_ptr<const model::MolecularSystem> system;
+  std::uint64_t coordinate_source_revision{1U};
+  std::uint64_t coordinate_revision{1U};
   selection::NamedSelections selections;
   RepresentationVisibilityState representation_visibility;
   std::vector<RepresentationRecord> representations;
   std::optional<TrajectoryState> trajectory;
+  std::optional<render::RenderPacket> molecular_surface;
+};
+
+struct MolecularSurfaceResult {
+  std::uint64_t object_id{};
+  render::MolecularSurfaceKind kind{
+      render::MolecularSurfaceKind::solvent_accessible};
+  std::string selection_expression;
+  double probe_radius_angstrom{};
+  double grid_spacing_angstrom{};
+  std::size_t voxel_count{};
+  std::size_t voxel_budget{};
+  std::size_t memory_budget_bytes{};
+  std::size_t vertex_count{};
+  std::size_t triangle_count{};
+  std::size_t pick_target_count{};
+  render::Bounds3d bounds;
 };
 
 struct WorkspaceVolume {
@@ -79,7 +108,49 @@ struct WorkspaceVolume {
   std::filesystem::path path;
   io::VolumeFormat format{io::VolumeFormat::auto_detect};
   std::shared_ptr<const model::VolumeGrid> grid;
+  std::uint64_t presentation_revision{1U};
   std::vector<render::RenderPacket> representations;
+  std::optional<render::TransferFunction> transfer_function;
+  std::string transfer_function_name;
+  std::shared_ptr<const render::DirectVolumeData> direct_volume;
+};
+
+struct VolumeRampResult {
+  std::uint64_t object_id{};
+  std::string name;
+  std::string algorithm;
+  std::size_t algorithm_version{};
+  std::vector<render::TransferPoint> points;
+};
+
+struct DirectVolumeResult {
+  std::uint64_t object_id{};
+  std::string transfer_function_name;
+  render::VolumeClassificationMode mode{
+      render::VolumeClassificationMode::post_classified};
+  double sampling_step{};
+  std::size_t maximum_steps{};
+  std::size_t lookup_table_samples{};
+  std::size_t texture_budget_bytes{};
+  std::size_t required_texture_bytes{};
+};
+
+struct DirectVolumePlan {
+  std::uint64_t object_id{};
+  scene::NodeId scene_node;
+  std::shared_ptr<const model::VolumeGrid> grid;
+  std::uint64_t expected_presentation_revision{};
+  render::TransferFunction transfer_function;
+  std::string transfer_function_name;
+  bool commit_transfer_function{};
+  bool replace_existing{};
+  render::DirectVolumeStyle style;
+  std::size_t required_texture_bytes{};
+};
+
+struct DirectVolumeCandidate {
+  DirectVolumePlan plan;
+  std::shared_ptr<const render::DirectVolumeData> data;
 };
 
 struct VolumeIsosurfaceResult {
@@ -89,6 +160,21 @@ struct VolumeIsosurfaceResult {
   render::ColorRgba color;
   std::size_t vertex_count{};
   std::size_t triangle_count{};
+  render::Bounds3d bounds;
+};
+
+struct VolumeSliceResult {
+  std::uint64_t object_id{};
+  std::size_t representation_index{};
+  render::VolumeSliceAxis axis{render::VolumeSliceAxis::z};
+  std::size_t index{};
+  render::ColorRgba minimum_color;
+  render::ColorRgba maximum_color;
+  std::size_t memory_budget_bytes{};
+  std::size_t required_bytes{};
+  std::size_t vertex_count{};
+  std::size_t triangle_count{};
+  std::size_t pick_target_count{};
   render::Bounds3d bounds;
 };
 
@@ -397,6 +483,87 @@ struct TopologyMutationResult {
   std::vector<std::uint64_t> ordered_atom_ids;
 };
 
+inline constexpr unsigned int kEditTransactionDiffSchemaVersion = 1U;
+
+enum class EditTransactionKind {
+  atom_position,
+  atom_properties,
+  residue_properties,
+  bond_order,
+  molecule_build
+};
+
+[[nodiscard]] std::string_view to_string(EditTransactionKind kind) noexcept;
+
+struct CoordinateEditResult {
+  std::uint64_t transaction_id{};
+  std::uint64_t object_id{};
+  model::AtomId atom_id;
+  std::size_t frame_index{};
+  model::Vec3d previous_position;
+  model::Vec3d position;
+  std::uint64_t previous_coordinate_source_revision{};
+  std::uint64_t previous_coordinate_revision{};
+  std::uint64_t coordinate_source_revision{};
+  std::uint64_t coordinate_revision{};
+  std::size_t affected_state_count{};
+  std::size_t invalidated_measurement_count{};
+  std::size_t undo_bytes{};
+  std::size_t evicted_transaction_count{};
+  EditTransactionKind transaction_kind{EditTransactionKind::atom_position};
+};
+
+struct EditHistoryStatus {
+  std::size_t memory_budget_bytes{};
+  std::size_t memory_used_bytes{};
+  std::size_t undo_count{};
+  std::size_t redo_count{};
+  std::optional<std::uint64_t> next_undo_transaction;
+  std::optional<std::uint64_t> next_redo_transaction;
+};
+
+struct EditHistoryResult {
+  std::uint64_t transaction_id{};
+  std::string direction;
+  std::uint64_t object_id{};
+  std::uint64_t coordinate_source_revision{};
+  std::uint64_t coordinate_revision{};
+  std::size_t invalidated_measurement_count{};
+  EditHistoryStatus history;
+  EditTransactionKind transaction_kind{EditTransactionKind::atom_position};
+};
+
+struct MoleculeBuildCommitResult {
+  LoadResult loaded;
+  std::uint64_t transaction_id{};
+  std::size_t undo_bytes{};
+  std::size_t evicted_transaction_count{};
+  EditTransactionKind transaction_kind{EditTransactionKind::molecule_build};
+};
+
+struct TopologyPropertyEditResult {
+  std::uint64_t transaction_id{};
+  std::uint64_t object_id{};
+  std::uint64_t previous_topology_version{};
+  std::uint64_t topology_version{};
+  std::uint64_t previous_coordinate_source_revision{};
+  std::uint64_t coordinate_source_revision{};
+  std::uint64_t coordinate_revision{};
+  std::size_t invalidated_measurement_count{};
+  std::size_t undo_bytes{};
+  std::size_t evicted_transaction_count{};
+  EditTransactionKind transaction_kind{EditTransactionKind::atom_properties};
+};
+
+struct ChemicalPerceptionApplyResult {
+  std::uint64_t object_id{};
+  std::uint64_t previous_topology_version{};
+  std::uint64_t topology_version{};
+  std::size_t previous_bond_count{};
+  std::size_t bond_count{};
+  std::size_t added_bond_count{};
+};
+
 struct ShowResult {
   std::uint64_t object_id{};
   std::size_t representation_index{};
@@ -431,6 +598,82 @@ struct DistanceMeasurementRecord {
   analysis::AtomDistanceResult distance;
 };
 
+struct AngleAnalysisResult {
+  std::uint64_t object_id{};
+  std::string first_expression;
+  std::string vertex_expression;
+  std::string third_expression;
+  analysis::AtomAngleResult angle;
+};
+
+struct DihedralAnalysisResult {
+  std::uint64_t object_id{};
+  std::string first_expression;
+  std::string second_expression;
+  std::string third_expression;
+  std::string fourth_expression;
+  analysis::AtomDihedralResult dihedral;
+};
+
+struct SasaAnalysisResult {
+  std::uint64_t object_id{};
+  std::string selection_expression;
+  std::string radius_source;
+  analysis::SasaResult sasa;
+};
+
+struct RdfAnalysisResult {
+  std::uint64_t object_id{};
+  std::string first_expression;
+  std::string second_expression;
+  analysis::RdfResult rdf;
+};
+
+struct AnalysisInputStamp {
+  std::uint64_t object_id{};
+  std::shared_ptr<const model::MolecularSystem> system;
+  std::uint64_t topology_version{};
+  std::uint64_t coordinate_source_revision{};
+  std::uint64_t coordinate_revision{};
+};
+
+struct SasaAnalysisPlan {
+  AnalysisInputStamp source;
+  std::shared_ptr<const model::CoordinateFrame> frame;
+  std::string selection_expression;
+  std::string radius_source;
+  std::vector<std::uint8_t> selected;
+  std::vector<double> vdw_radii_angstrom;
+  double probe_radius_angstrom{};
+  std::size_t samples_per_atom{};
+  std::size_t evaluation_budget{};
+};
+
+struct SasaAnalysisCandidate {
+  SasaAnalysisPlan plan;
+  analysis::SasaResult sasa;
+};
+
+struct RdfAnalysisPlan {
+  AnalysisInputStamp source;
+  std::shared_ptr<const model::CoordinateFrame> frame;
+  std::string first_expression;
+  std::string second_expression;
+  std::vector<std::uint8_t> first_selected;
+  std::vector<std::uint8_t> second_selected;
+  double maximum_radius{};
+  double bin_width{};
+  analysis::DistanceBoundary boundary{analysis::DistanceBoundary::raw};
+  analysis::RdfNormalization normalization{analysis::RdfNormalization::pair_count};
+  bool same_selection{};
+  std::uint64_t evaluation_budget{};
+};
+
+struct RdfAnalysisCandidate {
+  RdfAnalysisPlan plan;
+  analysis::RdfResult rdf;
+};
+
 struct ContactAnalysisResult {
   std::uint64_t object_id{};
   std::string first_expression;
@@ -460,6 +703,7 @@ struct HydrogenBondAnalysisResult {
 struct SecondaryStructureAnalysisResult {
   std::uint64_t object_id{};
   std::string selection_expression;
+  operation::LengthUnit coordinate_unit{operation::LengthUnit::angstrom};
   analysis::SecondaryStructureParameters parameters;
   analysis::SecondaryStructureResult assignment;
   std::vector<std::uint8_t> selected_residues;
@@ -498,6 +742,36 @@ struct RmsdTimeSeriesResult {
   analysis::FitMode fit{analysis::FitMode::rigid};
   AnalysisWeightProvenance weights;
   std::vector<analysis::RmsdSeriesRow> rows;
+};
+
+struct RmsdMatrixAnalysisResult {
+  std::uint64_t object_id{};
+  std::string selection_expression;
+  std::string fit_selection_expression;
+  analysis::SeriesRange range;
+  analysis::FitMode fit{analysis::FitMode::rigid};
+  AnalysisWeightProvenance weights;
+  analysis::RmsdMatrixResult matrix;
+};
+
+struct RmsdMatrixAnalysisPlan {
+  AnalysisInputStamp source;
+  std::shared_ptr<trajectory::FrameCache> cache;
+  std::string selection_expression;
+  std::string fit_selection_expression;
+  analysis::SeriesRange range;
+  analysis::FitMode fit{analysis::FitMode::rigid};
+  AnalysisWeightProvenance weights;
+  std::vector<std::uint8_t> selected;
+  std::vector<std::uint8_t> fit_selected;
+  std::vector<double> weight_values;
+  analysis::MissingAtomPolicy missing_atom_policy{analysis::MissingAtomPolicy::error};
+  std::uint64_t frame_pair_budget{};
+};
+
+struct RmsdMatrixAnalysisCandidate {
+  RmsdMatrixAnalysisPlan plan;
+  analysis::RmsdMatrixResult matrix;
 };
 
 struct RmsfTimeSeriesResult {
@@ -553,6 +827,56 @@ struct NamedViewDeleteResult {
   bool cleared_all{};
 };
 
+struct NamedSceneRecord {
+  std::string name;
+  std::size_t molecular_object_count{};
+  std::size_t volume_object_count{};
+  bool current{};
+
+  friend bool operator==(const NamedSceneRecord&, const NamedSceneRecord&) =
+      default;
+};
+
+struct NamedSceneStoreResult {
+  NamedSceneRecord scene;
+  std::size_t scene_count{};
+  bool replaced{};
+};
+
+struct NamedSceneDeleteResult {
+  std::string name;
+  std::size_t scene_count{};
+  bool cleared_all{};
+};
+
+struct MovieFrameRecord {
+  // Movie frames are one-based at the product API boundary.
+  std::size_t frame{1U};
+  std::optional<std::string> scene_name;
+  // Trajectory frames retain the existing zero-based trajectory contract.
+  std::optional<std::size_t> trajectory_frame;
+
+  friend bool operator==(const MovieFrameRecord&, const MovieFrameRecord&) =
+      default;
+};
+
+struct MovieTimelineState {
+  std::size_t frame_count{};
+  std::size_t current_frame{1U};
+  double frames_per_second{30.0};
+  bool loop{};
+  bool playing{};
+  std::map<std::size_t, MovieFrameRecord> keyframes;
+
+  friend bool operator==(const MovieTimelineState&, const MovieTimelineState&) =
+      default;
+};
+
+struct MovieTimelineResult {
+  MovieTimelineState timeline;
+  std::size_t applied_keyframe_count{};
+};
+
 class Workspace {
 public:
   Workspace();
@@ -579,6 +903,34 @@ public:
   show_volume_isosurface(double level, render::ColorRgba color,
                          bool replace_existing,
                          operation::TaskContext &context);
+  [[nodiscard]] operation::Result<VolumeSliceResult>
+  show_volume_slice(render::VolumeSliceStyle style, bool replace_existing,
+                    operation::TaskContext &context);
+  [[nodiscard]] operation::Result<VolumeRampResult>
+  set_volume_ramp(render::TransferPreset preset);
+  [[nodiscard]] operation::Result<VolumeRampResult>
+  define_volume_ramp(std::string name, render::TransferFunction transfer);
+  [[nodiscard]] operation::Result<VolumeRampResult> volume_ramp() const;
+  [[nodiscard]] operation::Result<DirectVolumeResult>
+  show_direct_volume(render::DirectVolumeStyle style,
+                     std::optional<render::TransferPreset> preset,
+                     bool replace_existing,
+                     operation::TaskContext &context);
+  [[nodiscard]] operation::Result<DirectVolumePlan>
+  plan_direct_volume(render::DirectVolumeStyle style,
+                     std::optional<render::TransferPreset> preset,
+                     bool replace_existing) const;
+  [[nodiscard]] static operation::Result<DirectVolumeCandidate>
+  build_direct_volume_candidate(DirectVolumePlan plan,
+                                operation::TaskContext &context);
+  [[nodiscard]] operation::Result<DirectVolumeResult>
+  commit_direct_volume(DirectVolumeCandidate candidate);
+  [[nodiscard]] operation::Result<bool> hide_direct_volume();
+  [[nodiscard]] operation::Result<MolecularSurfaceResult>
+  show_molecular_surface(std::string selection_expression,
+                         render::MolecularSurfaceStyle style,
+                         operation::TaskContext &context);
+  [[nodiscard]] operation::Result<bool> hide_molecular_surface();
   [[nodiscard]] operation::Result<VolumeSaveResult>
   save_active_volume(const std::filesystem::path &path,
                      io::VolumeFormat format, bool overwrite,
@@ -603,6 +955,27 @@ public:
   [[nodiscard]] operation::Result<TopologyMutationResult>
   retain_active_atoms(std::span<const model::AtomId> ordered_atom_ids,
                       std::uint64_t expected_topology_version);
+  [[nodiscard]] operation::Result<CoordinateEditResult>
+  set_active_atom_position(model::AtomId atom_id, model::Vec3d position,
+                           std::uint64_t expected_topology_version,
+                           std::uint64_t expected_coordinate_source_revision);
+  [[nodiscard]] operation::Result<EditHistoryResult> undo_edit();
+  [[nodiscard]] operation::Result<EditHistoryResult> redo_edit();
+  [[nodiscard]] EditHistoryStatus edit_history_status() const noexcept;
+  [[nodiscard]] operation::Result<EditHistoryStatus>
+  set_edit_history_budget(std::size_t memory_budget_bytes);
+  [[nodiscard]] operation::Result<MoleculeBuildCommitResult>
+  commit_built_molecule(std::string name,
+                        const model::MoleculeBuildResult &built);
+  [[nodiscard]] operation::Result<TopologyPropertyEditResult>
+  commit_active_topology_edit(
+      std::shared_ptr<const model::Topology> topology,
+      std::uint64_t expected_topology_version,
+      std::uint64_t expected_coordinate_source_revision,
+      EditTransactionKind transaction_kind);
+  [[nodiscard]] operation::Result<ChemicalPerceptionApplyResult>
+  apply_active_chemical_perception(
+      const model::ChemicalPerceptionReport &report);
   [[nodiscard]] std::optional<operation::Error>
   set_named_selection(std::string name, std::string expression, bool dynamic);
   [[nodiscard]] operation::Result<ShowResult>
@@ -631,6 +1004,8 @@ public:
   analyze_center(std::string selection_expression, analysis::CenterMode mode);
   [[nodiscard]] operation::Result<PersistentAnalysisResult>
   store_analysis_result(AnalysisResultDraft draft);
+  [[nodiscard]] operation::Result<ScientificResultContract>
+  bind_scientific_result_contract(ScientificResultContract contract) const;
   [[nodiscard]] std::optional<operation::Error> validate_analysis_result_name(
       const std::optional<std::string> &name) const;
   [[nodiscard]] operation::Result<PersistentAnalysisResult>
@@ -702,6 +1077,46 @@ public:
   [[nodiscard]] operation::Result<DistanceMeasurementRecord> measure_distance(
       std::string from_expression, std::string to_expression,
       analysis::DistanceBoundary boundary = analysis::DistanceBoundary::raw);
+  [[nodiscard]] operation::Result<AngleAnalysisResult> analyze_angle(
+      std::string first_expression, std::string vertex_expression,
+      std::string third_expression,
+      analysis::DistanceBoundary boundary = analysis::DistanceBoundary::raw);
+  [[nodiscard]] operation::Result<DihedralAnalysisResult> analyze_dihedral(
+      std::string first_expression, std::string second_expression,
+      std::string third_expression, std::string fourth_expression,
+      analysis::DistanceBoundary boundary = analysis::DistanceBoundary::raw);
+  [[nodiscard]] operation::Result<SasaAnalysisResult> analyze_sasa(
+      std::string selection_expression, double probe_radius_angstrom,
+      std::size_t samples_per_atom, std::size_t evaluation_budget,
+      operation::TaskContext *context = nullptr);
+  [[nodiscard]] operation::Result<SasaAnalysisPlan> plan_sasa_analysis(
+      std::string selection_expression, double probe_radius_angstrom,
+      std::size_t samples_per_atom, std::size_t evaluation_budget) const;
+  [[nodiscard]] static operation::Result<SasaAnalysisCandidate>
+  build_sasa_analysis_candidate(SasaAnalysisPlan plan,
+                                operation::TaskContext &context);
+  [[nodiscard]] operation::Result<SasaAnalysisResult>
+  commit_sasa_analysis(SasaAnalysisCandidate candidate) const;
+  [[nodiscard]] operation::Result<RdfAnalysisResult> analyze_rdf(
+      std::string first_expression, std::string second_expression,
+      double maximum_radius, double bin_width,
+      analysis::DistanceBoundary boundary,
+      analysis::RdfNormalization normalization, bool same_selection,
+      std::uint64_t evaluation_budget,
+      operation::LengthUnit distance_unit = operation::LengthUnit::angstrom,
+      operation::TaskContext *context = nullptr);
+  [[nodiscard]] operation::Result<RdfAnalysisPlan> plan_rdf_analysis(
+      std::string first_expression, std::string second_expression,
+      double maximum_radius, double bin_width,
+      analysis::DistanceBoundary boundary,
+      analysis::RdfNormalization normalization, bool same_selection,
+      std::uint64_t evaluation_budget,
+      operation::LengthUnit distance_unit = operation::LengthUnit::angstrom) const;
+  [[nodiscard]] static operation::Result<RdfAnalysisCandidate>
+  build_rdf_analysis_candidate(RdfAnalysisPlan plan,
+                               operation::TaskContext &context);
+  [[nodiscard]] operation::Result<RdfAnalysisResult>
+  commit_rdf_analysis(RdfAnalysisCandidate candidate) const;
   [[nodiscard]] operation::Result<DistanceAnalysisOverlay>
   distance_analysis_overlay(const DistanceMeasurementRecord &record,
                             std::string label) const;
@@ -740,6 +1155,26 @@ public:
                            analysis::WeightMode weight_mode,
                            analysis::MissingAtomPolicy missing_atom_policy,
                            operation::TaskContext &context);
+  [[nodiscard]] operation::Result<RmsdMatrixAnalysisResult>
+  analyze_rmsd_matrix(std::string selection_expression,
+                      std::string fit_selection_expression,
+                      analysis::SeriesRange range, analysis::FitMode fit,
+                      analysis::WeightMode weight_mode,
+                      analysis::MissingAtomPolicy missing_atom_policy,
+                      std::uint64_t frame_pair_budget,
+                      operation::TaskContext &context);
+  [[nodiscard]] operation::Result<RmsdMatrixAnalysisPlan>
+  plan_rmsd_matrix_analysis(
+      std::string selection_expression, std::string fit_selection_expression,
+      analysis::SeriesRange range, analysis::FitMode fit,
+      analysis::WeightMode weight_mode,
+      analysis::MissingAtomPolicy missing_atom_policy,
+      std::uint64_t frame_pair_budget) const;
+  [[nodiscard]] static operation::Result<RmsdMatrixAnalysisCandidate>
+  build_rmsd_matrix_analysis_candidate(RmsdMatrixAnalysisPlan plan,
+                                       operation::TaskContext &context);
+  [[nodiscard]] operation::Result<RmsdMatrixAnalysisResult>
+  commit_rmsd_matrix_analysis(RmsdMatrixAnalysisCandidate candidate) const;
   [[nodiscard]] operation::Result<RmsfTimeSeriesResult>
   analyze_rmsf_time_series(std::string selection_expression,
                            std::string fit_selection_expression,
@@ -833,6 +1268,30 @@ public:
   delete_named_view(std::string_view name);
   [[nodiscard]] NamedViewDeleteResult clear_named_views();
   [[nodiscard]] std::vector<NamedViewRecord> list_named_views() const;
+  [[nodiscard]] operation::Result<NamedSceneStoreResult>
+  store_named_scene(std::string name);
+  [[nodiscard]] operation::Result<NamedSceneRecord>
+  recall_named_scene(std::string_view name);
+  [[nodiscard]] operation::Result<NamedSceneDeleteResult>
+  delete_named_scene(std::string_view name);
+  [[nodiscard]] NamedSceneDeleteResult clear_named_scenes();
+  [[nodiscard]] std::vector<NamedSceneRecord> list_named_scenes() const;
+  [[nodiscard]] operation::Result<MovieTimelineResult>
+  configure_movie(std::size_t frame_count, double frames_per_second,
+                  bool loop);
+  [[nodiscard]] operation::Result<MovieTimelineResult>
+  set_movie_keyframe(MovieFrameRecord keyframe);
+  [[nodiscard]] operation::Result<MovieTimelineResult>
+  seek_movie(std::size_t frame);
+  [[nodiscard]] operation::Result<MovieTimelineResult>
+  play_movie(bool playing);
+  [[nodiscard]] operation::Result<MovieTimelineResult>
+  step_movie(std::size_t steps);
+  [[nodiscard]] operation::Result<MovieTimelineResult> clear_movie();
+  [[nodiscard]] const std::optional<MovieTimelineState>& movie() const
+      noexcept {
+    return movie_;
+  }
 
   [[nodiscard]] const std::shared_ptr<const scene::Scene> &scene() const {
     return scene_;
@@ -878,7 +1337,32 @@ public:
   [[nodiscard]] std::optional<operation::Error>
   restore_render_settings(const render::RenderSettingSnapshot &snapshot);
 
+  // Successful product-facing state mutations are recorded as normalized
+  // canonical invocations. Query/export commands and failed mutations are not
+  // part of this journal. Session producers use it instead of reverse
+  // engineering mutable Workspace internals.
+  void record_session_invocation(command::Invocation invocation);
+  [[nodiscard]] std::span<const command::Invocation>
+  session_invocations() const noexcept {
+    return session_invocations_;
+  }
+  void clear_session_invocations() noexcept { session_invocations_.clear(); }
+
 private:
+  enum class EditRecordKind { coordinate, object_create };
+  struct EditRecord {
+    EditRecordKind kind{EditRecordKind::coordinate};
+    std::uint64_t transaction_id{};
+    std::uint64_t object_id{};
+    std::shared_ptr<const model::MolecularSystem> before;
+    std::shared_ptr<const model::MolecularSystem> after;
+    std::optional<WorkspaceObject> created_object;
+    std::size_t memory_bytes{};
+    EditTransactionKind transaction_kind{EditTransactionKind::atom_position};
+  };
+  [[nodiscard]] operation::Result<std::size_t>
+  apply_edit_record(const EditRecord &record, bool use_after);
+  void evict_edit_history_to_budget();
   [[nodiscard]] std::optional<operation::Error>
   commit_render_settings(render::RenderSettingStore candidate);
   [[nodiscard]] WorkspaceObject *mutable_active_object() noexcept;
@@ -900,7 +1384,20 @@ private:
   std::optional<scene::Camera> camera_;
   scene::StereoParameters stereo_;
   std::map<std::string, scene::CameraParameters, std::less<>> named_views_;
+  // A scene is an in-memory full Workspace state checkpoint. Stored snapshots
+  // have their own scene map cleared, avoiding recursive ownership. The
+  // canonical `scene store` journal reconstructs them across session replay.
+  std::map<std::string, std::shared_ptr<const Workspace>, std::less<>>
+      named_scenes_;
+  std::optional<std::string> current_scene_name_;
+  std::optional<MovieTimelineState> movie_;
   render::RenderSettingStore render_settings_;
+  std::uint64_t next_edit_transaction_id_{1U};
+  std::size_t edit_history_memory_budget_bytes_{256U * 1024U * 1024U};
+  std::size_t edit_history_memory_used_bytes_{};
+  std::deque<EditRecord> undo_history_;
+  std::deque<EditRecord> redo_history_;
+  std::vector<command::Invocation> session_invocations_;
 };
 
 } // namespace molshredder::application

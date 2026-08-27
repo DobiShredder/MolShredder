@@ -34,6 +34,24 @@ molshredder::application::DispatchOutcome trigger(
   return gui.trigger({std::move(command), std::move(arguments)}, context);
 }
 
+bool wait_for_state(
+    const std::shared_ptr<molshredder::operation::TaskScheduler> &scheduler,
+    std::uint64_t task_id, molshredder::operation::TaskState expected) {
+  for (std::size_t attempt = 0; attempt < 2000U; ++attempt) {
+    const auto snapshot = scheduler->snapshot(task_id);
+    if (snapshot.has_value() && snapshot.value().state == expected)
+      return true;
+    if (snapshot.has_value() &&
+        (snapshot.value().state == molshredder::operation::TaskState::failed ||
+         snapshot.value().state ==
+             molshredder::operation::TaskState::cancelled ||
+         snapshot.value().state == molshredder::operation::TaskState::stale))
+      return false;
+    std::this_thread::sleep_for(std::chrono::milliseconds{1});
+  }
+  return false;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -181,6 +199,437 @@ int main(int argc, char** argv) {
                              operation::TaskState::stale &&
                          async_workspace->object_count() == 2U,
                      "generation change must discard parsed batch before commit");
+  }
+
+  {
+    auto analysis_workspace = std::make_shared<application::Workspace>();
+    const auto loaded = analysis_workspace->load_structure(
+        fixture, std::string{"scheduled-analysis"}, io::StructureFormat::pdb);
+    auto scheduler = operation::TaskScheduler::create(
+                         {1U, 4U, 16U * 1024U * 1024U, 2U, 16U})
+                         .value();
+    std::atomic_uint64_t generation{1U};
+    application::ScheduledSasaRequest sasa;
+    sasa.arguments = {{"selection", "all"},
+                      {"probe-radius", "1.4"},
+                      {"samples", "32"},
+                      {"evaluation-budget", "1000000"},
+                      {"unit", "square-angstrom"},
+                      {"precision", "6"}};
+    sasa.selection_expression = "all";
+    sasa.probe_radius_angstrom = 1.4;
+    sasa.samples_per_atom = 32U;
+    sasa.evaluation_budget = 1000000U;
+    sasa.generation = 1U;
+    sasa.generation_is_current = [&](std::uint64_t value) {
+      return value == generation.load();
+    };
+    const auto scheduled_sasa = application::schedule_sasa_analysis(
+        analysis_workspace, scheduler, std::move(sasa));
+    passed &= expect(
+        loaded.has_value() && scheduled_sasa.has_value() &&
+            wait_for_state(scheduler, scheduled_sasa.value().task_id,
+                           operation::TaskState::ready_to_commit) &&
+            analysis_workspace->analysis_results().empty(),
+        "analysis worker must build SASA without mutating the result store");
+    if (scheduled_sasa.has_value()) {
+      const auto committed =
+          scheduler->commit_ready(scheduled_sasa.value().task_id);
+      const auto completed = scheduled_sasa.value().completion->result();
+      passed &= expect(!committed.has_value() && completed.has_value() &&
+                           analysis_workspace->analysis_results().size() == 1U &&
+                           analysis_workspace->analysis_results().back().kind ==
+                               application::AnalysisResultKind::sasa,
+                       "owner-thread analysis commit must publish canonical SASA once");
+    }
+
+    application::ScheduledRdfRequest rdf;
+    rdf.arguments = {{"first", "all"},
+                     {"maximum-radius", "10.0"},
+                     {"bin-width", "0.5"},
+                     {"normalization", "count"},
+                     {"pbc", "raw"},
+                     {"evaluation-budget", "1000000"},
+                     {"precision", "6"},
+                     {"unit", "angstrom"}};
+    rdf.first_expression = "all";
+    rdf.second_expression = "all";
+    rdf.maximum_radius = 10.0;
+    rdf.bin_width = 0.5;
+    rdf.same_selection = true;
+    rdf.evaluation_budget = 1000000U;
+    rdf.generation = 1U;
+    rdf.generation_is_current = [&](std::uint64_t value) {
+      return value == generation.load();
+    };
+    const auto stale = application::schedule_rdf_analysis(
+        analysis_workspace, scheduler, std::move(rdf));
+    passed &= expect(
+        stale.has_value() &&
+            wait_for_state(scheduler, stale.value().task_id,
+                           operation::TaskState::ready_to_commit),
+        "scheduled RDF must produce an owner-thread candidate");
+    generation = 2U;
+    if (stale.has_value()) {
+      const auto discarded = scheduler->commit_ready(stale.value().task_id);
+      const auto state = scheduler->snapshot(stale.value().task_id);
+      passed &= expect(!discarded.has_value() && state.has_value() &&
+                           state.value().state == operation::TaskState::stale &&
+                           analysis_workspace->analysis_results().size() == 1U,
+                       "superseded analysis generation must not publish a result");
+    }
+
+    application::ScheduledRdfRequest revision_rdf;
+    revision_rdf.arguments = {{"first", "all"},
+                              {"maximum-radius", "10.0"},
+                              {"bin-width", "0.5"},
+                              {"normalization", "count"},
+                              {"pbc", "raw"},
+                              {"evaluation-budget", "1000000"},
+                              {"precision", "6"},
+                              {"unit", "angstrom"}};
+    revision_rdf.first_expression = "all";
+    revision_rdf.second_expression = "all";
+    revision_rdf.maximum_radius = 10.0;
+    revision_rdf.bin_width = 0.5;
+    revision_rdf.same_selection = true;
+    revision_rdf.evaluation_budget = 1000000U;
+    revision_rdf.generation = 2U;
+    revision_rdf.generation_is_current = [&](std::uint64_t value) {
+      return value == generation.load();
+    };
+    const auto revision_stale = application::schedule_rdf_analysis(
+        analysis_workspace, scheduler, std::move(revision_rdf));
+    passed &= expect(
+        revision_stale.has_value() &&
+            wait_for_state(scheduler, revision_stale.value().task_id,
+                           operation::TaskState::ready_to_commit),
+        "revision-stale RDF fixture must prepare a candidate");
+    const auto newer_object = analysis_workspace->load_structure(
+        fixture, std::string{"newer-active"}, io::StructureFormat::pdb);
+    if (revision_stale.has_value()) {
+      const auto rejected_commit =
+          scheduler->commit_ready(revision_stale.value().task_id);
+      const auto state = scheduler->snapshot(revision_stale.value().task_id);
+      passed &= expect(
+          !rejected_commit.has_value() && newer_object.has_value() &&
+              state.has_value() &&
+              state.value().state == operation::TaskState::failed &&
+              state.value().error.has_value() &&
+              state.value().error->code == operation::ErrorCode::stale_result &&
+              analysis_workspace->analysis_results().size() == 1U,
+          "active input revision change must reject analysis commit atomically");
+    }
+
+    application::ScheduledSasaRequest undersized;
+    undersized.arguments = {{"selection", "all"},
+                            {"probe-radius", "1.4"},
+                            {"samples", "32"},
+                            {"evaluation-budget", "1000000"},
+                            {"unit", "square-angstrom"},
+                            {"precision", "6"}};
+    undersized.selection_expression = "all";
+    undersized.probe_radius_angstrom = 1.4;
+    undersized.samples_per_atom = 32U;
+    undersized.evaluation_budget = 1000000U;
+    undersized.memory_reservation_bytes = 1U;
+    const auto rejected = application::schedule_sasa_analysis(
+        analysis_workspace, scheduler, std::move(undersized));
+    passed &= expect(
+        !rejected.has_value() &&
+            rejected.error().code == operation::ErrorCode::resource_exhausted &&
+            analysis_workspace->analysis_results().size() == 1U,
+        "undersized analysis reservation must fail before submission");
+
+    application::ScheduledSasaRequest cancellable;
+    cancellable.arguments = {{"selection", "all"},
+                             {"probe-radius", "1.4"},
+                             {"samples", "10000000"},
+                             {"evaluation-budget", "100000000"},
+                             {"unit", "square-angstrom"},
+                             {"precision", "6"}};
+    cancellable.selection_expression = "all";
+    cancellable.probe_radius_angstrom = 1.4;
+    cancellable.samples_per_atom = 10000000U;
+    cancellable.evaluation_budget = 100000000U;
+    cancellable.generation = 2U;
+    cancellable.generation_is_current = [&](std::uint64_t value) {
+      return value == generation.load();
+    };
+    const auto cancelled = application::schedule_sasa_analysis(
+        analysis_workspace, scheduler, std::move(cancellable));
+    if (cancelled.has_value())
+      static_cast<void>(scheduler->cancel(cancelled.value().task_id));
+    passed &= expect(
+        cancelled.has_value() &&
+            wait_for_state(scheduler, cancelled.value().task_id,
+                           operation::TaskState::cancelled) &&
+            analysis_workspace->analysis_results().size() == 1U,
+        "cancelled analysis must publish neither partial table nor result");
+  }
+
+  {
+    auto edit_workspace = std::make_shared<application::Workspace>();
+    auto edit_registry = application::make_default_registry(edit_workspace);
+    const application::Dispatcher edit_dispatcher{edit_registry};
+    const gui::ActionAdapter edit_gui{edit_dispatcher};
+    const auto edit_loaded = trigger(
+        edit_gui, "load", {{"path", pbc_fixture.string()}, {"name", "editable"}});
+    const auto *before_object = edit_workspace->active_object();
+    const auto atom_id = before_object->system->topology()->atom_ids().front();
+    const auto before_frame =
+        before_object->system->coordinates()->read_frame(0U).value();
+    const auto before_position = std::visit(
+        [](const auto &values) {
+          return model::Vec3d{static_cast<double>(values[0].x),
+                              static_cast<double>(values[0].y),
+                              static_cast<double>(values[0].z)};
+        },
+        before_frame->positions().values());
+    const auto tiny_budget = trigger(
+        edit_gui, "edit history", {{"memory-budget-bytes", "1"}});
+    const auto rejected = trigger(
+        edit_gui, "edit atom-position",
+        {{"atom-id", std::to_string(atom_id.value)},
+         {"x", "9"}, {"y", "8"}, {"z", "7"},
+         {"expected-topology-version", "1"},
+         {"expected-coordinate-source-revision", "1"},
+         {"unit", "angstrom"}});
+    const auto restored_budget = trigger(
+        edit_gui, "edit history", {{"memory-budget-bytes", "1048576"}});
+    const auto edited = trigger(
+        edit_gui, "edit atom-position",
+        {{"atom-id", std::to_string(atom_id.value)},
+         {"x", "9"}, {"y", "8"}, {"z", "7"},
+         {"expected-topology-version", "1"},
+         {"expected-coordinate-source-revision", "1"},
+         {"unit", "angstrom"}});
+    const auto *edited_object = edit_workspace->active_object();
+    const auto edited_frame0 =
+        edited_object->system->coordinates()->read_frame(0U).value();
+    const auto position_of = [](const auto &frame) {
+      return std::visit(
+          [](const auto &values) {
+            return model::Vec3d{static_cast<double>(values[0].x),
+                                static_cast<double>(values[0].y),
+                                static_cast<double>(values[0].z)};
+          },
+          frame->positions().values());
+    };
+    const auto stale = trigger(
+        edit_gui, "edit atom-position",
+        {{"atom-id", std::to_string(atom_id.value)},
+         {"x", "1"}, {"y", "1"}, {"z", "1"},
+         {"expected-topology-version", "1"},
+         {"expected-coordinate-source-revision", "1"}});
+    const auto undone = trigger(edit_gui, "edit undo");
+    const auto undo_position = position_of(
+        edit_workspace->active_object()->system->coordinates()->read_frame(0U)
+            .value());
+    const auto redone = trigger(edit_gui, "edit redo");
+    const auto redo_position = position_of(
+        edit_workspace->active_object()->system->coordinates()->read_frame(0U)
+            .value());
+    const auto history = trigger(edit_gui, "edit history");
+    const auto system_before_invalid = edit_workspace->active_object()->system;
+    const auto invalid_position = edit_workspace->set_active_atom_position(
+        atom_id,
+        {std::numeric_limits<double>::quiet_NaN(), 0.0, 0.0}, 1U, 4U);
+    const auto missing_atom = edit_workspace->set_active_atom_position(
+        model::AtomId{999999U}, {0.0, 0.0, 0.0}, 1U, 4U);
+    const auto invalid_unchanged =
+        edit_workspace->active_object()->system == system_before_invalid &&
+        edit_workspace->active_object()->coordinate_source_revision == 4U;
+    const auto branch_undo = trigger(edit_gui, "edit undo");
+    const auto branch_edit = trigger(
+        edit_gui, "edit atom-position",
+        {{"atom-id", std::to_string(atom_id.value)},
+         {"x", "6"}, {"y", "5"}, {"z", "4"},
+         {"expected-topology-version", "1"},
+         {"expected-coordinate-source-revision", "5"},
+         {"unit", "angstrom"}});
+    const auto invalidated_redo = trigger(edit_gui, "edit redo");
+    const auto second_edit = trigger(
+        edit_gui, "edit atom-position",
+        {{"atom-id", std::to_string(atom_id.value)},
+         {"x", "3"}, {"y", "2"}, {"z", "1"},
+         {"expected-topology-version", "1"},
+         {"expected-coordinate-source-revision", "6"},
+         {"unit", "angstrom"}});
+    const auto two_record_status = edit_workspace->edit_history_status();
+    const auto reduced = edit_workspace->set_edit_history_budget(
+        two_record_status.memory_used_bytes / 2U);
+    const auto reduced_status = edit_workspace->edit_history_status();
+    const auto evicted_all = edit_workspace->set_edit_history_budget(1U);
+    const auto no_history_system = edit_workspace->active_object()->system;
+    const auto evicted_undo = edit_workspace->undo_edit();
+    passed &= expect(
+        edit_loaded.succeeded() && tiny_budget.succeeded() &&
+            !rejected.succeeded() && restored_budget.succeeded() &&
+            edited.succeeded() && !stale.succeeded() && undone.succeeded() &&
+            redone.succeeded() && history.succeeded() &&
+            position_of(edited_frame0) == model::Vec3d{9.0, 8.0, 7.0} &&
+            undo_position == before_position &&
+            redo_position == model::Vec3d{9.0, 8.0, 7.0} &&
+            !invalid_position.has_value() && !missing_atom.has_value() &&
+            invalid_unchanged,
+        "bounded coordinate transaction must reject unrecordable/stale edits and round-trip static coordinates through undo/redo");
+    passed &= expect(
+        system_before_invalid != nullptr && branch_undo.succeeded() &&
+            branch_edit.succeeded() && !invalidated_redo.succeeded() &&
+            second_edit.succeeded() && two_record_status.undo_count == 2U &&
+            reduced.has_value() && reduced_status.undo_count == 1U &&
+            reduced_status.redo_count == 0U && evicted_all.has_value() &&
+            edit_workspace->edit_history_status().undo_count == 0U &&
+            !evicted_undo.has_value() &&
+            edit_workspace->active_object()->system == no_history_system &&
+            edit_workspace->active_object()->coordinate_source_revision == 7U,
+        "new edits must invalidate redo and deterministic budget eviction must preserve the current Workspace when history is exhausted");
+  }
+
+  {
+    auto topology_workspace = std::make_shared<application::Workspace>();
+    auto topology_registry =
+        application::make_default_registry(topology_workspace);
+    const application::Dispatcher topology_dispatcher{topology_registry};
+    const gui::ActionAdapter topology_gui{topology_dispatcher};
+    const auto built = trigger(
+        topology_gui, "build molecule",
+        {{"name", "editable-carbonyl"},
+         {"atoms", "C,6,0,0,0,0;O,8,1.2,0,0,0"},
+         {"bonds", "1,2,double"},
+         {"residue-name", "LIG"}, {"chain", "A"},
+         {"residue-number", "1"}, {"unit", "angstrom"},
+         {"memory-budget-bytes", "1048576"}});
+    const auto *initial_object = topology_workspace->active_object();
+    const auto initial_system = initial_object->system;
+    const auto atom_ids = initial_system->topology()->atom_ids();
+    const auto bond_ids = initial_system->topology()->bond_ids();
+    const auto static_selection = topology_workspace->set_named_selection(
+        "static_carbon", "name C", false);
+    const auto dynamic_selection = topology_workspace->set_named_selection(
+        "dynamic_carbon", "name C", true);
+    const auto measured = trigger(
+        topology_gui, "measure distance",
+        {{"from", "index 1"}, {"to", "index 2"}, {"mode", "atom"},
+         {"pbc", "raw"}, {"precision", "6"}, {"unit", "angstrom"}});
+    operation::TaskContext cancelled_context;
+    cancelled_context.cancellation.request_cancel();
+    const auto cancelled_edit = topology_gui.trigger(
+        gui::Action{"edit atom-properties",
+                    {{"atom-id", "1"}, {"name", "cancelled"},
+                     {"expected-topology-version", "1"},
+                     {"expected-coordinate-source-revision", "1"}}},
+        cancelled_context);
+    const auto cancelled_build = topology_gui.trigger(
+        gui::Action{"build molecule",
+                    {{"name", "cancelled-builder"},
+                     {"atoms", "H,1,0,0,0,0"}, {"bonds", "none"},
+                     {"residue-name", "LIG"}, {"chain", "A"},
+                     {"residue-number", "1"}, {"unit", "angstrom"},
+                     {"memory-budget-bytes", "1048576"}}},
+        cancelled_context);
+    const auto stale = trigger(
+        topology_gui, "edit atom-properties",
+        {{"atom-id", "1"}, {"name", "stale"},
+         {"expected-topology-version", "1"},
+         {"expected-coordinate-source-revision", "0"}});
+    const auto invalid_element = trigger(
+        topology_gui, "edit atom-properties",
+        {{"atom-id", "1"}, {"atomic-number", "119"},
+         {"expected-topology-version", "1"},
+         {"expected-coordinate-source-revision", "1"}});
+    const auto missing_residue = trigger(
+        topology_gui, "edit residue-properties",
+        {{"atom-id", "999"}, {"name", "BAD"},
+         {"expected-topology-version", "1"},
+         {"expected-coordinate-source-revision", "1"}});
+    const auto missing_bond = trigger(
+        topology_gui, "edit bond-order",
+        {{"bond-id", "999"}, {"order", "single"},
+         {"expected-topology-version", "1"},
+         {"expected-coordinate-source-revision", "1"}});
+    const auto failure_atomic =
+        topology_workspace->active_object()->system == initial_system &&
+        topology_workspace->active_object()->coordinate_source_revision == 1U &&
+        topology_workspace->object_count() == 1U &&
+        topology_workspace->measurements().size() == 1U &&
+        topology_workspace->analysis_results().size() == 1U &&
+        topology_workspace->edit_history_status().undo_count == 1U;
+    const auto tiny_budget =
+        topology_workspace->set_edit_history_budget(1U);
+    const auto unrecordable = trigger(
+        topology_gui, "edit atom-properties",
+        {{"atom-id", "1"}, {"name", "C1"},
+         {"expected-topology-version", "1"},
+         {"expected-coordinate-source-revision", "1"}});
+    const auto unrecordable_unchanged =
+        topology_workspace->active_object()->system == initial_system &&
+        topology_workspace->active_object()->coordinate_source_revision == 1U;
+    const auto restored_budget =
+        topology_workspace->set_edit_history_budget(1048576U);
+    const auto atom_edited = trigger(
+        topology_gui, "edit atom-properties",
+        {{"atom-id", "1"}, {"name", "C1"}, {"formal-charge", "1"},
+         {"expected-topology-version", "1"},
+         {"expected-coordinate-source-revision", "1"}});
+    const auto static_after_atom =
+        topology_workspace->selection_extent("@static_carbon");
+    const auto dynamic_after_atom =
+        topology_workspace->selection_extent("@dynamic_carbon");
+    const auto residue_edited = trigger(
+        topology_gui, "edit residue-properties",
+        {{"atom-id", "1"}, {"name", "CRB"}, {"chain", "B"},
+         {"residue-number", "7"}, {"expected-topology-version", "2"},
+         {"expected-coordinate-source-revision", "2"}});
+    const auto bond_edited = trigger(
+        topology_gui, "edit bond-order",
+        {{"bond-id", "1"}, {"order", "single"},
+         {"expected-topology-version", "3"},
+         {"expected-coordinate-source-revision", "3"}});
+    const auto undone = trigger(topology_gui, "edit undo");
+    const auto static_after_undo =
+        topology_workspace->selection_extent("@static_carbon");
+    const auto redone = trigger(topology_gui, "edit redo");
+    const auto *final_object = topology_workspace->active_object();
+    const auto &final_topology = *final_object->system->topology();
+    passed &= expect(
+        built.succeeded() && initial_object != nullptr &&
+            !static_selection.has_value() && !dynamic_selection.has_value() &&
+            measured.succeeded() && !stale.succeeded() &&
+            !cancelled_edit.succeeded() && !cancelled_build.succeeded() &&
+            std::get<operation::Error>(cancelled_edit.envelope.payload).code ==
+                operation::ErrorCode::cancelled &&
+            std::get<operation::Error>(cancelled_build.envelope.payload).code ==
+                operation::ErrorCode::cancelled &&
+            !invalid_element.succeeded() && !missing_residue.succeeded() &&
+            !missing_bond.succeeded() && failure_atomic && tiny_budget.has_value() &&
+            !unrecordable.succeeded() && unrecordable_unchanged &&
+            restored_budget.has_value(),
+        "topology edit validation, stale checks and history reservation must be failure-atomic");
+    passed &= expect(
+        atom_edited.succeeded() && residue_edited.succeeded() &&
+            bond_edited.succeeded() && undone.succeeded() && redone.succeeded() &&
+            static_after_atom.has_value() &&
+            static_after_atom.value().selected_atom_count == 1U &&
+            !dynamic_after_atom.has_value() && static_after_undo.has_value() &&
+            final_topology.version() == 4U &&
+            final_topology.atom_ids() == atom_ids &&
+            final_topology.bond_ids() == bond_ids &&
+            final_topology.atoms()[0].name == "C1" &&
+            final_topology.atoms()[0].formal_charge == 1 &&
+            final_topology.residues()[0].name == "CRB" &&
+            final_topology.residues()[0].chain_id == "B" &&
+            final_topology.residues()[0].sequence_number == 7 &&
+            final_topology.bonds()[0].order == model::BondOrder::single &&
+            topology_workspace->measurements().empty() &&
+            topology_workspace->analysis_results().size() == 1U &&
+            topology_workspace->analysis_source_status(
+                topology_workspace->analysis_results()[0]) ==
+                application::AnalysisSourceStatus::topology_changed &&
+            topology_workspace->edit_history_status().undo_count == 3U &&
+            topology_workspace->edit_history_status().redo_count == 0U,
+        "atom/residue/bond edits must preserve stable identity, remap static selections, reevaluate dynamic selections, stale derived results and round-trip through undo/redo");
   }
 
   {
@@ -961,6 +1410,10 @@ int main(int argc, char** argv) {
   passed &= expect(secondary_response!=nullptr && secondary_response->table.has_value() &&
       std::get<std::string>(secondary_response->fields.at("method").data)==
           "molshredder-stride-method-v0" &&
+      std::get<std::string>(secondary_response->fields.at("algorithm_version").data)==
+          "molshredder-stride-method-v0" &&
+      std::get<std::string>(secondary_response->fields.at("coordinate_scope").data)==
+          "current_frame" &&
       !std::get<bool>(secondary_response->fields.at("exact_stride_parity").data),
       "secondary-structure command must expose independent-method provenance");
   const auto secondary_presentation=gui::make_analysis_presentation(secondary);
@@ -1042,7 +1495,8 @@ int main(int argc, char** argv) {
           std::any_of(workspace->analysis_results().begin(),
                       workspace->analysis_results().end(),
                       [&](const auto &record) {
-                        return record.provenance.source.object_id == 3U &&
+                        return record.provenance.scientific.topology.object_id ==
+                                   3U &&
                                workspace->analysis_source_status(record) ==
                                    application::AnalysisSourceStatus::object_deleted;
                       }) &&
@@ -1145,7 +1599,8 @@ int main(int argc, char** argv) {
           std::any_of(workspace->analysis_results().begin(),
                       workspace->analysis_results().end(),
                       [&](const auto &record) {
-                        return record.provenance.source.object_id == 1U &&
+                        return record.provenance.scientific.topology.object_id ==
+                                   1U &&
                                workspace->analysis_source_status(record) ==
                                    application::AnalysisSourceStatus::topology_changed;
                       }) &&
@@ -1258,6 +1713,8 @@ int main(int argc, char** argv) {
   passed &= expect(hbond_response!=nullptr && hbond_response->table.has_value() &&
       hbond_response->table->rows.size()==1U &&
       std::get<std::string>(hbond_response->fields.at("donor_typing_source").data)=="element-bond-v1" &&
+      std::get<std::string>(hbond_response->fields.at("algorithm_version").data)==
+          "molshredder-hbond-v1" &&
       std::get<bool>(hbond_response->fields.at("typing_estimated").data),
       "GUI H-bond command must expose geometry table and typing provenance");
 

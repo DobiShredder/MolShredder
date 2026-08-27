@@ -29,6 +29,14 @@ std::string read_text(const std::filesystem::path &path) {
           std::istreambuf_iterator<char>{}};
 }
 
+bool has_loss(const molshredder::io::StructureWriteReport &report,
+              std::string_view channel, std::uint64_t count) {
+  return std::any_of(report.losses.begin(), report.losses.end(),
+                     [channel, count](const auto &loss) {
+                       return loss.channel == channel && loss.count == count;
+                     });
+}
+
 } // namespace
 
 int main(int argc, char **argv) {
@@ -361,6 +369,25 @@ int main(int argc, char **argv) {
         "native SDF read/write must round-trip chemistry semantics");
   }
 
+  auto chemistry_pdb_options = pdb_options;
+  chemistry_pdb_options.frame_indices = {0U};
+  operation::TaskContext chemistry_loss_context;
+  const auto chemistry_pdb = io::serialize_structure(
+      *sdf_structure.topology, *sdf_structure.coordinates,
+      chemistry_pdb_options, chemistry_loss_context);
+  auto chemistry_mmcif_options = mmcif_options;
+  chemistry_mmcif_options.frame_indices = {0U};
+  const auto chemistry_mmcif = io::serialize_structure(
+      *sdf_structure.topology, *sdf_structure.coordinates,
+      chemistry_mmcif_options, chemistry_loss_context);
+  passed &= expect(
+      chemistry_pdb.has_value() && chemistry_mmcif.has_value() &&
+          has_loss(chemistry_pdb.value().report, "isotope", 1U) &&
+          has_loss(chemistry_pdb.value().report, "radical", 1U) &&
+          has_loss(chemistry_mmcif.value().report, "isotope", 1U) &&
+          has_loss(chemistry_mmcif.value().report, "radical", 1U),
+      "PDB/mmCIF writers must report unsupported core atom chemistry loss");
+
   auto mol_options = sdf_options;
   mol_options.format = io::StructureFormat::mol;
   const auto serialized_mol = io::serialize_structure(
@@ -385,6 +412,109 @@ int main(int argc, char **argv) {
                 model::BondOrder::aromatic,
         "native MOL V2000 output must be readable without bond loss");
   }
+
+  const auto query_stereo_source = io::read_structure(
+      "query-stereo\nprogram\ncomment\n"
+      "  3  2  0  0  0  0  0  0  0  0999 V2000\n"
+      "    0.0000    0.0000    0.0000 C   0  0  0\n"
+      "    1.0000    0.0000    0.0000 N   0  0  0\n"
+      "    2.0000    0.0000    0.0000 O   0  0  0\n"
+      "  1  2  5  0\n  2  3  1  1\nM  CHG  1   1   0\nM  END\n",
+      {io::StructureFormat::mol, "query-stereo.mol"});
+  operation::TaskContext query_stereo_context;
+  const auto query_stereo_written =
+      query_stereo_source.has_value()
+          ? io::serialize_structure(
+                *query_stereo_source.value().structures.front().topology,
+                *query_stereo_source.value().structures.front().coordinates,
+                mol_options, query_stereo_context)
+          : operation::Result<io::SerializedStructure>::failure(
+                query_stereo_source.error());
+  const auto query_stereo_roundtrip =
+      query_stereo_written.has_value()
+          ? io::read_structure(query_stereo_written.value().content,
+                               {io::StructureFormat::mol,
+                                "query-stereo-roundtrip.mol"})
+          : operation::Result<io::StructureDocument>::failure(
+                query_stereo_written.error());
+  passed &= expect(
+      query_stereo_roundtrip.has_value() &&
+          query_stereo_roundtrip.value()
+                  .structures.front()
+                  .topology->bonds()[0]
+                  .order == model::BondOrder::query &&
+          query_stereo_roundtrip.value()
+                  .structures.front()
+                  .topology->bonds()[0]
+                  .query == model::BondQuery::single_or_double &&
+          query_stereo_roundtrip.value()
+                  .structures.front()
+                  .topology->bonds()[1]
+                  .stereo == model::BondStereo::up,
+      "MOL V2000 writer must round-trip query and stereo bond semantics");
+  const auto query_pdb =
+      query_stereo_source.has_value()
+          ? io::serialize_structure(
+                *query_stereo_source.value().structures.front().topology,
+                *query_stereo_source.value().structures.front().coordinates,
+                chemistry_pdb_options, chemistry_loss_context)
+          : operation::Result<io::SerializedStructure>::failure(
+                query_stereo_source.error());
+  const auto query_mmcif =
+      query_stereo_source.has_value()
+          ? io::serialize_structure(
+                *query_stereo_source.value().structures.front().topology,
+                *query_stereo_source.value().structures.front().coordinates,
+                chemistry_mmcif_options, chemistry_loss_context)
+          : operation::Result<io::SerializedStructure>::failure(
+                query_stereo_source.error());
+  passed &= expect(
+      query_pdb.has_value() && query_mmcif.has_value() &&
+          has_loss(query_pdb.value().report, "bond_order", 2U) &&
+          has_loss(query_pdb.value().report, "bond_stereo", 1U) &&
+          has_loss(query_mmcif.value().report, "query_bond", 1U) &&
+          has_loss(query_mmcif.value().report, "bond_stereo", 1U),
+      "PDB/mmCIF conversion must expose query/stereo bond loss");
+  io::StructureWriteOptions query_xyz_options;
+  query_xyz_options.format = io::StructureFormat::xyz;
+  const auto query_xyz =
+      query_stereo_source.has_value()
+          ? io::serialize_structure(
+                *query_stereo_source.value().structures.front().topology,
+                *query_stereo_source.value().structures.front().coordinates,
+                query_xyz_options, chemistry_loss_context)
+          : operation::Result<io::SerializedStructure>::failure(
+                query_stereo_source.error());
+  auto classified_builder = query_stereo_source.has_value()
+                                ? model::TopologyBuilder::from(
+                                      *query_stereo_source.value()
+                                           .structures.front().topology)
+                                : model::TopologyBuilder{};
+  const auto classification_error = classified_builder.set_residue_semantics(
+      model::ResidueIndex{0U}, model::ResidueKind::ligand,
+      model::PolymerType::none,
+      model::ChemicalAnnotationOrigin::inferred);
+  const auto classified_topology = classified_builder.build();
+  const auto classified_xyz =
+      query_stereo_source.has_value() && !classification_error.has_value() &&
+              classified_topology.has_value()
+          ? io::serialize_structure(
+                *classified_topology.value(),
+                *query_stereo_source.value().structures.front().coordinates,
+                query_xyz_options, chemistry_loss_context)
+          : operation::Result<io::SerializedStructure>::failure(
+                operation::Error{operation::ErrorCode::internal,
+                                 "classified XYZ fixture failed", {}});
+  passed &= expect(
+      query_xyz.has_value() &&
+          has_loss(query_xyz.value().report, "formal_charge", 1U) &&
+          has_loss(query_xyz.value().report, "query_bond", 1U) &&
+          has_loss(query_xyz.value().report, "bond_stereo", 1U),
+      "generic structure loss accounting must retain explicit-zero/query/stereo channels");
+  passed &= expect(
+      classified_xyz.has_value() &&
+          has_loss(classified_xyz.value().report, "residue_semantics", 1U),
+      "writer loss accounting must expose normalized residue semantics");
 
   operation::TaskContext mol2_context;
   io::StructureWriteOptions mol2_options;

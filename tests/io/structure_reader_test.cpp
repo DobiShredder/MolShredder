@@ -74,6 +74,8 @@ int main(int argc, char **argv) {
             amide.topology->residue_count() == 1U &&
             amide.topology->residues()[0].chain_id == "A" &&
             amide.topology->bonds()[0].order == model::BondOrder::double_bond &&
+            amide.topology->bonds()[0].order_origin ==
+                model::ChemicalAnnotationOrigin::explicit_input &&
             amide.topology->bonds()[1].order == model::BondOrder::amide &&
             aromatic.topology->bonds()[0].order == model::BondOrder::aromatic &&
             amide.topology->bonds().size() == 3U &&
@@ -470,8 +472,14 @@ int main(int argc, char **argv) {
             first.topology->atoms()[1].formal_charge == -1 &&
             isotope != nullptr && radical != nullptr &&
             std::get<std::vector<std::int64_t>>(isotope->values)[2] == 13 &&
-            std::get<std::vector<std::int64_t>>(radical->values)[3] == 2,
-        "SDF M CHG/ISO/RAD chemistry properties must load");
+            std::get<std::vector<std::int64_t>>(radical->values)[3] == 2 &&
+            first.topology->atoms()[0].formal_charge_present &&
+            first.topology->atoms()[2].isotope_mass_number == 13U &&
+            first.topology->atoms()[3].radical ==
+                model::RadicalState::doublet &&
+            first.topology->atoms()[0].chemical_origin ==
+                model::ChemicalAnnotationOrigin::explicit_input,
+        "SDF M CHG/ISO/RAD chemistry must load into core semantics");
     passed &= expect(
         first.metadata.at("sdf.data.ID") == "first-001" &&
             first.metadata.at("sdf.data.NOTE") == "line one\nline two" &&
@@ -569,11 +577,16 @@ int main(int argc, char **argv) {
         "molecule metadata");
     passed &= expect(structure.topology->atom_count() == 3 &&
                          structure.topology->residue_count() == 2 &&
-                         structure.topology->bonds().size() == 1,
+                         structure.topology->bonds().size() == 1 &&
+                         structure.topology->bonds().front().order_origin ==
+                             model::ChemicalAnnotationOrigin::explicit_input,
                      "PDB topology, residues and CONECT bond must load");
     const auto &first_atom = structure.topology->atoms().front();
     passed &= expect(first_atom.name == "N" && first_atom.atomic_number == 7 &&
                          first_atom.formal_charge == 1 &&
+                         first_atom.formal_charge_present &&
+                         first_atom.chemical_origin ==
+                             model::ChemicalAnnotationOrigin::explicit_input &&
                          first_atom.alternate_location == "A" &&
                          first_atom.source_serial == 1,
                      "PDB atom identity, element, charge and altloc must load");
@@ -700,11 +713,16 @@ int main(int argc, char **argv) {
                    structure.topology->residue_count() == 2 &&
                    structure.topology->bonds().size() == 2 &&
                    structure.topology->bonds().front().order ==
-                       model::BondOrder::single,
+                       model::BondOrder::single &&
+                   structure.topology->bonds().front().order_origin ==
+                       model::ChemicalAnnotationOrigin::explicit_input,
                "mmCIF label/auth atom_site and struct_conn topology must load");
     passed &=
         expect(structure.topology->atoms().front().name == "N" &&
                    structure.topology->atoms().front().formal_charge == 1 &&
+                   structure.topology->atoms().front().formal_charge_present &&
+                   structure.topology->atoms().front().chemical_origin ==
+                       model::ChemicalAnnotationOrigin::explicit_input &&
                    structure.topology->atoms().front().source_serial == 1,
                "mmCIF author atom identity, charge and source id must load");
     const auto *label_asym =
@@ -971,19 +989,29 @@ int main(int argc, char **argv) {
       "    1.0000    0.0000    0.0000 N   0  0  0\n"
       "  1  2  5  0\nM  END\n",
       {io::StructureFormat::mol, "query.mol"});
-  passed &= expect(!query_bond.has_value() && query_bond.error().message.find(
-                                                  "query") != std::string::npos,
-                   "unsupported MOL query bonds must not become unknown bonds");
+  passed &= expect(
+      query_bond.has_value() &&
+          query_bond.value().structures.front().topology->bonds()[0].order ==
+              model::BondOrder::query &&
+          query_bond.value().structures.front().topology->bonds()[0].query ==
+              model::BondQuery::single_or_double &&
+          query_bond.value()
+                  .structures.front()
+                  .topology->bonds()[0]
+                  .order_origin ==
+              model::ChemicalAnnotationOrigin::explicit_input,
+      "MOL query bonds must retain the exact typed constraint");
   const auto stereo_bond = io::read_structure(
       "stereo\nprogram\ncomment\n  2  1  0  0  0  0  0  0  0  0999 V2000\n"
       "    0.0000    0.0000    0.0000 C   0  0  0\n"
       "    1.0000    0.0000    0.0000 N   0  0  0\n"
       "  1  2  1  1\nM  END\n",
       {io::StructureFormat::mol, "stereo.mol"});
-  passed &= expect(!stereo_bond.has_value() &&
-                       stereo_bond.error().message.find("stereo") !=
-                           std::string::npos,
-                   "bond stereo must not be silently discarded");
+  passed &= expect(
+      stereo_bond.has_value() &&
+          stereo_bond.value().structures.front().topology->bonds()[0].stereo ==
+              model::BondStereo::up,
+      "MOL bond stereo must be retained in the core topology");
 
   return passed ? 0 : 1;
 }

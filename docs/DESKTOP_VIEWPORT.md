@@ -1,9 +1,12 @@
 # Desktop viewport prototype
 
+Workflow menu와 action migration의 authoritative 목록은
+[Desktop UI action inventory](UI_ACTION_INVENTORY.md)에 둔다.
+
 ## Language
 
 Desktop은 영어와 한국어 Qt Linguist catalog를 application resource에 포함한다. OS locale을 기본으로 사용하며
-toolbar 또는 `--language=en|ko|system`으로 전환한다. 선택한 toolbar 언어는 application setting에 저장되고
+Help > Language 또는 `--language=en|ko|system`으로 전환한다. 선택한 UI 언어는 application setting에 저장되고
 runtime 전환 시 QML binding을 다시 번역한다. Operation ID, command, JSON field와 scientific provenance는
 재현성을 위해 번역하지 않는다. 현재 typed operation에서 오는 일부 동적 status/error detail은 영어이며
 완전한 frontend message mapping은 후속 UX 단계다. Catalog 추가 및 검증 절차는
@@ -20,9 +23,28 @@ Open dialog은 여러 molecular structure를 동시에 선택할 수 있다. Des
 failure-atomic transaction을 사용하며 중간 input 오류 시 일부 object가 panel에 남지 않는다. Scalar
 volume은 현재 한 번에 하나씩 연다. Batch progress는 공용 `TaskContext` status로 표시된다.
 
+`file.save`와 `trajectory.attach`는 활성 molecular workspace가 있을 때만 사용할 수 있다. File/Trajectory menu,
+compact toolbar와 command palette는 각각 같은 QML Action을 참조하며 Attach는 같은 action의 import-settings panel에서
+coordinate unit, mapping policy와 optional stable-ID map을 받은 뒤 file dialog를 연다. 비활성 상태에서는 공통 metadata의 번역된
+remediation을 표시한다. `tools.run-script`는 Tools menu와 palette에서 찾을 수 있지만 일반 작업용 compact toolbar에는
+두지 않으며 기존 explicit trust confirmation을 유지한다.
+
+## Molecular editing
+
+Edit menu와 command palette의 **Atom Coordinates**, **Atom Properties**, **Residue Properties**와
+**Bond Order**는 progressive property editor를 연다. Stable atom/bond ID와 변경할 값만 입력하며 Desktop은
+현재 topology/source revision을 자동으로 붙여 CLI·Python과 같은 canonical transaction을 호출한다.
+Attached trajectory에서는 topology/coordinate editor를 비활성화한다. Apply 성공 뒤 scene과 object/result
+presentation을 갱신하고, Undo/Redo와 byte-accounted history는 같은 Edit menu 및 panel에서 공유한다.
+
+**Molecule Builder**는 object name, 한 residue의 name/chain/number, semicolon-delimited atom/bond row를 받아
+검증된 immutable topology와 한 coordinate state를 생성한다. 원자 행은
+`name,atomic-number,x,y,z,formal-charge`, 결합 행은 `first,second,order` 형식이다. 일반 fragment template,
+hydrogen/protonation, peptide/nucleic-acid wizard와 minimization을 구현한 것으로 표시하지 않는다.
+
 ## Settings editor
 
-Viewport toolbar의 **Settings**는 render setting editor를 연다. Setting name/value, scope와
+Represent menu 또는 command palette의 **Render Settings**는 render setting editor를 연다. Setting name/value, scope와
 atom/bond target을 입력하고 Set, Get, Unset, Reset을 수행할 수 있다. Editor는
 Desktop 전용 state를 직접 바꾸지 않고 CLI/Python과 같은 canonical operation을 호출한다.
 Atom/bond target은 topology의 64-bit stable ID이며 실패한 적용은 현재 scene packet을 유지한다.
@@ -86,15 +108,13 @@ startup:
   --trajectory-unit=angstrom --representation=sticks
 ```
 
-The adjacent `Traj Å`/`Traj nm` toggle supplies the explicit coordinate unit
+The trajectory import-settings panel supplies the explicit coordinate unit
 required by unitless formats such as LAMMPS text dump. Encoded-unit formats
-retain their native reader semantics.
-
-The `Map exact`/`Map index`/`Map IDs` control selects the mandatory topology
-mapping policy. Exact is the default and succeeds only when the format carries
-usable atom identity. Index order is an explicit user assertion. Map IDs shows
-an inline stable-ID list; the GUI submits the current topology version with the
-same canonical `traj load` action used by CLI and Python.
+retain their native reader semantics. The same panel selects exact stable-ID,
+index-order or explicit stable-ID mapping. Exact is the default; index order is
+an explicit user assertion, while explicit mapping accepts a stable-ID list.
+The GUI submits these parameters through the same canonical `traj load` action
+used by CLI and Python.
 
 The representation toolbar uses the same registry, dispatcher, GUI action and
 `Workspace` operations as the non-visual GUI adapter. Status shows the active
@@ -103,9 +123,10 @@ right drag pans, the wheel dollies and double click reframes through the core
 `scene::Camera` implementation. Toolbar presets send canonical `show
 --replace true`; ordinary CLI/Python `show` remains additive.
 
-The `Show`, `Hide`, `As`, and `Toggle` toolbar actions apply the selected
+The `Show`, `Hide`, `Show Only`, and `Toggle Visibility` actions in the Represent
+menu, viewport context menu and command palette apply the selected
 representation to `all` atoms through the same canonical actions exposed by CLI
-and Python. `As` is selection-local in the core operation; the toolbar's `all`
+and Python. `As` is selection-local in the core operation; the UI action's `all`
 scope makes it an object-wide replacement. Object visibility remains independent
 and does not erase representation membership.
 `Run Script` opens a local `.py` picker and an explicit arbitrary-code trust
@@ -190,9 +211,22 @@ The Open dialog also accepts PQR, MOL/SDF V2000, Tripos MOL2, CHARMM/NAMD PSF, A
 concatenated GROMACS GRO,
 ordered GROMOS-96 G96, VMD VTF, plain multi-frame XYZ, ASCII OpenDX and MRC/CCP4 maps. Volume files use the same
 canonical `volume load` action as CLI/Python, create a typed volume scene object and immediately render the scalar
-range midpoint through canonical `volume isosurface`. The bottom contour panel moves the level by 5% of the range
-or restores the midpoint; every control replaces the active volume mesh through the shared action. Multi-record
-SDF and multi-molecule MOL2 create one ordered Workspace object per record and activate the last one. Save invokes the same
+range midpoint through canonical `volume isosurface`. The bottom volume panel switches between the isosurface and
+X/Y/Z orthogonal scalar slices, moves the active level or plane, and replaces the active volume mesh through
+canonical `volume isosurface` or `volume slice`. Slice controls, Represent menu and command palette share the
+`represent.volume-slice` action ID.
+Represent > Molecular Surface와 command palette는 같은 `represent.surface` parameter panel을 열어 selection,
+VDW/SAS, probe radius, grid spacing과 voxel/memory budget을 수집한다. Apply는 canonical `surface show`, Hide는
+`surface hide`를 호출하며 generated triangle은 원자 picking을 유지한다. 현재 구현은 VDW와 solvent-accessible
+surface이며 solvent-excluded/re-entrant surface로 표시하지 않는다.
+Represent > Direct Volume과 같은 volume panel은 transfer preset과 sampling step을 받아 canonical `volume render/hide`
+contract를 사용한다. Texture payload 준비는 bounded worker에서 실행되고 panel은 progress/Cancel을 표시한다. Candidate는
+owner thread에서 volume presentation revision을 재확인한 뒤에만 commit되므로 rapid preset 변경, cancellation과 stale
+completion이 이전 화면을 덮지 않는다. QRhi는 R32F 3D scalar texture와 RGBA32F LUT를 post-classified ray march하며
+mono, adjacent/composite stereo에서 eye별 uniform binding을 사용하고 별도 volume pick pass를 제공한다.
+Panel의 GPU badge/tooltip은 render-thread lease와 일치하는 status만 받아 `ready`, `degraded`, `unavailable` 또는
+`failed`를 표시하며 지원되지 않는 backend를 성공처럼 보이지 않는다.
+Multi-record SDF and multi-molecule MOL2 create one ordered Workspace object per record and activate the last one. Save invokes the same
 canonical writer as CLI/Python and exports the active object as PDB, mmCIF, PQR, MOL, SDF, MOL2, PSF, GRO, G96 or XYZ/XMol based on the suffix;
 the status badge reports the semantic-loss item count. All-frame trajectory
 export is currently available through console/Python and startup smoke rather
@@ -297,6 +331,11 @@ isosurface and submits its indexed mesh through the Metal pipeline.
 A native MRC smoke opens a little-endian, axis-permuted triclinic 2×2×3 float32 map with an extended header,
 verifies logical dimensions/value count, creates its midpoint isosurface through the same Workspace action and
 reaches the Metal event loop.
+A volume-slice smoke opens the same synthetic MRC, creates the Z=1 plane through the shared action, verifies the
+4-vertex/2-triangle packet, volume pick identity and `represent.volume-slice` panel projection before shutdown.
+A direct-volume smoke는 같은 MRC에서 background task를 즉시 취소해 기존 state 보존을 확인한 뒤 fire ramp를 다시
+준비·commit한다. Metal QRhi가 3D texture를 upload하고 side-by-side eye별 binding으로 draw한 상태에서 중앙 volume
+GPU pick이 성공해야 종료한다.
 A native PSF smoke loads a zero-frame topology without treating absent coordinates as a load error, clears stale scene
 geometry, saves through the canonical GUI action and reloads the topology before clean shutdown. Attaching DCD/XTC/TRR/MDCRD/NetCDF/H5MD/RST7/LAMMPS/BINPOS
 creates the selected representation through the ordinary shared `show` operation.
@@ -317,14 +356,16 @@ highlight, additive/multi-pick gestures, hierarchical object editing,
 analysis/sequence/representation panels, general asynchronous structure/volume
 file decoding, transparency, culling/LOD and 10k/100k/1M GPU benchmarks
 remain open.
-Volume slice/direct-volume rendering, volume picking and a volume object panel are still open. The current contour
-panel offers bounded step/midpoint controls but not editable numeric entry, color ramps or multiple contour rows.
+Direct-volume post-classified rendering is implemented, while a hierarchical volume object panel remains open.
+Orthogonal X/Y/Z slice rendering and volume-scene picking are implemented, but the panel still lacks editable numeric entry, transfer-function point editing,
+multiple contour/slice rows and arbitrary camera-aligned planes.
 The object panel itself still lacks hierarchy, transform, solo/fixed/lock and
 per-representation child rows. The trajectory panel still lacks editable
 first/last/stride, physical-time display and multi-object synchronization.
-The manual cross-platform checkpoint workflow is configured to reject a null or unexpected backend and to run the
-installed daily workflow on Metal, Linux Vulkan/OpenGL and Windows Direct3D. Windows D3D and Linux Vulkan/OpenGL
-have not yet been executed, so configuration alone is not support evidence. The offscreen
+The manual cross-platform checkpoint workflow rejects a null or unexpected backend and runs the installed daily
+workflow on Metal and Linux Vulkan/OpenGL. The M1 checkpoint also recorded a separate interactive Windows D3D11
+installed-Desktop run. Every later milestone must repeat the relevant checks on that milestone's exact source revision;
+an earlier M1 result is not M2 support evidence. The offscreen
 texture item adds a render pass; an underlay/direct render-pass path should be
 benchmarked before the final viewport composition strategy is fixed.
 

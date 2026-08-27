@@ -179,7 +179,11 @@ int main() {
   passed &= expect(mol != nullptr && mol->readable && mol->writable &&
                        !mol->multi_frame && !mol->multi_structure &&
                        std::find(mol->channels.begin(), mol->channels.end(),
-                                 "bond_order") != mol->channels.end(),
+                                 "bond_order") != mol->channels.end() &&
+                       std::find(mol->channels.begin(), mol->channels.end(),
+                                 "bond_query") != mol->channels.end() &&
+                       std::find(mol->channels.begin(), mol->channels.end(),
+                                 "bond_stereo") != mol->channels.end(),
                    "MOL registry row must expose V2000 chemistry channels");
   const auto *sdf = find("sdf");
   passed &= expect(sdf != nullptr && sdf->readable && sdf->writable &&

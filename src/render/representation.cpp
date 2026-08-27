@@ -184,6 +184,7 @@ std::size_t valence_order(model::BondOrder order) noexcept {
   case model::BondOrder::single:
   case model::BondOrder::amide:
   case model::BondOrder::unknown:
+  case model::BondOrder::query:
     return 1U;
   case model::BondOrder::zero:
     return 0U;

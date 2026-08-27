@@ -371,6 +371,8 @@ target_sources(
     src/analysis/basic.cpp
     src/analysis/contacts.cpp
     src/analysis/principal_axes.cpp
+    src/analysis/sasa.cpp
+    src/analysis/rdf.cpp
     src/analysis/secondary_structure.cpp
     src/analysis/time_series.cpp
     src/application/default_registry.cpp
@@ -417,15 +419,21 @@ target_sources(
     src/io/mrc_reader.cpp
     src/io/volume_reader.cpp
     src/io/volume_writer.cpp
+    src/model/chemical_perception.cpp
     src/model/coordinates.cpp
     src/model/molecular_system.cpp
+    src/model/molecular_builder.cpp
     src/model/topology.cpp
     src/model/volume.cpp
     src/operation/task_scheduler.cpp
     src/render/reference_renderer.cpp
+    src/render/direct_volume.cpp
+    src/render/molecular_surface.cpp
+    src/render/transfer_function.cpp
     src/render/representation.cpp
     src/render/setting_store.cpp
     src/render/volume_isosurface.cpp
+    src/render/volume_slice.cpp
     src/selection/evaluator.cpp
     src/selection/expression.cpp
     src/selection/named_selection.cpp
@@ -477,15 +485,20 @@ target_sources(
       include/molshredder/io/volume_writer.hpp
       include/molshredder/model/coordinates.hpp
       include/molshredder/model/molecular_system.hpp
+      include/molshredder/model/molecular_builder.hpp
       include/molshredder/model/topology.hpp
       include/molshredder/trajectory/attachment.hpp
       include/molshredder/scene/stereo.hpp
       include/molshredder/model/volume.hpp
       include/molshredder/render/packet.hpp
+      include/molshredder/render/direct_volume.hpp
+      include/molshredder/render/molecular_surface.hpp
       include/molshredder/render/reference_renderer.hpp
       include/molshredder/render/representation.hpp
       include/molshredder/render/setting_store.hpp
+      include/molshredder/render/transfer_function.hpp
       include/molshredder/render/volume_isosurface.hpp
+      include/molshredder/render/volume_slice.hpp
       include/molshredder/selection/evaluator.hpp
       include/molshredder/selection/expression.hpp
       include/molshredder/selection/named_selection.hpp
@@ -670,6 +683,7 @@ if(MOLSHREDDER_BUILD_DESKTOP)
     molshredder_desktop
     MACOSX_BUNDLE
     WIN32
+    apps/desktop/action_translation_sources.cpp
     apps/desktop/localization_controller.cpp
     apps/desktop/localization_controller.hpp
     apps/desktop/main.cpp
@@ -744,6 +758,9 @@ if(MOLSHREDDER_BUILD_DESKTOP)
       apps/desktop/shaders/pick_line.vert
       apps/desktop/shaders/stereo_composite.vert
       apps/desktop/shaders/stereo_composite.frag
+      apps/desktop/shaders/volume.vert
+      apps/desktop/shaders/volume.frag
+      apps/desktop/shaders/volume_pick.frag
   )
   install(
     TARGETS molshredder_desktop
@@ -772,6 +789,8 @@ if(MOLSHREDDER_BUILD_DESKTOP)
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/localization_catalog_test.py"
         --qml "${CMAKE_CURRENT_SOURCE_DIR}/apps/desktop/Main.qml"
         --actions "${CMAKE_CURRENT_SOURCE_DIR}/src/gui/action_catalog.cpp"
+        --action-translations
+          "${CMAKE_CURRENT_SOURCE_DIR}/apps/desktop/action_translation_sources.cpp"
         --ts "${CMAKE_CURRENT_SOURCE_DIR}/translations/molshredder_ko.ts"
     )
     add_test(
@@ -801,6 +820,8 @@ if(MOLSHREDDER_BUILD_DESKTOP)
         NAME desktop.information_architecture_${MOLSHREDDER_ACTION_LANGUAGE}_smoke
         COMMAND
           molshredder_desktop --smoke --information-architecture-smoke
+          --open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/lammps_topology.pdb
+          --trajectory=${CMAKE_CURRENT_BINARY_DIR}/desktop_trajectory.dcd
           --language=${MOLSHREDDER_ACTION_LANGUAGE}
       )
       set_tests_properties(
@@ -808,7 +829,7 @@ if(MOLSHREDDER_BUILD_DESKTOP)
         PROPERTIES
           TIMEOUT 10
           PASS_REGULAR_EXPRESSION
-            "MolShredder information architecture ready: action=file.open command=load surfaces=menu,toolbar,command-palette language=${MOLSHREDDER_ACTION_LANGUAGE}"
+            "MolShredder information architecture ready: actions=25 availability=workspace surfaces=shared language=${MOLSHREDDER_ACTION_LANGUAGE}"
       )
     endforeach()
     if(WIN32)
@@ -839,6 +860,11 @@ if(MOLSHREDDER_BUILD_DESKTOP)
     set_tests_properties(
       desktop.trajectory_fixture_setup
       PROPERTIES FIXTURES_SETUP desktop_trajectory_fixture
+    )
+    set_tests_properties(
+      desktop.information_architecture_en_smoke
+      desktop.information_architecture_ko_smoke
+      PROPERTIES FIXTURES_REQUIRED desktop_trajectory_fixture
     )
     add_test(
       NAME desktop.redirected_renderer_smoke
@@ -895,6 +921,35 @@ if(MOLSHREDDER_BUILD_DESKTOP)
     add_test(
       NAME desktop.named_view_smoke
       COMMAND molshredder_desktop --smoke --named-view-smoke
+    )
+    add_test(
+      NAME desktop.session_smoke
+      COMMAND molshredder_desktop --smoke --session-smoke
+              --open=${CMAKE_CURRENT_SOURCE_DIR}/tests/application/fixtures/pbc_distance.pdb
+    )
+    set_tests_properties(
+      desktop.session_smoke
+      PROPERTIES
+        TIMEOUT 15
+        PASS_REGULAR_EXPRESSION
+          "MolShredder desktop session ready: scenes=1 movie=typed save-load=atomic autosave=rotated panel=visible"
+    )
+    add_test(
+      NAME frontend.m2_scientific_workstation
+      COMMAND
+        Python3::Interpreter
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/m2_workstation_test.py"
+        "$<TARGET_FILE:molshredder_python>"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/application/fixtures/hydrogen_bond.pdb"
+        "${MOLSHREDDER_DESKTOP_DCD_FIXTURE}"
+        "${MOLSHREDDER_MRC_FIXTURE}"
+    )
+    set_tests_properties(
+      frontend.m2_scientific_workstation
+      PROPERTIES
+        FIXTURES_REQUIRED "desktop_trajectory_fixture;mrc_fixture"
+        TIMEOUT 30
+        PASS_REGULAR_EXPRESSION "m2-scientific-workstation-ok"
     )
     set_tests_properties(
       desktop.named_view_smoke
@@ -982,6 +1037,30 @@ if(MOLSHREDDER_BUILD_DESKTOP)
         PASS_REGULAR_EXPRESSION "MolShredder desktop render setting ready: typed=shared geometry=updated editor=visible"
     )
     add_test(
+      NAME desktop.edit_smoke
+      COMMAND
+        molshredder_desktop --smoke
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/application/fixtures/pbc_distance.pdb"
+        "--representation=spheres"
+        "--edit-smoke"
+    )
+    set_tests_properties(
+      desktop.edit_smoke
+      PROPERTIES
+        TIMEOUT 10
+        PASS_REGULAR_EXPRESSION "MolShredder desktop coordinate edit ready: apply=shared undo=shared redo=shared history=bounded editor=visible"
+    )
+    add_test(
+      NAME desktop.molecule_builder_smoke
+      COMMAND molshredder_desktop --smoke --builder-smoke
+    )
+    set_tests_properties(
+      desktop.molecule_builder_smoke
+      PROPERTIES
+        TIMEOUT 10
+        PASS_REGULAR_EXPRESSION "MolShredder desktop molecule builder ready: residue=1 atoms=2 bonds=1 properties=atom-residue-bond canonical=shared undo=bounded panels=visible"
+    )
+    add_test(
       NAME desktop.analysis_smoke
       COMMAND
         molshredder_desktop --smoke
@@ -993,7 +1072,7 @@ if(MOLSHREDDER_BUILD_DESKTOP)
       desktop.analysis_smoke
       PROPERTIES
         TIMEOUT 10
-        PASS_REGULAR_EXPRESSION "MolShredder desktop analysis ready: results=2 overlay=marker-dash-label canonical=shared panel=visible"
+        PASS_REGULAR_EXPRESSION "MolShredder desktop analysis ready: results=4 overlay=marker-dash-label sasa-rdf=bounded canonical=shared panel=visible"
     )
     set_tests_properties(
       desktop.structure_open_smoke
@@ -1032,6 +1111,20 @@ if(MOLSHREDDER_BUILD_DESKTOP)
       COMMAND
         molshredder_desktop --smoke --script-cancel-smoke
         "--script=${CMAKE_CURRENT_SOURCE_DIR}/tests/automation/fixtures/gui_cancel.py"
+    )
+    add_test(
+      NAME desktop.isolated_python_script_smoke
+      COMMAND
+        molshredder_desktop
+        --isolated-script-smoke
+        --script=${CMAKE_CURRENT_SOURCE_DIR}/tests/automation/fixtures/gui_isolated.py
+    )
+    set_tests_properties(
+      desktop.isolated_python_script_smoke
+      PROPERTIES
+        TIMEOUT 10
+        PASS_REGULAR_EXPRESSION
+          "MolShredder desktop isolated Python script ready: objects=0 output=captured parent=unchanged"
     )
     set_tests_properties(
       desktop.python_script_cancel_smoke
@@ -1084,6 +1177,44 @@ if(MOLSHREDDER_BUILD_DESKTOP)
         TIMEOUT 10
         FIXTURES_REQUIRED mrc_fixture
         PASS_REGULAR_EXPRESSION "MolShredder desktop isosurface ready: level=56 vertices="
+    )
+    add_test(
+      NAME desktop.volume_slice_smoke
+      COMMAND
+        molshredder_desktop --volume-slice-smoke
+        "--open=${MOLSHREDDER_MRC_FIXTURE}"
+    )
+    add_test(
+      NAME desktop.molecular_surface_smoke
+      COMMAND
+        molshredder_desktop --molecular-surface-smoke
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/pick_single_atom.pdb"
+    )
+    add_test(
+      NAME desktop.direct_volume_smoke
+      COMMAND
+        molshredder_desktop --direct-volume-smoke
+        "--open=${MOLSHREDDER_MRC_FIXTURE}"
+    )
+    set_tests_properties(
+      desktop.direct_volume_smoke
+      PROPERTIES
+        FIXTURES_REQUIRED mrc_fixture
+        TIMEOUT 15
+        PASS_REGULAR_EXPRESSION "MolShredder direct-volume GPU stereo ready: mode=side_by_side eyes=2 bindings=per-eye"
+    )
+    set_tests_properties(
+      desktop.molecular_surface_smoke
+      PROPERTIES
+        TIMEOUT 15
+        PASS_REGULAR_EXPRESSION "MolShredder desktop molecular surface workflow ready: kind=vdw picking=atom canonical=shared action=represent.surface"
+    )
+    set_tests_properties(
+      desktop.volume_slice_smoke
+      PROPERTIES
+        TIMEOUT 15
+        FIXTURES_REQUIRED mrc_fixture
+        PASS_REGULAR_EXPRESSION "MolShredder desktop volume slice ready: axis=z index=1 vertices=4 triangles=2 picking=volume canonical=shared panel=visible"
     )
     set_tests_properties(
       desktop.bcif_open_smoke
@@ -1470,6 +1601,38 @@ if(BUILD_TESTING)
   target_link_libraries(molshredder_topology_tests PRIVATE MolShredder::Core)
   molshredder_enable_warnings(molshredder_topology_tests)
   add_test(NAME model.topology COMMAND molshredder_topology_tests)
+
+  add_executable(
+    molshredder_molecular_builder_tests
+    tests/model/molecular_builder_test.cpp
+  )
+  target_compile_features(
+    molshredder_molecular_builder_tests PRIVATE cxx_std_20
+  )
+  target_link_libraries(
+    molshredder_molecular_builder_tests PRIVATE MolShredder::Core
+  )
+  molshredder_enable_warnings(molshredder_molecular_builder_tests)
+  add_test(
+    NAME model.molecular_builder
+    COMMAND molshredder_molecular_builder_tests
+  )
+
+  add_executable(
+    molshredder_chemical_perception_tests
+    tests/model/chemical_perception_test.cpp
+  )
+  target_compile_features(
+    molshredder_chemical_perception_tests PRIVATE cxx_std_20
+  )
+  target_link_libraries(
+    molshredder_chemical_perception_tests PRIVATE MolShredder::Core
+  )
+  molshredder_enable_warnings(molshredder_chemical_perception_tests)
+  add_test(
+    NAME model.chemical_perception
+    COMMAND molshredder_chemical_perception_tests
+  )
 
   add_executable(molshredder_coordinates_tests tests/model/coordinates_test.cpp)
   target_compile_features(molshredder_coordinates_tests PRIVATE cxx_std_20)
@@ -1955,6 +2118,70 @@ if(BUILD_TESTING)
   )
 
   add_executable(
+    molshredder_volume_slice_tests
+    tests/render/volume_slice_test.cpp
+  )
+  target_compile_features(
+    molshredder_volume_slice_tests PRIVATE cxx_std_20
+  )
+  target_link_libraries(
+    molshredder_volume_slice_tests PRIVATE MolShredder::Core
+  )
+  molshredder_enable_warnings(molshredder_volume_slice_tests)
+  add_test(
+    NAME render.volume_slice
+    COMMAND molshredder_volume_slice_tests
+  )
+
+  add_executable(
+    molshredder_molecular_surface_tests
+    tests/render/molecular_surface_test.cpp
+  )
+  target_compile_features(
+    molshredder_molecular_surface_tests PRIVATE cxx_std_20
+  )
+  target_link_libraries(
+    molshredder_molecular_surface_tests PRIVATE MolShredder::Core
+  )
+  molshredder_enable_warnings(molshredder_molecular_surface_tests)
+  add_test(
+    NAME render.molecular_surface
+    COMMAND molshredder_molecular_surface_tests
+  )
+
+  add_executable(
+    molshredder_transfer_function_tests
+    tests/render/transfer_function_test.cpp
+  )
+  target_compile_features(
+    molshredder_transfer_function_tests PRIVATE cxx_std_20
+  )
+  target_link_libraries(
+    molshredder_transfer_function_tests PRIVATE MolShredder::Core
+  )
+  molshredder_enable_warnings(molshredder_transfer_function_tests)
+  add_test(
+    NAME render.transfer_function
+    COMMAND molshredder_transfer_function_tests
+  )
+
+  add_executable(
+    molshredder_direct_volume_tests
+    tests/render/direct_volume_test.cpp
+  )
+  target_compile_features(
+    molshredder_direct_volume_tests PRIVATE cxx_std_20
+  )
+  target_link_libraries(
+    molshredder_direct_volume_tests PRIVATE MolShredder::Core
+  )
+  molshredder_enable_warnings(molshredder_direct_volume_tests)
+  add_test(
+    NAME render.direct_volume
+    COMMAND molshredder_direct_volume_tests
+  )
+
+  add_executable(
     molshredder_representation_scaling_tests
     tests/render/representation_scaling_test.cpp
   )
@@ -2007,6 +2234,24 @@ if(BUILD_TESTING)
   target_link_libraries(molshredder_basic_analysis_tests PRIVATE MolShredder::Core)
   molshredder_enable_warnings(molshredder_basic_analysis_tests)
   add_test(NAME analysis.basic COMMAND molshredder_basic_analysis_tests)
+
+  add_executable(
+    molshredder_sasa_tests
+    tests/analysis/sasa_test.cpp
+  )
+  target_compile_features(molshredder_sasa_tests PRIVATE cxx_std_20)
+  target_link_libraries(molshredder_sasa_tests PRIVATE MolShredder::Core)
+  molshredder_enable_warnings(molshredder_sasa_tests)
+  add_test(NAME analysis.sasa COMMAND molshredder_sasa_tests)
+
+  add_executable(
+    molshredder_rdf_tests
+    tests/analysis/rdf_test.cpp
+  )
+  target_compile_features(molshredder_rdf_tests PRIVATE cxx_std_20)
+  target_link_libraries(molshredder_rdf_tests PRIVATE MolShredder::Core)
+  molshredder_enable_warnings(molshredder_rdf_tests)
+  add_test(NAME analysis.rdf COMMAND molshredder_rdf_tests)
 
   add_executable(
     molshredder_alignment_tests
@@ -2218,6 +2463,23 @@ if(BUILD_TESTING)
   )
 
   add_executable(
+    molshredder_molecular_surface_workspace_tests
+    tests/application/molecular_surface_workspace_test.cpp
+  )
+  target_compile_features(
+    molshredder_molecular_surface_workspace_tests PRIVATE cxx_std_20
+  )
+  target_link_libraries(
+    molshredder_molecular_surface_workspace_tests PRIVATE MolShredder::Gui
+  )
+  molshredder_enable_warnings(molshredder_molecular_surface_workspace_tests)
+  add_test(
+    NAME application.molecular_surface_workspace
+    COMMAND molshredder_molecular_surface_workspace_tests
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/pick_single_atom.pdb"
+  )
+
+  add_executable(
     molshredder_trajectory_controller_tests
     tests/application/trajectory_controller_test.cpp
   )
@@ -2260,12 +2522,33 @@ if(BUILD_TESTING)
     molshredder_gui_action_catalog_tests PRIVATE cxx_std_20
   )
   target_link_libraries(
-    molshredder_gui_action_catalog_tests PRIVATE MolShredder::Gui
+    molshredder_gui_action_catalog_tests
+    PRIVATE MolShredder::Automation MolShredder::Gui pybind11::embed
   )
   molshredder_enable_warnings(molshredder_gui_action_catalog_tests)
   add_test(
     NAME gui.action_catalog
     COMMAND molshredder_gui_action_catalog_tests
+  )
+
+  add_executable(
+    molshredder_python_script_service_tests
+    tests/automation/python_script_service_test.cpp
+  )
+  target_compile_features(
+    molshredder_python_script_service_tests PRIVATE cxx_std_20
+  )
+  target_link_libraries(
+    molshredder_python_script_service_tests
+    PRIVATE MolShredder::Automation pybind11::embed
+  )
+  molshredder_enable_warnings(molshredder_python_script_service_tests)
+  add_test(
+    NAME automation.python_script_service
+    COMMAND
+      molshredder_python_script_service_tests
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/automation/fixtures/isolated_success.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/automation/fixtures/isolated_timeout.py"
   )
 
   add_executable(
@@ -2404,6 +2687,17 @@ if(BUILD_TESTING)
   )
 
   add_test(
+    NAME frontend.selection_numeric_parity
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/selection_frontend_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "$<TARGET_FILE:molshredder>"
+      "$<TARGET_FILE:molshredder_gui_probe>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/synthetic_multimodel.pdb"
+  )
+
+  add_test(
     NAME frontend.render_setting_parity
     COMMAND
       Python3::Interpreter
@@ -2424,6 +2718,30 @@ if(BUILD_TESTING)
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/automation/fixtures/success.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/automation/fixtures/failure_after_mutation.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/synthetic_multimodel.pdb"
+  )
+
+  add_test(
+    NAME frontend.python_api_lifecycle
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/python_api_lifecycle_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/synthetic_multimodel.pdb"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/automation/fixtures/embedded_api.py"
+  )
+
+  add_test(
+    NAME frontend.isolated_python_script
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/isolated_python_script_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "$<TARGET_FILE:molshredder>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/automation/fixtures/isolated_success.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/automation/fixtures/isolated_failure.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/automation/fixtures/isolated_timeout.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/automation/fixtures/isolated_malformed.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/automation/fixtures/isolated_environment.py"
   )
 
   add_test(
@@ -2459,7 +2777,7 @@ if(BUILD_TESTING)
       "$<TARGET_FILE:molshredder_python>"
       "$<TARGET_FILE:molshredder>"
       "$<TARGET_FILE:molshredder_analysis_probe>"
-      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/synthetic_multimodel.pdb"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/analysis/fixtures/geometry_frontend.pdb"
   )
 
   add_test(
@@ -2471,6 +2789,49 @@ if(BUILD_TESTING)
       "$<TARGET_FILE:molshredder>"
       "$<TARGET_FILE:molshredder_gui_probe>"
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/synthetic_multimodel.pdb"
+  )
+
+  add_test(
+    NAME frontend.edit_parity
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/edit_frontend_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "$<TARGET_FILE:molshredder>"
+      "$<TARGET_FILE:molshredder_gui_probe>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/application/fixtures/pbc_distance.pdb"
+  )
+
+  add_test(
+    NAME frontend.session_parity
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/session_frontend_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "$<TARGET_FILE:molshredder>"
+      "$<TARGET_FILE:molshredder_gui_probe>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/application/fixtures/pbc_distance.pdb"
+  )
+
+  add_test(
+    NAME frontend.molecule_builder_parity
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/molecule_builder_frontend_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "$<TARGET_FILE:molshredder>"
+      "$<TARGET_FILE:molshredder_gui_probe>"
+  )
+
+  add_test(
+    NAME frontend.chemical_semantics_parity
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/chemical_semantics_frontend_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "$<TARGET_FILE:molshredder>"
+      "$<TARGET_FILE:molshredder_gui_probe>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/chemistry.sdf"
   )
 
   add_test(
@@ -2644,6 +3005,16 @@ if(BUILD_TESTING)
   set_tests_properties(
     frontend.volume_isosurface_parity
     PROPERTIES FIXTURES_REQUIRED mrc_fixture
+  )
+
+  add_test(
+    NAME frontend.molecular_surface_parity
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/molecular_surface_frontend_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "$<TARGET_FILE:molshredder>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/pick_single_atom.pdb"
   )
 
   add_test(

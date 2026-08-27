@@ -43,6 +43,38 @@ version을 `--expected-version`으로 보내며 stale version, duplicate/deleted
 transaction 전체를 거부한다. 자세한 계약은 [Persistent identity and numeric contract](IDENTITY_AND_NUMERIC_CONTRACT.md)를
 참고한다.
 
+## Molecular editing
+
+```text
+edit atom-position --atom-id 1 --x 9 --y 8 --z 7 \
+  --expected-topology-version 1 \
+  --expected-coordinate-source-revision 1 --unit angstrom
+edit atom-properties --atom-id 1 --name C1 --formal-charge 1 \
+  --expected-topology-version 1 \
+  --expected-coordinate-source-revision 1
+edit residue-properties --atom-id 1 --name LIG --chain A --residue-number 7 \
+  --expected-topology-version 2 \
+  --expected-coordinate-source-revision 2
+edit bond-order --bond-id 1 --order single \
+  --expected-topology-version 3 \
+  --expected-coordinate-source-revision 3
+build molecule --name carbonyl \
+  --atoms "C,6,0,0,0,0;O,8,1.2,0,0,0" \
+  --bonds "1,2,double" --residue-name LIG --chain A \
+  --residue-number 1 --unit angstrom --memory-budget-bytes 1048576
+edit undo
+edit redo
+edit history [--memory-budget-bytes 268435456]
+```
+
+좌표 편집은 static coordinate source의 모든 state에 적용된다. Atom identity/element/formal charge,
+residue name/chain/number와 bond order 편집은 stable ID를 보존하면서 topology version을 증가시킨다.
+각 응답은 diff schema 1의 transaction kind, before/after 값과 revision을 반환한다. Undo history는 byte
+budget을 넘지 않으며 새 edit는 redo branch를 무효화한다. GUI의 Edit menu/property editor/builder,
+CLI와 Python `invoke`가 모두 같은 operation을 공유한다. Attached trajectory, missing ID, invalid chemistry,
+stale revision, cancellation 및 undo snapshot budget 부족은 commit 전에 거부한다. 상세 계약과 의도적으로
+지원하지 않는 template builder 범위는 [Editing and builders](EDITING_AND_BUILDERS.md)를 참고한다.
+
 첫 molecular vertical slice의 GUI·Console·Python parity와 session replay 검증을 기준으로 foundation
 command grammar를 version 1로 pin한다. Canonical history/session에는 생략된 기본값과 alias가 모두
 정규화된 invocation을 저장한다.
@@ -81,6 +113,27 @@ molshredder measure distance --from EXPR --to EXPR
                                [--pbc raw|minimum-image]
                                [--precision 0..15] [--unit angstrom|nanometer]
                                [--result-name NAME]
+molshredder measure angle --first EXPR --vertex EXPR --third EXPR
+                            [--pbc raw|minimum-image] [--precision 0..15]
+                            [--result-name NAME]
+molshredder measure dihedral --first EXPR --second EXPR --third EXPR --fourth EXPR
+                               [--pbc raw|minimum-image] [--precision 0..15]
+                               [--result-name NAME]
+molshredder analyze sasa [--selection EXPR] [--probe-radius ANGSTROM]
+                           [--samples N] [--evaluation-budget N]
+                           [--unit square-angstrom|square-nanometer]
+                           [--precision 0..15] [--result-name NAME]
+molshredder analyze rdf [--first EXPR] [--second EXPR]
+                          [--maximum-radius DISTANCE] [--bin-width DISTANCE]
+                          [--normalization count|g-r] [--pbc raw|minimum-image]
+                          [--evaluation-budget N] [--unit angstrom|nanometer]
+                          [--precision 0..15] [--result-name NAME]
+molshredder analyze trajectory rmsd-matrix [--selection EXPR]
+                          [--fit-selection EXPR] [--first FRAME]
+                          [--last FRAME] [--stride N] [--fit none|rigid]
+                          [--weight uniform|mass] [--missing error|skip]
+                          [--frame-pair-budget N] [--unit angstrom|nanometer]
+                          [--precision 0..15] [--result-name NAME]
 molshredder result list
 molshredder result get --id ID
 molshredder result show --id ID
@@ -91,6 +144,12 @@ molshredder result delete --id ID
 molshredder script run --path SCRIPT.py --trust true
                          [--arguments-json '["arg1","arg2"]']
                          [--working-directory DIRECTORY]
+molshredder script run-isolated --path SCRIPT.py --trust true
+                         [--arguments-json '["arg1","arg2"]']
+                         [--working-directory DIRECTORY]
+                         [--timeout-ms 30000]
+                         [--max-output-bytes 8388608]
+                         [--environment-policy minimal|inherit]
 molshredder system version
 molshredder system info
 molshredder view get
@@ -198,6 +257,29 @@ Additive `format list`와 `save` 문법, atomic output 및 semantic loss table�
   expression이고 mode가 reduction semantics를 지정한다. 현재 실행되는 첫 slice는 endpoint마다
   정확히 한 atom을 선택하는 `mode=atom`이며 `pbc=raw|minimum-image`를 지원한다. Minimum-image는
   active frame의 orthorhombic/triclinic unit cell을 요구한다.
+- `measure angle`/`measure dihedral`: 각각 순서가 지정된 원자 선택 3개 또는 4개를 받아 degree 단위의
+  current-frame geometry result를 만든다. 각 selection은 정확히 한 원자여야 하며 `raw`와
+  orthorhombic/triclinic `minimum-image`를 지원한다. Angle은 안정적인 cross/dot `atan2`로
+  `[0, 180]`, dihedral은 projected-vector signed `atan2`로 `[-180, 180]` 범위를 사용한다.
+  중복 원자, missing coordinate, zero-length vector와 collinear torsion은 명시적 오류이고 result를
+  남기지 않는다.
+- `analyze sasa`: active frame에서 deterministic Fibonacci sphere를 사용하는 Shrake–Rupley SASA를
+  계산한다. 기본 probe radius는 1.4 Å, 기본 sample 수는 atom당 960개이며 `evaluation-budget`으로
+  pair/point occlusion 평가량을 제한한다. 선택 원자의 표면은 선택 밖의 present atom에도 가려진다.
+  Radius는 PQR radius, explicit VDW radius, versioned element table 순으로 정하고 출처를 결과에 남긴다.
+  출력은 Å² 또는 nm²이고 현재 PBC image를 만들지 않는 `raw` active-frame 계산만 지원한다.
+  선택 원자의 missing coordinate는 오류이며 선택 밖 missing occluder는 count를 남기고 건너뛴다.
+- `analyze rdf`: active frame의 두 selection 사이 거리를 half-open `[lower, upper)` bin으로 집계한다.
+  `second`를 생략하면 같은 selection의 unordered distinct pair만 한 번 센다. 별도 selection은 self pair를
+  제외한 ordered first→second pair다. `count`는 raw 또는 minimum-image에서 pair count를 반환한다.
+  Dimensionless `g-r`은 finite cell volume이 있는 `minimum-image`에서만 허용하고
+  `count/(eligible_pairs×shell_volume/cell_volume)`으로 정규화한다. Maximum radius는 triclinic cell의 최소
+  높이 절반 이하여야 한다. Missing atom은 count와 함께 건너뛰며 budget/cancellation 실패는 result를 남기지 않는다.
+- `analyze trajectory rmsd-matrix`: inclusive first/last/stride frame 집합의 all-pairs RMSD를 계산하고
+  diagonal 포함 upper triangle만 저장한다. `fit=rigid`는 각 off-diagonal mobile frame을 reference frame에
+  Horn quaternion rigid fit한 뒤 별도 score selection으로 RMSD를 계산하지만 좌표와 viewport를 변경하지 않는다.
+  `N(N+1)/2` frame-pair 수가 budget을 넘으면 frame을 읽거나 partial table을 publish하기 전에 거부한다.
+  Collinear/insufficient fit selection처럼 회전이 유일하지 않은 입력은 명시적 오류다.
 - `result list/get/show/hide/export/delete`: analysis 결과와 provenance, stale source 상태 및 독립적인
   viewport overlay를 관리한다. 상세 schema와 atomic export 계약은
   [Persistent analysis results](ANALYSIS_RESULTS.md)에 둔다.
@@ -262,6 +344,15 @@ Additive `format list`와 `save` 문법, atomic output 및 semantic loss table�
   PyMOL 동작과 같이 +1로 해석된다. Operation은 최종 camera를 즉시 commit하고 `animation`에 start/end,
   duration과 handedness를 반환한다. 따라서 Desktop 같은 interactive client는 결정적 endpoint를 유지하면서
   화면만 시간에 따라 보간할 수 있다.
+- `scene store/recall/list/delete/clear`: object/volume/trajectory/result/edit state, representation/settings/selection,
+  camera/stereo와 stable identity를 포함한 full `Workspace` snapshot을 이름으로 관리한다. Recall은 detached candidate를
+  publish하며 실패하면 현재 Workspace를 보존한다. Camera-only `view` inventory와는 독립적이다.
+- `movie configure/keyframe/seek/play/pause/step/status/clear`: 1-based bounded timeline에 named scene과 optional 0-based
+  trajectory frame만 연결한다. 임의 command/script payload는 허용하지 않는다. `seek`와 `step`은 scene recall 및
+  trajectory seek를 하나의 failure-atomic transition으로 적용한다.
+- `session save/load/autosave`: current canonical mutation journal, final camera/stereo, named scene/movie 및
+  `ui.visible-panels` metadata를 schema 2 `.msess`로 저장한다. Load는 explicit recovery와 exact missing-path relink를
+  지원한다. 자세한 migration/security/file transaction은 [Session format](SESSION_FORMAT.md)을 따른다.
 
 ## Shorthand
 
@@ -275,6 +366,10 @@ Additive `format list`와 `save` 문법, atomic output 및 semantic loss table�
 | `centroid` | `analyze center` | `mode=centroid` |
 | `com` | `analyze center` | `mode=com` |
 | `dist`, `distance` | `measure distance` | 없음 |
+| `angle` | `measure angle` | 없음 |
+| `dihedral` | `measure dihedral` | 없음 |
+| `sasa` | `analyze sasa` | 없음 |
+| `rdf` | `analyze rdf` | 없음 |
 
 명시한 option은 shorthand의 고정 argument도 override한다. 예를 들어 `com --mode centroid`는
 canonical `analyze center --mode centroid`가 된다. Alias 사용 여부는 history에 남기지 않는다.
@@ -292,8 +387,8 @@ Camera gesture는 Desktop에서 `view set`으로, selection framing/orient/pivot
 `view center/zoom/orient/origin/reset`
 operation으로 정규화된다. Named-view operation을 session journal에 포함하면
 replay가 현재 camera와 inventory를 복원한다. PyMOL public 18-value layout은 import invocation 자체를 journal에
-넣어 재현할 수 있다. Replay는 wall-clock animation을 기다리지 않고 committed endpoint를 복원한다. Full scene 저장은
-아직 구현되지 않았다.
+넣어 재현할 수 있다. Replay는 wall-clock animation을 기다리지 않고 committed endpoint를 복원한다. Full-state
+named scene, typed movie track와 bounded failure-atomic session file operation도 같은 Registry에서 제공한다.
 
 ## 호환성 정책
 

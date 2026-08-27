@@ -127,6 +127,22 @@ molshredder.run_script(
     working_directory: str | None = None,
     trusted: bool = False,
 ) -> dict
+molshredder.run_script_isolated(
+    path: str,
+    arguments: list[str] = [],
+    working_directory: str | None = None,
+    trusted: bool = False,
+    timeout_ms: int = 30_000,
+    max_output_bytes: int = 8 * 1024 * 1024,
+    environment_policy: str = "minimal",
+) -> dict
+molshredder.run_script_isolated_async(...) -> OperationTask
+molshredder.runtime_info() -> dict
+molshredder.reset_runtime() -> dict
+molshredder.subscribe(callback) -> int
+molshredder.unsubscribe(token: int) -> bool
+molshredder.callback_errors(clear: bool = True) -> list[dict]
+molshredder.coordinate_view(frame_index: int = 0) -> CoordinateView
 ```
 
 예:
@@ -227,6 +243,26 @@ molshredder.invoke(
     {"values": pymol_view["data"]["text"], "duration": "0.35", "hand": "1"},
 )
 
+# Full-state named scenes and a typed, non-executable movie track
+molshredder.invoke("scene store", {"name": "active site"})
+molshredder.invoke(
+    "movie configure", {"frames": "120", "fps": "24", "loop": "true"}
+)
+molshredder.invoke(
+    "movie keyframe", {"frame": "1", "scene": "active site"}
+)
+molshredder.invoke("movie seek", {"frame": "1"})
+
+# Native schema-2 session. Paths are explicit external references.
+molshredder.invoke(
+    "session save",
+    {"path": "analysis.msess", "ui-visible-panels": "analysis,views"},
+)
+molshredder.invoke(
+    "session load",
+    {"path": "analysis.msess", "recovery": "analysis.msess.autosave.previous"},
+)
+
 script = molshredder.run_script(
     "analysis.py", ["trajectory.dcd", "--stride", "10"], trusted=True
 )
@@ -245,6 +281,18 @@ stdout/stderr, canonical nested invocation, mutation count, source SHA-256, inte
 들어간다. Runtime/syntax error도 exception으로 변환하지 않고 `script_failed` envelope를 반환하며 같은 정보와
 `partial_mutation`을 `error.details`에 보존한다. 자세한 보안·수명 계약은 [Automation](AUTOMATION.md)을 따른다.
 
-현재 Python API는 command-dispatch smoke surface다. Typed molecular object, NumPy zero-copy
-coordinate view, async task/cancellation, embedded console과 plugin API는 data/trajectory vertical
-slice에서 수명·thread·GIL contract를 정한 뒤 추가한다.
+Module-owned headless runtime은 `reset_runtime()`으로 generation을 올리며 Workspace를 결정적으로 교체한다. Embedded
+script에서는 host Workspace를 사용하므로 reset을 거부한다. `subscribe()` callback은 canonical operation 완료 뒤 등록
+순서로 전달되고 callback 중 reentrant operation의 재귀 event delivery는 억제된다. Callback exception은 operation을
+실패시키지 않고 `callback_errors()`에 격리한다.
+
+`coordinate_view()`는 active object의 immutable frame을 소유하는 read-only 2-D buffer `(atom_count, 3)`를 반환한다.
+`numpy.asarray(view)`는 float32/float64 zero-copy view를 만들 수 있고 Workspace reset/edit 뒤에도 기존 snapshot lifetime을
+보존한다. Built-in `memoryview` fixture와 local conda package cache의 NumPy 2.5.1을 설치 없이 연결한 실제
+`numpy.asarray` gate에서 shape/dtype/zero-copy/read-only/reset 후 snapshot lifetime을 검증했다. Writable coordinates는
+raw memory mutation이 아니라 canonical edit transaction을 사용한다.
+
+`run_script_isolated_async()`는 `OperationTask`를 반환한다. `done`, `progress`, `cancel()`, bounded `result(timeout_ms)`와
+`close()`를 제공하고 결과를 처음 회수할 때 completion event를 정확히 한 번 전달한다. Module reset 뒤에도 task가 시작한
+runtime generation lease를 보존하며 child는 parent Workspace를 변경할 수 없다. OS-native sandbox profile은 향후 강화
+범위이고 현재 permission contract는 explicit trust, process isolation과 `minimal|inherit` environment policy다.

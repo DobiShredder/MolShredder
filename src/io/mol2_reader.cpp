@@ -481,7 +481,9 @@ Result<StructureData> parse_record(std::span<const SourceLine> record,
   for (const auto& atom : atoms) {
     const auto added = builder.add_atom(
         {atom.name, atom.atomic_number, residue_indices.at(atom.substructure_id),
-         "", 0, atom.id});
+         "", 0, atom.id, std::nullopt,
+         model::AtomStereoParity::unspecified, model::RadicalState::none,
+         false, model::ChemicalAnnotationOrigin::explicit_input});
     if (!added.has_value()) return Result<StructureData>::failure(added.error());
     atom_types.push_back(atom.atom_type);
     substructure_ids.push_back(atom.substructure_id);
@@ -495,7 +497,8 @@ Result<StructureData> parse_record(std::span<const SourceLine> record,
     const auto& bond = bonds[index];
     if (const auto error = builder.add_bond(
             {{atom_indices.at(bond.first)}, {atom_indices.at(bond.second)},
-             bond.order});
+             bond.order, model::BondQuery::none, model::BondStereo::none,
+             model::ChemicalAnnotationOrigin::explicit_input});
         error.has_value()) {
       return Result<StructureData>::failure(*error);
     }

@@ -132,35 +132,39 @@
       "title": "Identifier-matched rigid fit"
     },
     {
-      "acceptance_level": "unwritten",
+      "acceptance_level": "specified",
       "capability_id": "analysis.geometry.angle",
       "domain": "analysis",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 2,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
-      "platforms": [],
+      "platforms": [
+        "macos"
+      ],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Scalar atom angle query"
     },
     {
-      "acceptance_level": "unwritten",
+      "acceptance_level": "specified",
       "capability_id": "analysis.geometry.dihedral",
       "domain": "analysis",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 2,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
-      "platforms": [],
+      "platforms": [
+        "macos"
+      ],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Scalar atom dihedral query"
     },
     {
@@ -402,6 +406,24 @@
       "priority": "P0",
       "public_state": "in_progress",
       "title": "Fitted RMS without coordinate mutation"
+    },
+    {
+      "acceptance_level": "specified",
+      "capability_id": "analysis.surface_area.sasa",
+      "domain": "analysis",
+      "evidence_count": 2,
+      "implementation_status": "partial",
+      "interfaces": {
+        "cli": true,
+        "gui": true,
+        "python": true
+      },
+      "platforms": [
+        "macos"
+      ],
+      "priority": "P0",
+      "public_state": "in_progress",
+      "title": "Solvent-accessible surface area"
     },
     {
       "acceptance_level": "specified",
@@ -2503,16 +2525,18 @@
       "acceptance_level": "specified",
       "capability_id": "session.migration",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 2,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
-      "platforms": [],
+      "platforms": [
+        "macos"
+      ],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Session version check and migration"
     },
     {
@@ -2599,14 +2623,16 @@
       "acceptance_level": "specified",
       "capability_id": "session.restore.memory",
       "domain": "io",
-      "evidence_count": 0,
+      "evidence_count": 2,
       "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
-      "platforms": [],
+      "platforms": [
+        "macos"
+      ],
       "priority": "P0",
       "public_state": "in_progress",
       "title": "Restore application state from memory"
@@ -2615,16 +2641,18 @@
       "acceptance_level": "specified",
       "capability_id": "session.security.movie_commands",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 2,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
-      "platforms": [],
+      "platforms": [
+        "macos"
+      ],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Lock commands restored from untrusted sessions"
     },
     {
@@ -2647,14 +2675,16 @@
       "acceptance_level": "specified",
       "capability_id": "session.serialize.memory",
       "domain": "io",
-      "evidence_count": 0,
+      "evidence_count": 2,
       "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
-      "platforms": [],
+      "platforms": [
+        "macos"
+      ],
       "priority": "P0",
       "public_state": "in_progress",
       "title": "Serialize application state in memory"
@@ -14776,15 +14806,15 @@
       "capability_id": "representation.surface.molecular",
       "domain": "representation",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "PyMOL-compatible surface representation"
     },
     {
@@ -15880,15 +15910,15 @@
       "capability_id": "representation.volume.create",
       "domain": "representation",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Direct volume object creation"
     },
     {
@@ -15896,15 +15926,15 @@
       "capability_id": "representation.volume.direct",
       "domain": "representation",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "PyMOL-compatible volume representation"
     },
     {
@@ -15928,15 +15958,15 @@
       "capability_id": "representation.volume.object_overwrite",
       "domain": "representation",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Direct volume overwrite policy"
     },
     {
@@ -15944,15 +15974,15 @@
       "capability_id": "representation.volume.ramp.builtin_presets",
       "domain": "representation",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Built-in volume ramp presets"
     },
     {
@@ -15960,15 +15990,15 @@
       "capability_id": "representation.volume.ramp.define",
       "domain": "representation",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Volume ramp definition"
     },
     {
@@ -15976,15 +16006,15 @@
       "capability_id": "representation.volume.ramp.get",
       "domain": "representation",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Volume ramp query"
     },
     {
@@ -16008,15 +16038,15 @@
       "capability_id": "representation.volume.ramp.set",
       "domain": "representation",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Volume ramp assignment"
     },
     {
@@ -16088,15 +16118,15 @@
       "capability_id": "representation.volume.setting.mode",
       "domain": "representation",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Volume Mode"
     },
     {
@@ -16104,15 +16134,15 @@
       "capability_id": "representation.volume.setting.mode.mode.post_classified",
       "domain": "representation",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Volume Mode mode post_classified"
     },
     {
@@ -16136,15 +16166,15 @@
       "capability_id": "representation.volume.slice",
       "domain": "representation",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "PyMOL-compatible slice representation"
     },
     {
@@ -16152,15 +16182,15 @@
       "capability_id": "representation.volume.slice.create",
       "domain": "representation",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Map slice object creation"
     },
     {
@@ -17719,16 +17749,18 @@
       "acceptance_level": "specified",
       "capability_id": "scene.snapshot.recall",
       "domain": "scene",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 2,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
-      "platforms": [],
+      "platforms": [
+        "macos"
+      ],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Recall a named scene snapshot"
     },
     {
@@ -17751,16 +17783,18 @@
       "acceptance_level": "specified",
       "capability_id": "scene.snapshot.store",
       "domain": "scene",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 2,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
-      "platforms": [],
+      "platforms": [
+        "macos"
+      ],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Store a named scene snapshot"
     },
     {
@@ -17784,15 +17818,15 @@
       "capability_id": "selection.appearance.cartoon_color",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Cartoon-color selector"
     },
     {
@@ -17800,15 +17834,15 @@
       "capability_id": "selection.appearance.color",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Atom-color selector"
     },
     {
@@ -17816,15 +17850,15 @@
       "capability_id": "selection.appearance.enabled",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Enabled-object atom selector"
     },
     {
@@ -17832,15 +17866,15 @@
       "capability_id": "selection.appearance.representation",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Representation-visibility selector"
     },
     {
@@ -17848,15 +17882,15 @@
       "capability_id": "selection.appearance.ribbon_color",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Ribbon-color selector"
     },
     {
@@ -17864,15 +17898,15 @@
       "capability_id": "selection.appearance.visible",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Visible-atom selector"
     },
     {
@@ -17880,15 +17914,15 @@
       "capability_id": "selection.chemical.acceptor",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Hydrogen-bond acceptor selector"
     },
     {
@@ -17896,15 +17930,15 @@
       "capability_id": "selection.chemical.backbone",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Polymer backbone selector"
     },
     {
@@ -17912,15 +17946,15 @@
       "capability_id": "selection.chemical.donor",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Hydrogen-bond donor selector"
     },
     {
@@ -17928,15 +17962,15 @@
       "capability_id": "selection.chemical.guide",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Polymer guide-atom selector"
     },
     {
@@ -17944,15 +17978,15 @@
       "capability_id": "selection.chemical.hbond_acceptor_short",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Hydrogen-bond acceptor shorthand"
     },
     {
@@ -17960,15 +17994,15 @@
       "capability_id": "selection.chemical.hbond_donor_short",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Hydrogen-bond donor shorthand"
     },
     {
@@ -17976,15 +18010,15 @@
       "capability_id": "selection.chemical.hetatm",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "HETATM-origin selector"
     },
     {
@@ -17992,15 +18026,15 @@
       "capability_id": "selection.chemical.hydrogen",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Hydrogen selector"
     },
     {
@@ -18008,15 +18042,15 @@
       "capability_id": "selection.chemical.inorganic",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Non-polymer inorganic selector"
     },
     {
@@ -18024,15 +18058,15 @@
       "capability_id": "selection.chemical.metal",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Metal selector"
     },
     {
@@ -18040,15 +18074,15 @@
       "capability_id": "selection.chemical.nucleic",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Nucleic-polymer selector"
     },
     {
@@ -18056,15 +18090,15 @@
       "capability_id": "selection.chemical.organic",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Non-polymer organic selector"
     },
     {
@@ -18072,15 +18106,15 @@
       "capability_id": "selection.chemical.polymer",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Polymer selector"
     },
     {
@@ -18088,15 +18122,15 @@
       "capability_id": "selection.chemical.protein",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Protein-polymer selector"
     },
     {
@@ -18104,15 +18138,15 @@
       "capability_id": "selection.chemical.sidechain",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Polymer sidechain selector"
     },
     {
@@ -18120,15 +18154,15 @@
       "capability_id": "selection.chemical.solvent",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Solvent selector"
     },
     {
@@ -18136,15 +18170,15 @@
       "capability_id": "selection.comparison.equal",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Numeric equality comparison"
     },
     {
@@ -18152,15 +18186,15 @@
       "capability_id": "selection.comparison.greater_than",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Greater-than numeric comparison"
     },
     {
@@ -18168,15 +18202,15 @@
       "capability_id": "selection.comparison.less_than",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Less-than numeric comparison"
     },
     {
@@ -18184,15 +18218,15 @@
       "capability_id": "selection.comparison.range",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Numeric range/list comparison"
     },
     {
@@ -18232,15 +18266,15 @@
       "capability_id": "selection.coordinate.present",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Current-state coordinate presence"
     },
     {
@@ -18248,15 +18282,15 @@
       "capability_id": "selection.coordinate.state",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Coordinate-state selector"
     },
     {
@@ -18264,15 +18298,15 @@
       "capability_id": "selection.expansion.bond_steps",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Expand by bond steps"
     },
     {
@@ -18280,15 +18314,15 @@
       "capability_id": "selection.expansion.bound_to",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Direct bonded atoms including overlap"
     },
     {
@@ -18296,15 +18330,15 @@
       "capability_id": "selection.expansion.calpha",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Reduce expanded residues to C-alpha atoms"
     },
     {
@@ -18312,15 +18346,15 @@
       "capability_id": "selection.expansion.chain",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Expand to chains"
     },
     {
@@ -18328,15 +18362,15 @@
       "capability_id": "selection.expansion.fragment",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Expand to fragments"
     },
     {
@@ -18344,15 +18378,15 @@
       "capability_id": "selection.expansion.molecule",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Expand to bonded molecules"
     },
     {
@@ -18360,15 +18394,15 @@
       "capability_id": "selection.expansion.neighbor",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Direct bonded neighbors excluding source"
     },
     {
@@ -18376,15 +18410,15 @@
       "capability_id": "selection.expansion.object",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Expand to objects"
     },
     {
@@ -18392,15 +18426,15 @@
       "capability_id": "selection.expansion.residue",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Expand to residues"
     },
     {
@@ -18408,15 +18442,15 @@
       "capability_id": "selection.expansion.ring",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Expand to small rings"
     },
     {
@@ -18424,15 +18458,15 @@
       "capability_id": "selection.expansion.segment",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Expand to segments"
     },
     {
@@ -18440,15 +18474,15 @@
       "capability_id": "selection.expansion.unit_cell",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Expand to crystallographic unit cell"
     },
     {
@@ -18456,15 +18490,15 @@
       "capability_id": "selection.identifier.altloc",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Alternate-location selector"
     },
     {
@@ -18536,15 +18570,15 @@
       "capability_id": "selection.identifier.label",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Atom-label selector"
     },
     {
@@ -18552,15 +18586,15 @@
       "capability_id": "selection.identifier.object",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Object/model selector"
     },
     {
@@ -18568,15 +18602,15 @@
       "capability_id": "selection.identifier.peptide_sequence",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Peptide-sequence selector"
     },
     {
@@ -18584,15 +18618,15 @@
       "capability_id": "selection.identifier.rank",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Load-order atom-rank selector"
     },
     {
@@ -18712,15 +18746,15 @@
       "capability_id": "selection.logical.subtract",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Selection subtraction"
     },
     {
@@ -18728,15 +18762,15 @@
       "capability_id": "selection.match.identifiers",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Identifier-set matching"
     },
     {
@@ -18744,15 +18778,15 @@
       "capability_id": "selection.match.name_residue",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Name/residue matching"
     },
     {
@@ -19048,15 +19082,15 @@
       "capability_id": "selection.numeric.b_factor",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "B-factor selector"
     },
     {
@@ -19064,15 +19098,15 @@
       "capability_id": "selection.numeric.coordinate_x",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Model-space X selector"
     },
     {
@@ -19080,15 +19114,15 @@
       "capability_id": "selection.numeric.coordinate_y",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Model-space Y selector"
     },
     {
@@ -19096,15 +19130,15 @@
       "capability_id": "selection.numeric.coordinate_z",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Model-space Z selector"
     },
     {
@@ -19112,15 +19146,15 @@
       "capability_id": "selection.numeric.formal_charge",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Formal-charge selector"
     },
     {
@@ -19128,15 +19162,15 @@
       "capability_id": "selection.numeric.occupancy",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Occupancy selector"
     },
     {
@@ -19144,15 +19178,15 @@
       "capability_id": "selection.numeric.partial_charge",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Partial-charge selector"
     },
     {
@@ -19160,15 +19194,15 @@
       "capability_id": "selection.numeric.user_property",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "User numeric-property selector"
     },
     {
@@ -19176,15 +19210,15 @@
       "capability_id": "selection.position.first",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "First selected atom"
     },
     {
@@ -19192,15 +19226,15 @@
       "capability_id": "selection.position.last",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Last selected atom"
     },
     {
@@ -19208,15 +19242,15 @@
       "capability_id": "selection.property.custom",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Custom atom-property selector"
     },
     {
@@ -19224,15 +19258,15 @@
       "capability_id": "selection.property.flag",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Atom-flag selector"
     },
     {
@@ -19240,15 +19274,15 @@
       "capability_id": "selection.property.numeric_type",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Numeric-type selector"
     },
     {
@@ -19256,15 +19290,15 @@
       "capability_id": "selection.property.secondary_structure",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Secondary-structure selector"
     },
     {
@@ -19272,15 +19306,15 @@
       "capability_id": "selection.property.stereochemistry",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Stereochemistry selector"
     },
     {
@@ -19288,15 +19322,15 @@
       "capability_id": "selection.property.text_type",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Text-type selector"
     },
     {
@@ -19304,15 +19338,15 @@
       "capability_id": "selection.pseudo.rotation_origin",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Rotation-origin pseudo-atom"
     },
     {
@@ -19320,15 +19354,15 @@
       "capability_id": "selection.pseudo.scene_center",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Scene-center pseudo-atom"
     },
     {
@@ -19336,15 +19370,15 @@
       "capability_id": "selection.spatial.around",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Atoms around a selection"
     },
     {
@@ -19352,15 +19386,15 @@
       "capability_id": "selection.spatial.beyond",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Beyond-distance selection"
     },
     {
@@ -19368,15 +19402,15 @@
       "capability_id": "selection.spatial.expand",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Distance expansion including source"
     },
     {
@@ -19384,15 +19418,15 @@
       "capability_id": "selection.spatial.near_to",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Within-distance selection excluding target"
     },
     {
@@ -19400,15 +19434,15 @@
       "capability_id": "selection.spatial.vdw_gap",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "VDW-surface gap selection"
     },
     {
@@ -19416,15 +19450,15 @@
       "capability_id": "selection.spatial.within",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Within-distance selection"
     },
     {
@@ -19432,15 +19466,15 @@
       "capability_id": "selection.status.bonded",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Bonded-atom selector"
     },
     {
@@ -19448,15 +19482,15 @@
       "capability_id": "selection.status.fixed",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Fixed-atom selector"
     },
     {
@@ -19464,15 +19498,15 @@
       "capability_id": "selection.status.masked",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Masked-atom selector"
     },
     {
@@ -19480,15 +19514,15 @@
       "capability_id": "selection.status.protected",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Protected-atom selector"
     },
     {
@@ -19496,15 +19530,15 @@
       "capability_id": "selection.status.restrained",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Restrained-atom selector"
     },
     {
@@ -20327,16 +20361,18 @@
       "acceptance_level": "specified",
       "capability_id": "trajectory.movie.session.persistence",
       "domain": "trajectory",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 2,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
-        "gui": false,
-        "python": false
+        "cli": true,
+        "gui": true,
+        "python": true
       },
-      "platforms": [],
+      "platforms": [
+        "macos"
+      ],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Persist movie timeline"
     },
     {
@@ -20826,15 +20862,15 @@
     "unavailable": "보류, 제외, 접근 제한 또는 license 격리 상태",
     "verified": "implementation이 compatible/robust이며 fixture, evidence, module과 public interface가 모두 연결됨"
   },
-  "reviewed_at": "2026-08-25",
+  "reviewed_at": "2026-08-27",
   "schema_version": 1,
   "summary": {
-    "capability_count": 1301,
+    "capability_count": 1302,
     "domain_counts": {
       "analysis": {
-        "in_progress": 7,
-        "planned": 15,
-        "total": 25,
+        "in_progress": 10,
+        "planned": 13,
+        "total": 26,
         "unavailable": 3,
         "verified": 0
       },
@@ -20846,8 +20882,8 @@
         "verified": 0
       },
       "io": {
-        "in_progress": 33,
-        "planned": 70,
+        "in_progress": 35,
+        "planned": 68,
         "total": 110,
         "unavailable": 7,
         "verified": 0
@@ -20867,29 +20903,29 @@
         "verified": 0
       },
       "representation": {
-        "in_progress": 96,
-        "planned": 431,
+        "in_progress": 108,
+        "planned": 419,
         "total": 528,
         "unavailable": 1,
         "verified": 0
       },
       "scene": {
-        "in_progress": 55,
-        "planned": 42,
+        "in_progress": 57,
+        "planned": 40,
         "total": 97,
         "unavailable": 0,
         "verified": 0
       },
       "selection": {
-        "in_progress": 21,
-        "planned": 99,
+        "in_progress": 98,
+        "planned": 22,
         "total": 120,
         "unavailable": 0,
         "verified": 0
       },
       "trajectory": {
-        "in_progress": 13,
-        "planned": 55,
+        "in_progress": 14,
+        "planned": 54,
         "total": 68,
         "unavailable": 0,
         "verified": 0
@@ -20904,13 +20940,13 @@
     },
     "implementation_status_counts": {
       "blocked_access": 13,
-      "inventoried": 1019,
-      "partial": 264,
+      "inventoried": 923,
+      "partial": 361,
       "specified": 5
     },
     "public_state_counts": {
-      "in_progress": 264,
-      "planned": 1024,
+      "in_progress": 361,
+      "planned": 928,
       "unavailable": 13,
       "verified": 0
     }

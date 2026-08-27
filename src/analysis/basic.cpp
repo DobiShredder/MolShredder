@@ -4,6 +4,8 @@
 #include <cctype>
 #include <cmath>
 #include <cstdint>
+#include <limits>
+#include <numbers>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -56,6 +58,75 @@ bool annotation_is_true(const model::PropertyMetadata& metadata,
   });
   return value == "true" || value == "1" || value == "yes";
 }
+
+model::Vec3d subtract(model::Vec3d left, model::Vec3d right) noexcept {
+  return {left.x - right.x, left.y - right.y, left.z - right.z};
+}
+
+model::Vec3d scale(model::Vec3d value, double factor) noexcept {
+  return {value.x * factor, value.y * factor, value.z * factor};
+}
+
+double dot(model::Vec3d left, model::Vec3d right) noexcept {
+  return left.x * right.x + left.y * right.y + left.z * right.z;
+}
+
+model::Vec3d cross(model::Vec3d left, model::Vec3d right) noexcept {
+  return {left.y * right.z - left.z * right.y,
+          left.z * right.x - left.x * right.z,
+          left.x * right.y - left.y * right.x};
+}
+
+double norm(model::Vec3d value) noexcept {
+  return std::hypot(value.x, value.y, value.z);
+}
+
+operation::Result<model::Vec3d> atom_position(
+    const model::CoordinateFrame& frame, model::AtomIndex atom) {
+  if (atom.value >= frame.atom_count()) {
+    return operation::Result<model::Vec3d>::failure(
+        invalid("geometry atom index is out of range"));
+  }
+  if (!frame.atom_present(atom.value)) {
+    return operation::Result<model::Vec3d>::failure(invalid_selection(
+        "geometry atom is missing in this coordinate frame"));
+  }
+  return operation::Result<model::Vec3d>::success(std::visit(
+      [&](const auto& positions) {
+        const auto& position = positions[atom.value];
+        return model::Vec3d{static_cast<double>(position.x),
+                            static_cast<double>(position.y),
+                            static_cast<double>(position.z)};
+      },
+      frame.positions().values()));
+}
+
+operation::Result<model::Vec3d> atom_displacement(
+    const model::CoordinateFrame& frame, model::AtomIndex from,
+    model::AtomIndex to, DistanceBoundary boundary) {
+  const auto from_position = atom_position(frame, from);
+  if (!from_position.has_value())
+    return operation::Result<model::Vec3d>::failure(from_position.error());
+  const auto to_position = atom_position(frame, to);
+  if (!to_position.has_value())
+    return operation::Result<model::Vec3d>::failure(to_position.error());
+  auto displacement = subtract(to_position.value(), from_position.value());
+  if (boundary == DistanceBoundary::minimum_image) {
+    if (!frame.metadata().unit_cell.has_value()) {
+      return operation::Result<model::Vec3d>::failure(
+          invalid("minimum-image geometry requires a periodic unit cell"));
+    }
+    const auto minimum = trajectory::minimum_image(
+        *frame.metadata().unit_cell, displacement);
+    if (!minimum.has_value())
+      return operation::Result<model::Vec3d>::failure(minimum.error());
+    displacement = minimum.value().displacement;
+  }
+  return operation::Result<model::Vec3d>::success(displacement);
+}
+
+constexpr auto kGeometryRelativeTolerance =
+    128.0 * std::numeric_limits<double>::epsilon();
 
 }  // namespace
 
@@ -284,6 +355,107 @@ operation::Result<AtomDistanceResult> atom_distance(
   return operation::Result<AtomDistanceResult>::success(
       AtomDistanceResult{first, second, displacement, distance,
                          frame.metadata().coordinate_unit});
+}
+
+operation::Result<AtomAngleResult> atom_angle(
+    const model::CoordinateFrame& frame, model::AtomIndex first,
+    model::AtomIndex vertex, model::AtomIndex third,
+    DistanceBoundary boundary) {
+  if (first == vertex || first == third || vertex == third) {
+    return operation::Result<AtomAngleResult>::failure(
+        invalid("angle requires three distinct atoms"));
+  }
+  const auto first_vector = atom_displacement(frame, vertex, first, boundary);
+  if (!first_vector.has_value())
+    return operation::Result<AtomAngleResult>::failure(first_vector.error());
+  const auto third_vector = atom_displacement(frame, vertex, third, boundary);
+  if (!third_vector.has_value())
+    return operation::Result<AtomAngleResult>::failure(third_vector.error());
+  const auto first_norm = norm(first_vector.value());
+  const auto third_norm = norm(third_vector.value());
+  if (!(first_norm > 0.0) || !(third_norm > 0.0)) {
+    return operation::Result<AtomAngleResult>::failure(invalid(
+        "angle is undefined because a vertex bond has zero length"));
+  }
+  const auto sine = norm(cross(first_vector.value(), third_vector.value()));
+  const auto cosine = dot(first_vector.value(), third_vector.value());
+  const auto scale_value = first_norm * third_norm;
+  if (!std::isfinite(scale_value) ||
+      std::hypot(sine, cosine) <= kGeometryRelativeTolerance * scale_value) {
+    return operation::Result<AtomAngleResult>::failure(
+        invalid("angle geometry is numerically degenerate"));
+  }
+  const auto degrees =
+      std::atan2(sine, cosine) * 180.0 / std::numbers::pi;
+  const auto vertex_position = atom_position(frame, vertex).value();
+  return operation::Result<AtomAngleResult>::success(
+      {first, vertex, third, {vertex_position.x + first_vector.value().x,
+                              vertex_position.y + first_vector.value().y,
+                              vertex_position.z + first_vector.value().z},
+       vertex_position,
+       {vertex_position.x + third_vector.value().x,
+        vertex_position.y + third_vector.value().y,
+        vertex_position.z + third_vector.value().z},
+       degrees, frame.metadata().coordinate_unit, boundary});
+}
+
+operation::Result<AtomDihedralResult> atom_dihedral(
+    const model::CoordinateFrame& frame, model::AtomIndex first,
+    model::AtomIndex second, model::AtomIndex third, model::AtomIndex fourth,
+    DistanceBoundary boundary) {
+  if (first == second || first == third || first == fourth ||
+      second == third || second == fourth || third == fourth) {
+    return operation::Result<AtomDihedralResult>::failure(
+        invalid("dihedral requires four distinct atoms"));
+  }
+  const auto b0 = atom_displacement(frame, second, first, boundary);
+  if (!b0.has_value())
+    return operation::Result<AtomDihedralResult>::failure(b0.error());
+  const auto b1 = atom_displacement(frame, second, third, boundary);
+  if (!b1.has_value())
+    return operation::Result<AtomDihedralResult>::failure(b1.error());
+  const auto b2 = atom_displacement(frame, third, fourth, boundary);
+  if (!b2.has_value())
+    return operation::Result<AtomDihedralResult>::failure(b2.error());
+  const auto b1_norm = norm(b1.value());
+  if (!(b1_norm > 0.0)) {
+    return operation::Result<AtomDihedralResult>::failure(
+        invalid("dihedral is undefined because the central bond has zero length"));
+  }
+  const auto axis = scale(b1.value(), 1.0 / b1_norm);
+  const auto v = subtract(b0.value(), scale(axis, dot(b0.value(), axis)));
+  const auto w = subtract(b2.value(), scale(axis, dot(b2.value(), axis)));
+  const auto v_norm = norm(v);
+  const auto w_norm = norm(w);
+  const auto outer_scale = norm(b0.value()) * norm(b2.value());
+  if (!(v_norm > kGeometryRelativeTolerance * norm(b0.value())) ||
+      !(w_norm > kGeometryRelativeTolerance * norm(b2.value())) ||
+      !std::isfinite(outer_scale)) {
+    return operation::Result<AtomDihedralResult>::failure(invalid(
+        "dihedral is undefined because three consecutive atoms are collinear"));
+  }
+  const auto x = dot(v, w);
+  const auto y = dot(cross(axis, v), w);
+  const auto degrees =
+      std::atan2(y, x) * 180.0 / std::numbers::pi;
+  const auto second_position = atom_position(frame, second).value();
+  const auto third_position = model::Vec3d{
+      second_position.x + b1.value().x, second_position.y + b1.value().y,
+      second_position.z + b1.value().z};
+  return operation::Result<AtomDihedralResult>::success(
+      {first,
+       second,
+       third,
+       fourth,
+       {second_position.x + b0.value().x, second_position.y + b0.value().y,
+        second_position.z + b0.value().z},
+       second_position,
+       third_position,
+       {third_position.x + b2.value().x, third_position.y + b2.value().y,
+        third_position.z + b2.value().z},
+       degrees,
+       frame.metadata().coordinate_unit,
+       boundary});
 }
 
 }  // namespace molshredder::analysis

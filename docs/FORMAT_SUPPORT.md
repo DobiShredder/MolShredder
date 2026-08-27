@@ -134,7 +134,9 @@ degenerate cell을 거부한다. Multi-model record는 암묵적으로 flatten�
 
 MOL/SDF reader는 V2000 fixed-width counts/atom/bond block을 읽고 `M  CHG`, `M  ISO`, `M  RAD`를
 typed chemistry로 반영한다. Single/double/triple/aromatic bond order를 구분하며 현재 core가 표현하지 못하는
-query/unspecified bond와 bond stereo는 단순 결합으로 낮추지 않고 오류로 거부한다. SDF의 각 `$$$$`
+unspecified bond는 단순 결합으로 낮추지 않고 오류로 거부한다. V2000 query bond type
+5–8(single/double, single/aromatic, double/aromatic, any)과 bond stereo code 0/1/3/4/6은 core typed
+semantics로 보존한다. SDF의 각 `$$$$`
 record는 document의 독립 structure가 되고 data field는 `sdf.data.*` metadata로 보존된다. Workspace는 모든
 record의 system과 scene node를 먼저 구성한 뒤 한 번에 commit하므로 duplicate name이나 build 실패가
 일부 record만 남기지 않는다. Explicit `--name base`는 `base_1`, `base_2`, …로 확장된다.
@@ -329,7 +331,7 @@ Parse error message에는 source name과 1-based line을 포함한다. File open
   explicit element를 저장하지 않으며 multi-frame/PBC/connectivity를 표현하지 못한다.
 - PDB writer는 fixed-column 99,999 atom/9,999 model 범위이며 hybrid-36, `ANISOU`, `TER`, `LINK`/`SSBOND`,
   `HELIX`/`SHEET`, sequence/assembly/transform, varying model cell과 full header dictionary를 아직 출력하지 않는다.
-- MOL/SDF는 enhanced stereo collection, query bond/atom, Sgroup, reaction record와 duplicate/ordered SDF
+- MOL/SDF는 enhanced stereo collection, query atom, Sgroup, reaction record와 duplicate/ordered SDF
   tag를 아직 표현하지 않는다. SDF writer는 active object 한 record만 쓰며 multi-object batch export는 후속이다.
 - MOL2는 dummy/query/unknown bond, FEATURE/SET/UNITY의 typed interpretation, substructure의 모든
   optional field와 multi-molecule batch export를 아직 지원하지 않는다. Writer는 explicit SYBYL type이 없는
@@ -346,6 +348,9 @@ Parse error message에는 source name과 1-based line을 포함한다. File open
   concatenated trajectory 전체를 memory에 보유하며 random-access indexing과 streaming은 아직 없다. Malformed
   `t=` title은 title 그대로 보존하지만 물리 시간으로 만들지 않는다.
 - G96는 full identity의 residue/atom name을 5자로 제한하고 explicit element/connectivity를 저장하지 않는다.
+- Core의 inferred/user residue kind와 polymer classification은 현재 native structure format writer가 직접
+  round-trip하지 않으며 export report의 `residue_semantics` channel로 count한다. Source residue/chain identity
+  보존과 normalized chemical classification 보존은 별도 channel이다.
   Reduced first-frame load는 원래 identity를 복원할 수 없어 synthetic unknown atom을 사용한다. Reader는 in-memory이며
   gzip/`.Z`, incremental indexing과 external-topology POSITIONRED mapping은 아직 없다.
 

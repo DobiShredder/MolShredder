@@ -91,16 +91,19 @@ struct ParsedAtom {
   std::string symbol;
   model::Vec3d position;
   std::int64_t mass_difference{};
-  std::int64_t stereo_parity{};
+  model::AtomStereoParity stereo_parity{model::AtomStereoParity::unspecified};
   std::int32_t formal_charge{};
-  std::int64_t isotope_mass{};
-  std::int64_t radical{};
+  bool formal_charge_present{};
+  std::optional<std::uint16_t> isotope_mass;
+  model::RadicalState radical{model::RadicalState::none};
 };
 
 struct ParsedBond {
   std::size_t first{};
   std::size_t second{};
   model::BondOrder order{model::BondOrder::unknown};
+  model::BondQuery query{model::BondQuery::none};
+  model::BondStereo stereo{model::BondStereo::none};
 };
 
 Result<ParsedAtom> parse_atom(const SourceLine& line, std::string_view source) {
@@ -166,11 +169,15 @@ Result<ParsedAtom> parse_atom(const SourceLine& line, std::string_view source) {
   result.symbol = symbol == "*" ? "X" : symbol;
   result.position = {x.value(), y.value(), z.value()};
   result.mass_difference = mass.value();
-  result.stereo_parity = stereo.value();
+  result.stereo_parity = static_cast<model::AtomStereoParity>(stereo.value());
   result.formal_charge = charge_code.value() == 4
                              ? 0
                              : charges.at(charge_code.value());
-  result.radical = charge_code.value() == 4 ? 2 : 0;
+  result.formal_charge_present = charge_code.value() != 0 &&
+                                 charge_code.value() != 4;
+  result.radical = charge_code.value() == 4
+                       ? model::RadicalState::doublet
+                       : model::RadicalState::none;
   return Result<ParsedAtom>::success(std::move(result));
 }
 
@@ -199,13 +206,8 @@ Result<ParsedBond> parse_bond(const SourceLine& line, std::string_view source,
     return Result<ParsedBond>::failure(parse_error(
         source, line.number, "MOL V2000 bond references invalid atom indices"));
   }
-  if (stereo.value() != 0U) {
-    return Result<ParsedBond>::failure(parse_error(
-        source, line.number,
-        "MOL V2000 bond stereo is not representable in the current topology model",
-        "remove bond stereo or wait for the stereochemistry data-model slice"));
-  }
   model::BondOrder order;
+  model::BondQuery query{model::BondQuery::none};
   switch (type.value()) {
     case 1U:
       order = model::BondOrder::single;
@@ -219,13 +221,40 @@ Result<ParsedBond> parse_bond(const SourceLine& line, std::string_view source,
     case 4U:
       order = model::BondOrder::aromatic;
       break;
+    case 5U:
+      order = model::BondOrder::query;
+      query = model::BondQuery::single_or_double;
+      break;
+    case 6U:
+      order = model::BondOrder::query;
+      query = model::BondQuery::single_or_aromatic;
+      break;
+    case 7U:
+      order = model::BondOrder::query;
+      query = model::BondQuery::double_or_aromatic;
+      break;
+    case 8U:
+      order = model::BondOrder::query;
+      query = model::BondQuery::any;
+      break;
     default:
       return Result<ParsedBond>::failure(parse_error(
           source, line.number,
-          "unsupported MOL V2000 query or unspecified bond type"));
+          "unsupported MOL V2000 bond type"));
+  }
+  model::BondStereo stereo_value;
+  switch (stereo.value()) {
+    case 0U: stereo_value = model::BondStereo::none; break;
+    case 1U: stereo_value = model::BondStereo::up; break;
+    case 3U: stereo_value = model::BondStereo::cis_or_trans; break;
+    case 4U: stereo_value = model::BondStereo::either; break;
+    case 6U: stereo_value = model::BondStereo::down; break;
+    default:
+      return Result<ParsedBond>::failure(parse_error(
+          source, line.number, "unsupported MOL V2000 bond stereo code"));
   }
   return Result<ParsedBond>::success(
-      {first.value() - 1U, second.value() - 1U, order});
+      {first.value() - 1U, second.value() - 1U, order, query, stereo_value});
 }
 
 Result<bool> apply_pairs(const SourceLine& line, std::string_view source,
@@ -264,20 +293,22 @@ Result<bool> apply_pairs(const SourceLine& line, std::string_view source,
             source, line.number, "MOL V2000 formal charge is out of range"));
       }
       atom.formal_charge = static_cast<std::int32_t>(value.value());
+      atom.formal_charge_present = true;
     } else if (keyword == "ISO") {
-      if (value.value() <= 0) {
+      if (value.value() <= 0 ||
+          value.value() > std::numeric_limits<std::uint16_t>::max()) {
         return Result<bool>::failure(parse_error(
             source, line.number,
-            "MOL V2000 isotope mass number must be positive"));
+            "MOL V2000 isotope mass number is out of range"));
       }
-      atom.isotope_mass = value.value();
+      atom.isotope_mass = static_cast<std::uint16_t>(value.value());
     } else if (keyword == "RAD") {
       if (value.value() < 1 || value.value() > 3) {
         return Result<bool>::failure(parse_error(
             source, line.number,
             "MOL V2000 radical code must be singlet, doublet or triplet"));
       }
-      atom.radical = value.value();
+      atom.radical = static_cast<model::RadicalState>(value.value());
     }
   }
   return Result<bool>::success(true);
@@ -424,17 +455,20 @@ Result<StructureData> parse_record(std::span<const SourceLine> record,
     const auto added = builder.add_atom(
         {atom.symbol + std::to_string(index + 1U), atom.atomic_number,
          residue.value(), "", atom.formal_charge,
-         static_cast<std::int64_t>(index + 1U)});
+         static_cast<std::int64_t>(index + 1U), atom.isotope_mass,
+         atom.stereo_parity, atom.radical, atom.formal_charge_present,
+         model::ChemicalAnnotationOrigin::explicit_input});
     if (!added.has_value()) return Result<StructureData>::failure(added.error());
     mass_difference.push_back(atom.mass_difference);
-    stereo_parity.push_back(atom.stereo_parity);
-    isotope_mass.push_back(atom.isotope_mass);
-    radical.push_back(atom.radical);
+    stereo_parity.push_back(static_cast<std::int64_t>(atom.stereo_parity));
+    isotope_mass.push_back(atom.isotope_mass.value_or(0U));
+    radical.push_back(static_cast<std::int64_t>(atom.radical));
     coordinates.push_back(atom.position);
   }
   for (const auto& bond : bonds) {
     if (const auto error = builder.add_bond(
-            {{bond.first}, {bond.second}, bond.order});
+            {{bond.first}, {bond.second}, bond.order, bond.query, bond.stereo,
+             model::ChemicalAnnotationOrigin::explicit_input});
         error.has_value()) {
       return Result<StructureData>::failure(*error);
     }
