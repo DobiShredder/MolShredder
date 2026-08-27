@@ -23,6 +23,26 @@
         <translation>MolShredder 분자 뷰어</translation>
     </message>
     <message>
+        <location filename="../apps/desktop/Main.qml" line="113"/>
+        <source>File</source>
+        <translation>파일</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/Main.qml" line="109"/>
+        <source>Command Palette</source>
+        <translation>명령 팔레트</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/Main.qml" line="163"/>
+        <source>Search actions</source>
+        <translation>작업 검색</translation>
+    </message>
+    <message>
+        <location filename="../src/gui/action_catalog.cpp" line="24"/>
+        <source>Open one or more molecular structures or scalar volumes</source>
+        <translation>하나 이상의 분자 구조 또는 스칼라 볼륨을 엽니다</translation>
+    </message>
+    <message>
         <location filename="../apps/desktop/Main.qml" line="156"/>
         <source>Open molecular structure or scalar volume</source>
         <translation>분자 구조 또는 스칼라 볼륨 열기</translation>

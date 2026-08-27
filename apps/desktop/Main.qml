@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Dialogs
 import MolShredder.Desktop
 
@@ -13,6 +14,7 @@ Window {
     property string systemInfoPanelError: ""
     property var analysisExportResultId: 0
     property string analysisExportFormat: "json"
+    readonly property var fileOpenMetadata: localization.actionMetadata("file.open")
 
     function systemInfoValue(group, key) {
         if (!root.systemInfoData || !root.systemInfoData[group])
@@ -82,11 +84,155 @@ Window {
         analysisOverlay.visible = true
         analysisPrimaryInput.forceActiveFocus()
     }
+
+    function openCommandPalette() {
+        commandPaletteQuery.text = ""
+        commandPaletteOverlay.visible = true
+        commandPaletteQuery.forceActiveFocus()
+    }
     width: 1080
     height: 720
     visible: true
     color: "#050812"
     title: qsTr("MolShredder Molecular Viewer")
+
+    Action {
+        id: fileOpenAction
+        objectName: "fileOpenAction"
+        text: {
+            localization.currentLanguage
+            return localization.translateUi(root.fileOpenMetadata.label)
+        }
+        shortcut: root.fileOpenMetadata.shortcut === "standard.open"
+                  ? StandardKey.Open : ""
+        onTriggered: structureDialog.open()
+    }
+
+    Action {
+        id: showCommandPaletteAction
+        objectName: "showCommandPaletteAction"
+        text: qsTr("Command Palette")
+        shortcut: Qt.platform.os === "osx" ? "Meta+Shift+P" : "Ctrl+Shift+P"
+        onTriggered: root.openCommandPalette()
+    }
+
+    MenuBar {
+        id: mainMenuBar
+        objectName: "mainMenuBar"
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        z: 50
+
+        Menu {
+            id: fileMenu
+            objectName: "fileMenu"
+            title: qsTr("File")
+
+            MenuItem {
+                objectName: "fileOpenMenuItem"
+                action: fileOpenAction
+            }
+        }
+    }
+
+    Rectangle {
+        id: commandPaletteOverlay
+        objectName: "commandPaletteOverlay"
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.top: mainMenuBar.bottom
+        anchors.topMargin: 18
+        width: Math.min(560, parent.width - 40)
+        height: 126
+        visible: false
+        radius: 10
+        color: "#f2101827"
+        border.color: "#69aef0"
+        z: 60
+
+        TextInput {
+            id: commandPaletteQuery
+            objectName: "commandPaletteQuery"
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.margins: 14
+            height: 34
+            color: "#eef6ff"
+            selectByMouse: true
+            font.pixelSize: 15
+            Keys.onEscapePressed: commandPaletteOverlay.visible = false
+
+            Text {
+                anchors.fill: parent
+                text: qsTr("Search actions")
+                visible: parent.text.length === 0
+                color: "#71849c"
+                font.pixelSize: 15
+            }
+        }
+
+        Rectangle {
+            id: commandPaletteFileOpen
+            objectName: "commandPaletteFileOpen"
+            property string actionId: root.fileOpenMetadata.id
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            anchors.margins: 12
+            height: 56
+            radius: 7
+            visible: commandPaletteQuery.text.length === 0 ||
+                     fileOpenAction.text.toLowerCase().indexOf(
+                         commandPaletteQuery.text.toLowerCase()) >= 0 ||
+                     actionId.indexOf(commandPaletteQuery.text.toLowerCase()) >= 0
+            color: commandPaletteEntryMouse.containsMouse ? "#284767" : "#172235"
+            border.color: "#405270"
+
+            Text {
+                anchors.left: parent.left
+                anchors.top: parent.top
+                anchors.leftMargin: 12
+                anchors.topMargin: 8
+                text: fileOpenAction.text
+                color: "#eef6ff"
+                font.pixelSize: 14
+                font.bold: true
+            }
+
+            Text {
+                anchors.left: parent.left
+                anchors.bottom: parent.bottom
+                anchors.leftMargin: 12
+                anchors.bottomMargin: 7
+                text: {
+                    localization.currentLanguage
+                    return localization.translateUi(root.fileOpenMetadata.status)
+                }
+                color: "#91a8c2"
+                font.pixelSize: 12
+            }
+
+            Text {
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.rightMargin: 12
+                text: fileOpenAction.shortcut
+                color: "#91a8c2"
+                font.pixelSize: 12
+            }
+
+            MouseArea {
+                id: commandPaletteEntryMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                onClicked: {
+                    commandPaletteOverlay.visible = false
+                    fileOpenAction.trigger()
+                }
+            }
+        }
+    }
 
     MolecularViewport {
         id: viewport
@@ -226,8 +372,11 @@ Window {
     }
 
     component ToolbarButton: Rectangle {
+        id: toolbarButtonRoot
         required property string label
         required property var action
+        property string actionId: ""
+        property string toolTip: ""
         property bool selected: false
         width: buttonText.implicitWidth + 22
         height: 34
@@ -249,6 +398,9 @@ Window {
             hoverEnabled: true
             onClicked: parent.action()
         }
+
+        ToolTip.visible: mouse.containsMouse && toolbarButtonRoot.toolTip.length > 0
+        ToolTip.text: toolbarButtonRoot.toolTip
     }
 
     component InfoRow: Item {
@@ -281,7 +433,8 @@ Window {
     Rectangle {
         anchors.left: parent.left
         anchors.top: parent.top
-        anchors.margins: 20
+        anchors.leftMargin: 20
+        anchors.topMargin: 58
         width: toolbar.width + 28
         height: toolbar.height + 22
         radius: 8
@@ -294,8 +447,14 @@ Window {
             spacing: 8
 
             ToolbarButton {
-                label: qsTr("Open")
-                action: function() { structureDialog.open() }
+                objectName: "fileOpenToolbarButton"
+                actionId: root.fileOpenMetadata.id
+                label: fileOpenAction.text
+                toolTip: {
+                    localization.currentLanguage
+                    return localization.translateUi(root.fileOpenMetadata.status)
+                }
+                action: function() { fileOpenAction.trigger() }
             }
             ToolbarButton {
                 label: qsTr("Trajectory")

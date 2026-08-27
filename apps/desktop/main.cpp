@@ -175,6 +175,7 @@ int main(int argc, char *argv[]) {
   bool render_setting_smoke = false;
   bool analysis_smoke = false;
   bool daily_workflow_smoke = false;
+  bool information_architecture_smoke = false;
   std::optional<QString> redirected_render_smoke;
   std::optional<QString> screenshot;
   std::vector<QString> open_paths;
@@ -239,6 +240,9 @@ int main(int argc, char *argv[]) {
       analysis_smoke = true;
     } else if (argument == "--daily-workflow-smoke") {
       daily_workflow_smoke = true;
+      smoke = true;
+    } else if (argument == "--information-architecture-smoke") {
+      information_architecture_smoke = true;
       smoke = true;
     } else if (argument.starts_with("--redirected-render-smoke=")) {
       const auto value =
@@ -335,6 +339,57 @@ int main(int argc, char *argv[]) {
       QStringLiteral("molecularViewport"));
   if (viewport == nullptr)
     return EXIT_FAILURE;
+  if (information_architecture_smoke) {
+    const auto metadata = localization.actionMetadata(QStringLiteral("file.open"));
+    auto *action =
+        window->findChild<QObject *>(QStringLiteral("fileOpenAction"));
+    auto *menu_bar =
+        window->findChild<QObject *>(QStringLiteral("mainMenuBar"));
+    auto *menu_item =
+        window->findChild<QObject *>(QStringLiteral("fileOpenMenuItem"));
+    auto *toolbar_button =
+        window->findChild<QObject *>(QStringLiteral("fileOpenToolbarButton"));
+    auto *palette =
+        window->findChild<QObject *>(QStringLiteral("commandPaletteOverlay"));
+    auto *palette_entry =
+        window->findChild<QObject *>(QStringLiteral("commandPaletteFileOpen"));
+    const auto palette_opened = QMetaObject::invokeMethod(
+        window, "openCommandPalette", Qt::DirectConnection);
+    const auto expected_label = localization.currentLanguage() ==
+                                        QStringLiteral("ko")
+                                    ? QStringLiteral("열기")
+                                    : QStringLiteral("Open");
+    const auto metadata_surfaces =
+        metadata.value(QStringLiteral("surfaces")).toStringList();
+    const auto passed =
+        metadata.value(QStringLiteral("id")).toString() ==
+            QStringLiteral("file.open") &&
+        metadata.value(QStringLiteral("command")).toString() ==
+            QStringLiteral("load") &&
+        metadata.value(QStringLiteral("shortcut")).toString() ==
+            QStringLiteral("standard.open") &&
+        metadata_surfaces ==
+            QStringList{QStringLiteral("menu"), QStringLiteral("toolbar"),
+                        QStringLiteral("command-palette")} &&
+        action != nullptr && menu_bar != nullptr && menu_item != nullptr &&
+        toolbar_button != nullptr && palette != nullptr &&
+        palette_entry != nullptr && palette_opened &&
+        action->property("text").toString() == expected_label &&
+        !action->property("shortcut").toString().isEmpty() &&
+        toolbar_button->property("actionId").toString() ==
+            QStringLiteral("file.open") &&
+        palette->property("visible").toBool() &&
+        palette_entry->property("actionId").toString() ==
+            QStringLiteral("file.open") &&
+        menu_item->property("action").value<QObject *>() == action;
+    if (!passed) {
+      qCritical("MolShredder information architecture smoke failed");
+      return EXIT_FAILURE;
+    }
+    qInfo("MolShredder information architecture ready: action=file.open "
+          "command=load surfaces=menu,toolbar,command-palette language=%s",
+          qUtf8Printable(localization.currentLanguage()));
+  }
   // Automated exits can stop the GUI event loop while the native window and
   // its QRhi scene graph are still live. Release them while QGuiApplication is
   // still active so QQuickRhiItemRenderer and its backend resources are

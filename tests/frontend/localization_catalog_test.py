@@ -9,6 +9,7 @@ from pathlib import Path
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--qml", type=Path, required=True)
+    parser.add_argument("--actions", type=Path, required=True)
     parser.add_argument("--ts", type=Path, required=True)
     args = parser.parse_args()
 
@@ -36,6 +37,13 @@ def main() -> int:
 
     qml = args.qml.read_text(encoding="utf-8")
     extracted = set(re.findall(r'qsTr\("((?:[^"\\]|\\.)*)"\)', qml))
+    action_source = args.actions.read_text(encoding="utf-8")
+    extracted.update(
+        re.findall(
+            r'\.(?:label_source|status_source)\s*=\s*\n?\s*"((?:[^"\\]|\\.)*)"',
+            action_source,
+        )
+    )
     assert extracted == sources, (
         f"catalog drift: missing={sorted(extracted - sources)!r} "
         f"stale={sorted(sources - extracted)!r}"

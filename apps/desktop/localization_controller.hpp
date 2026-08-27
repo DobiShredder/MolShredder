@@ -4,6 +4,7 @@
 #include <QString>
 #include <QStringList>
 #include <QTranslator>
+#include <QVariantMap>
 
 class QQmlEngine;
 
@@ -24,6 +25,8 @@ class LocalizationController final : public QObject {
   void setEngine(QQmlEngine* engine);
 
   Q_INVOKABLE bool setLanguage(const QString& language);
+  Q_INVOKABLE QVariantMap actionMetadata(const QString& action_id) const;
+  Q_INVOKABLE QString translateUi(const QString& source) const;
 
  signals:
   void currentLanguageChanged();

@@ -27,6 +27,8 @@ error code와 structured context를 제공하고 frontend가 사용자 설명을
 번역 문자열의 `%1`, `%2` placeholder는 원문과 동일하게 유지해야 하며 catalog test가 누락, 빈 번역,
 중복과 placeholder drift를 거부한다.
 
-현재 catalog는 QML UI chrome 150개를 포함한다. Typed operation에서 전달되는 동적 status/error detail은 stable
+현재 catalog는 QML UI chrome 및 action metadata source 154개를 포함한다. `gui::ActionMetadata`의 label/status도
+catalog drift 검사에 포함되므로 menu, toolbar와 command palette가 같은 번역 source를 사용한다. Typed operation에서
+전달되는 동적 status/error detail은 stable
 code/context의 presentation mapping이 아직 없어 일부 영어로 표시될 수 있다. 이를 한국어 지원 완료로 과장하지 않으며,
-workflow menu/action metadata를 정리하는 다음 UX 단계에서 code별 번역과 remediation catalog를 연결한다.
+후속 action migration에서 code별 번역과 remediation catalog를 연결한다.

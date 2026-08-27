@@ -580,12 +580,14 @@ add_library(MolShredder::Gui ALIAS molshredder_gui)
 target_sources(
   molshredder_gui
   PRIVATE
+    src/gui/action_catalog.cpp
     src/gui/action_adapter.cpp
     src/gui/analysis_presenter.cpp
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS include
     FILES
+      include/molshredder/gui/action_catalog.hpp
       include/molshredder/gui/action_adapter.hpp
       include/molshredder/gui/analysis_presenter.hpp
 )
@@ -769,6 +771,7 @@ if(MOLSHREDDER_BUILD_DESKTOP)
         Python3::Interpreter
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/localization_catalog_test.py"
         --qml "${CMAKE_CURRENT_SOURCE_DIR}/apps/desktop/Main.qml"
+        --actions "${CMAKE_CURRENT_SOURCE_DIR}/src/gui/action_catalog.cpp"
         --ts "${CMAKE_CURRENT_SOURCE_DIR}/translations/molshredder_ko.ts"
     )
     add_test(
@@ -793,6 +796,21 @@ if(MOLSHREDDER_BUILD_DESKTOP)
         PASS_REGULAR_EXPRESSION
           "MolShredder localization ready: language=ko title=MolShredder 분자 뷰어"
     )
+    foreach(MOLSHREDDER_ACTION_LANGUAGE IN ITEMS en ko)
+      add_test(
+        NAME desktop.information_architecture_${MOLSHREDDER_ACTION_LANGUAGE}_smoke
+        COMMAND
+          molshredder_desktop --smoke --information-architecture-smoke
+          --language=${MOLSHREDDER_ACTION_LANGUAGE}
+      )
+      set_tests_properties(
+        desktop.information_architecture_${MOLSHREDDER_ACTION_LANGUAGE}_smoke
+        PROPERTIES
+          TIMEOUT 10
+          PASS_REGULAR_EXPRESSION
+            "MolShredder information architecture ready: action=file.open command=load surfaces=menu,toolbar,command-palette language=${MOLSHREDDER_ACTION_LANGUAGE}"
+      )
+    endforeach()
     if(WIN32)
       set(MOLSHREDDER_REDIRECTED_RENDER_BACKEND d3d11)
     elseif(APPLE)
@@ -2232,6 +2250,22 @@ if(BUILD_TESTING)
     COMMAND
       molshredder_session_tests
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/synthetic_multimodel.pdb"
+  )
+
+  add_executable(
+    molshredder_gui_action_catalog_tests
+    tests/gui/action_catalog_test.cpp
+  )
+  target_compile_features(
+    molshredder_gui_action_catalog_tests PRIVATE cxx_std_20
+  )
+  target_link_libraries(
+    molshredder_gui_action_catalog_tests PRIVATE MolShredder::Gui
+  )
+  molshredder_enable_warnings(molshredder_gui_action_catalog_tests)
+  add_test(
+    NAME gui.action_catalog
+    COMMAND molshredder_gui_action_catalog_tests
   )
 
   add_executable(

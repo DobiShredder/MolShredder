@@ -11,6 +11,10 @@ runtime 전환 시 QML binding을 다시 번역한다. Operation ID, command, JS
 
 ## Multi-file open
 
+`file.open` action은 File menu, compact toolbar와 searchable command palette에서 같은 canonical `load` route를
+사용한다. 표준 Open shortcut은 platform convention을 따르고 command palette는 macOS에서 `Command+Shift+P`, 다른
+platform에서 `Ctrl+Shift+P`로 연다. 이 action의 영어·한국어 label/status는 공통 action metadata에서 제공된다.
+
 Open dialog은 여러 molecular structure를 동시에 선택할 수 있다. Desktop은 file stem으로 충돌 없는
 기본 object name을 만들고 `load batch` canonical operation을 호출한다. 따라서 CLI와 Python과 같은
 failure-atomic transaction을 사용하며 중간 input 오류 시 일부 object가 panel에 남지 않는다. Scalar

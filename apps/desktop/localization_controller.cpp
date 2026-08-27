@@ -5,6 +5,8 @@
 #include <QQmlEngine>
 #include <QSettings>
 
+#include "molshredder/gui/action_catalog.hpp"
+
 namespace molshredder::desktop {
 namespace {
 
@@ -57,6 +59,41 @@ void LocalizationController::setEngine(QQmlEngine* engine) {
 
 bool LocalizationController::setLanguage(const QString& language) {
   return applyLanguage(language, true);
+}
+
+QVariantMap LocalizationController::actionMetadata(
+    const QString& action_id) const {
+  const auto id = action_id.toStdString();
+  const auto* action = gui::find_action_metadata(id);
+  if (action == nullptr) return {};
+  QStringList surfaces;
+  if ((action->surfaces & gui::surface_mask(gui::ActionSurface::menu)) != 0U)
+    surfaces.push_back(QStringLiteral("menu"));
+  if ((action->surfaces & gui::surface_mask(gui::ActionSurface::toolbar)) !=
+      0U)
+    surfaces.push_back(QStringLiteral("toolbar"));
+  if ((action->surfaces &
+       gui::surface_mask(gui::ActionSurface::command_palette)) != 0U)
+    surfaces.push_back(QStringLiteral("command-palette"));
+  return {{QStringLiteral("id"), QString::fromUtf8(action->id)},
+          {QStringLiteral("command"),
+           QString::fromUtf8(action->command_name)},
+          {QStringLiteral("menu"), QString::fromUtf8(action->menu)},
+          {QStringLiteral("label"),
+           QString::fromUtf8(action->label_source)},
+          {QStringLiteral("status"),
+           QString::fromUtf8(action->status_source)},
+          {QStringLiteral("shortcut"),
+           QString::fromUtf8(action->shortcut)},
+          {QStringLiteral("order"), action->order},
+          {QStringLiteral("surfaces"), surfaces},
+          {QStringLiteral("checkable"), action->checkable},
+          {QStringLiteral("requiresWorkspace"), action->requires_workspace}};
+}
+
+QString LocalizationController::translateUi(const QString& source) const {
+  const auto utf8 = source.toUtf8();
+  return QCoreApplication::translate("Main", utf8.constData());
 }
 
 bool LocalizationController::applyLanguage(const QString& language,
