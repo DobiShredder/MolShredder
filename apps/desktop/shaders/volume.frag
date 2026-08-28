@@ -56,9 +56,10 @@ void main()
         if (step >= maximum_steps || distance > far_t || accumulated.a >= 0.995)
             break;
         vec3 position = texture_origin + texture_direction * distance;
-        float scalar = texture(volume_texture, position).r;
-        vec4 color = texture(transfer_texture, vec2(scalar, 0.5));
-        float corrected_alpha = 1.0 - pow(1.0 - color.a, sampling.w);
+        float scalar = textureLod(volume_texture, position, 0.0).r;
+        vec4 color = textureLod(transfer_texture, vec2(scalar, 0.5), 0.0);
+        float corrected_alpha =
+            1.0 - pow(max(1.0 - color.a, 0.0), sampling.w);
         float weight = (1.0 - accumulated.a) * corrected_alpha;
         accumulated.rgb += weight * color.rgb;
         accumulated.a += weight;

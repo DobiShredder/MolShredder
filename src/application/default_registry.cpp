@@ -4869,7 +4869,7 @@ command::Registry make_default_registry(
         if (!samples.has_value())
           return Result<Response>::failure(samples.error());
         if (!budget.has_value()) return Result<Response>::failure(budget.error());
-        const auto measured = workspace->analyze_sasa(
+        auto measured = workspace->analyze_sasa(
             arguments.at("selection"), probe.value(), samples.value(),
             budget.value(), &context);
         if (!measured.has_value())
@@ -4894,7 +4894,7 @@ command::Registry make_default_registry(
         const auto normalization=arguments.at("normalization")=="g-r"
             ?analysis::RdfNormalization::radial_distribution:analysis::RdfNormalization::pair_count;
         const auto target_unit=length_unit(arguments.at("unit"));
-        const auto analyzed=workspace->analyze_rdf(
+        auto analyzed=workspace->analyze_rdf(
             arguments.at("first"),second,maximum.value(),width.value(),boundary,
             normalization,same_selection,static_cast<std::uint64_t>(budget.value()),
             target_unit,&context);
@@ -5410,7 +5410,7 @@ command::Registry make_default_registry(
         const auto budget=size_argument(arguments,"frame-pair-budget",true);
         if(!range.has_value()) return Result<Response>::failure(range.error());
         if(!budget.has_value()) return Result<Response>::failure(budget.error());
-        const auto analyzed=workspace->analyze_rmsd_matrix(
+        auto analyzed=workspace->analyze_rmsd_matrix(
             arguments.at("selection"),fit_selection(arguments),range.value(),
             fit_mode(arguments.at("fit")),weight_mode(arguments.at("weight")),
             arguments.at("missing")=="skip"?analysis::MissingAtomPolicy::skip:

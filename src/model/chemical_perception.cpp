@@ -325,7 +325,7 @@ operation::Result<ChemicalPerceptionReport> perceive_chemistry(
   }
 
   std::vector<std::vector<std::size_t>> graph(topology.atom_count());
-  for (const auto edge : edges) {
+  for (const auto &edge : edges) {
     graph[edge.first].push_back(edge.second);
     graph[edge.second].push_back(edge.first);
   }
@@ -395,7 +395,7 @@ operation::Result<ChemicalPerceptionReport> perceive_chemistry(
     }
   }
   std::vector<std::uint8_t> in_ring(topology.atom_count(), 0U);
-  for (const auto edge : edges) {
+  for (const auto &edge : edges) {
     if (path_exists_without_edge(graph, edge.first, edge.second, edge)) {
       ++report.ring_bond_count;
       in_ring[edge.first] = 1U;

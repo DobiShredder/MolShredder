@@ -52,9 +52,11 @@ void main()
         if (step >= maximum_steps || distance > far_t || alpha >= 0.05)
             break;
         vec3 position = texture_origin + texture_direction * distance;
-        float scalar = texture(volume_texture, position).r;
-        float source_alpha = texture(transfer_texture, vec2(scalar, 0.5)).a;
-        float corrected_alpha = 1.0 - pow(1.0 - source_alpha, sampling.w);
+        float scalar = textureLod(volume_texture, position, 0.0).r;
+        float source_alpha =
+            textureLod(transfer_texture, vec2(scalar, 0.5), 0.0).a;
+        float corrected_alpha =
+            1.0 - pow(max(1.0 - source_alpha, 0.0), sampling.w);
         alpha += (1.0 - alpha) * corrected_alpha;
         distance += world_step;
     }
