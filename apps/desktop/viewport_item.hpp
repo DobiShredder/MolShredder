@@ -121,6 +121,9 @@ public:
   [[nodiscard]] std::uint64_t lastPickId() const noexcept {
     return last_pick_id_;
   }
+  [[nodiscard]] std::uint64_t lastPickCompletionRevision() const noexcept {
+    return last_pick_completion_revision_;
+  }
   [[nodiscard]] QVariantList objectItems() const;
   [[nodiscard]] bool hasTrajectory() const noexcept { return has_trajectory_; }
   [[nodiscard]] qulonglong trajectoryFrame() const noexcept {
@@ -535,6 +538,7 @@ private:
   QPointF pick_position_;
   std::uint64_t pick_request_revision_{};
   std::uint64_t last_pick_id_{};
+  std::uint64_t last_pick_completion_revision_{};
   QTimer playback_timer_;
   QElapsedTimer playback_elapsed_;
   bool has_trajectory_{};

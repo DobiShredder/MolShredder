@@ -647,9 +647,12 @@ target_link_libraries(
 set_target_properties(molshredder PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
 if(MSVC)
   # The executable and Python extension both have the output basename
-  # "molshredder". Give their linker PDBs distinct names so parallel Ninja
-  # links do not race on build/<preset>/molshredder.pdb.
-  set_target_properties(molshredder PROPERTIES PDB_NAME molshredder_cli)
+  # "molshredder", while the static CLI library uses "molshredder_cli" for
+  # its compile PDB. Keep the executable linker PDB distinct from both so
+  # parallel MSBuild/Ninja work cannot race on a shared file.
+  set_target_properties(
+    molshredder PROPERTIES PDB_NAME molshredder_executable
+  )
 endif()
 molshredder_enable_warnings(molshredder)
 

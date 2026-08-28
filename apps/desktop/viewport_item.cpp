@@ -2007,6 +2007,13 @@ private:
         pick_item_size_.width() <= 0.0 || pick_item_size_.height() <= 0.0) {
       return;
     }
+    std::erase_if(pending_pick_readbacks_, [](const auto &state) {
+      return state->completed;
+    });
+    // Coalesce rapid cursor updates while the GPU owns the staging texture.
+    // Reusing it for multiple outstanding readbacks can race teardown on slow
+    // backends and guarantees that every older result is stale anyway.
+    if (!pending_pick_readbacks_.empty()) return;
     pick_pending_ = false;
     const auto x =
         std::clamp(static_cast<int>(std::floor(
@@ -2030,9 +2037,6 @@ private:
     draw_pick_volume(command_buffer);
     command_buffer->endPass();
 
-    std::erase_if(pending_pick_readbacks_, [](const auto &state) {
-      return state->completed;
-    });
     auto state = std::make_shared<PickReadbackState>();
     pending_pick_readbacks_.push_back(state);
     const auto viewport = viewport_item_;
@@ -2050,6 +2054,7 @@ private:
           source_ids && gpu_id < source_ids->size()
               ? (*source_ids)[static_cast<std::size_t>(gpu_id)]
               : std::uint64_t{};
+      state->completed = true;
       if (viewport != nullptr) {
         QMetaObject::invokeMethod(
             viewport.data(),
@@ -2057,11 +2062,13 @@ private:
               if (viewport != nullptr) {
                 viewport->deliverPickResult(request_revision, packet_revision,
                                             source_id);
+                viewport->update();
+                if (viewport->window() != nullptr)
+                  viewport->window()->update();
               }
             },
             Qt::QueuedConnection);
       }
-      state->completed = true;
     };
     auto *updates = rhi_->nextResourceUpdateBatch();
     QRhiTextureCopyDescription copy;
@@ -5014,6 +5021,7 @@ void MolecularViewport::deliverPickResult(std::uint64_t request_revision,
       packet_revision != packet_revision_) {
     return;
   }
+  last_pick_completion_revision_ = request_revision;
   last_pick_id_ = pick_id;
   const auto found = packet_.pick_targets.find(pick_id);
   const std::optional<render::PickTarget> target =

@@ -1218,9 +1218,12 @@ int main(int argc, char *argv[]) {
     qInfo("MolShredder desktop direct volume workflow ready: ramp=fire mode=post-classified picking=volume stereo=side_by_side canonical=shared action=represent.volume-render");
     auto *direct_pick_retry = new QTimer{viewport};
     direct_pick_retry->setInterval(60);
+    const auto direct_pick_in_flight_revision =
+        std::make_shared<std::uint64_t>(0U);
     QObject::connect(
         direct_pick_retry, &QTimer::timeout, viewport,
-        [viewport, direct_pick_retry, &application] {
+        [viewport, direct_pick_retry, direct_pick_in_flight_revision,
+         &application] {
           if (viewport->selectionText().contains(QStringLiteral("Volume")) &&
               viewport->volumeGpuState() == QStringLiteral("ready")) {
             direct_pick_retry->stop();
@@ -1228,11 +1231,19 @@ int main(int argc, char *argv[]) {
             application.quit();
             return;
           }
+          if (*direct_pick_in_flight_revision != 0U &&
+              viewport->lastPickCompletionRevision() <
+                  *direct_pick_in_flight_revision) {
+            return;
+          }
           viewport->pickAt(viewport->width() * 0.5,
                            viewport->height() * 0.5);
+          *direct_pick_in_flight_revision = viewport->pickRequestRevision();
         });
     direct_pick_retry->start();
-    QTimer::singleShot(5000, &application, [&application] {
+    QTimer::singleShot(5000, direct_pick_retry,
+                       [direct_pick_retry, &application] {
+      direct_pick_retry->stop();
       qCritical("MolShredder direct volume GPU picking timed out");
       application.exit(EXIT_FAILURE);
     });
