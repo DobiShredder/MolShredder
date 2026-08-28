@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
@@ -355,13 +356,6 @@ int main(int argc, char *argv[]) {
   qInfo("MolShredder localization ready: language=%s title=%s",
         qUtf8Printable(localization.currentLanguage()),
         qUtf8Printable(window->title()));
-  QObject::connect(
-      window, &QQuickWindow::sceneGraphInitialized, window,
-      [window] {
-        qInfo("MolShredder graphics API: %d",
-              static_cast<int>(window->rendererInterface()->graphicsApi()));
-      },
-      Qt::DirectConnection);
   auto *viewport = window->findChild<molshredder::desktop::MolecularViewport *>(
       QStringLiteral("molecularViewport"));
   if (viewport == nullptr)
@@ -979,9 +973,13 @@ int main(int argc, char *argv[]) {
            viewport->trajectoryFrame() == frame;
   };
   QPointer<molshredder::desktop::MolecularViewport> viewport_guard{viewport};
+  auto graphics_probe_started = std::make_shared<std::atomic_bool>(false);
   QObject::connect(
-      window, &QQuickWindow::sceneGraphInitialized, window,
-      [window, viewport_guard] {
+      window, &QQuickWindow::afterRendering, window,
+      [window, viewport_guard, graphics_probe_started] {
+        if (graphics_probe_started->exchange(true)) return;
+        qInfo("MolShredder graphics API: %d",
+              static_cast<int>(window->rendererInterface()->graphicsApi()));
         auto info = graphics_runtime_info(*window);
         if (viewport_guard.isNull())
           return;
@@ -994,6 +992,11 @@ int main(int argc, char *argv[]) {
             Qt::QueuedConnection);
       },
       Qt::DirectConnection);
+  // Main.qml creates a visible Window, so sceneGraphInitialized can precede
+  // the C++ connection above on fast render loops. Request another frame and
+  // probe from afterRendering, which is both repeatable and on the render
+  // thread where QRhi resources are valid.
+  window->update();
   QObject::connect(
       window, &QQuickWindow::sceneGraphInvalidated, window,
       [viewport_guard] {
