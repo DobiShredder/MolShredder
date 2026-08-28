@@ -185,8 +185,11 @@ endif()
 
 function(molshredder_enable_warnings target_name)
   if(MSVC)
+    # Keep localized UTF-8 source deterministic on Windows systems whose
+    # active ANSI code page is not UTF-8 (for example Korean CP949).
     target_compile_options(
-      ${target_name} PRIVATE /W4 /permissive- /external:anglebrackets /external:W0
+      ${target_name}
+      PRIVATE /W4 /permissive- /utf-8 /external:anglebrackets /external:W0
     )
     if(MOLSHREDDER_WARNINGS_AS_ERRORS)
       target_compile_options(${target_name} PRIVATE /WX)
