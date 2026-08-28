@@ -38,7 +38,7 @@ using ActionRequirements = std::uint8_t;
 struct ActionMetadata {
   std::string_view id;
   std::string_view command_name;
-  std::string_view alternate_command_name;
+  std::string_view alternate_command_name{};
   std::string_view menu;
   std::string_view label_source;
   std::string_view status_source;
