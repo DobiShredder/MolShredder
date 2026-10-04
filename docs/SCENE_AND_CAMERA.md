@@ -59,6 +59,7 @@ Interaction method는 새 validated Camera 값을 반환한다.
 - `pan_pixels`: target depth의 vertical world span을 viewport height로 나눈 pixel scale 사용
 - `dolly`: exponential scale과 configurable positive min/max clamp
 - `frame_sphere`: aspect/projection을 고려해 bounding sphere center와 padded extent framing
+- `frame_sphere_pymol`: PyMOL zoom 공식(distance `r / tan(fov/2)`, clip `±1.2r`)으로 center/radius framing
 - `frame_box`: 현재 camera-local 축으로 표현한 half extent를 perspective/orthographic viewport와 clip에 맞춤
 
 `pan_pixels(dx, dy)`에서 양의 `dx`는 target을 camera-left로, 양의 `dy`는 camera-up으로 이동시켜
@@ -81,12 +82,15 @@ Center, zoom과 origin은 active object의 state-scoped selection extent를 공�
 MolShredder workflow를 보존한다. All-state는 known frame count를 요구하고 `CoordinateSource`/`FrameCache`에서
 out-of-core two-pass bounds/radius scan을 수행하며 `TaskContext` cancellation/progress를 지원한다. Missing atom
 coordinate는 frame별 count와 함께 제외되고 present coordinate가 하나도 없으면 failure-atomic
-`invalid_selection`이다. Center는 AABB midpoint를
-target으로 사용하고 pivot 이동 여부를 선택할 수 있다. Zoom은 기본적으로 최대 AABB 축의 절반, `complete=true`이면
-midpoint에서 가장 먼 atom center를 radius로 사용하며 absolute buffer와 molecular-scale floor를 적용한다. 현재 floor는
-atom radius property를 반영하지 않는 독립 근사이므로 exact PyMOL `MAX_VDW` parity로 주장하지 않는다. Reset은 default
-camera state와 identity orientation을 만들고 effectively-visible molecule current frame 및 volume grid corner의 합집합을
-frame한다. Live aspect ratio는 유지한다.
+`invalid_selection`이다. Center는 PyMOL처럼 선택 좌표 평균을
+target으로 사용하고 pivot 이동 여부를 선택할 수 있다(pivot을 옮기지 않으면 origin 깊이를 유지). Zoom은 같은 평균을
+중심으로 축별 `max(mean-min, max-mean)`의 최댓값(weighted half extent), `complete=true`이면 평균에서 가장 먼 atom
+center를 radius로 사용하며 absolute buffer와 2.5 Angstrom floor(PyMOL `MAX_VDW`)를 적용한다. `Camera::frame_sphere_pymol`은
+distance를 `radius / tan(fov/2)`(aspect < 1이면 aspect로 나눔), clip을 `distance ± 1.2 radius`로 둔다. Reset은 identity
+orientation과 기본 camera field를 만들되 projection mode, field of view와 live aspect ratio는 유지하고, effectively-visible
+molecule current frame 좌표 평균과 weighted extent(volume grid corner 포함)로 frame한다. 이 framing과 clip/origin/turn/move/
+projection 결과는 PyMOL 3.1.0 `get_view` capture와 1e-4(float32) 안에서 일치한다
+(`tests/application/pymol_camera_visibility_test.cpp`).
 
 `view origin --position x,y,z`는 selection scan 없이 camera model origin을 설정한다. `--object current|NAME|ID`는
 대상 molecular node의 local pivot을 설정하며, position이 없으면 그 object에 selection과 state scope를 평가해 AABB
@@ -100,7 +104,7 @@ parity는 아직 완료로 주장하지 않는다.
 Eigenvector는 variance 내림차순으로 camera right/up/backward에 배치하고 right-handed basis를 보장한다. 부호 조합은
 현재 camera basis와 dot 합이 가장 큰 방향을 고른다. 두 eigenvalue가 수치적으로 같으면 해당 degenerate subspace에
 현재 camera 축을 투영하며, 세 값이 모두 같으면 orientation을 유지한다. 두 번째 streaming pass에서 principal-axis
-AABB와 world AABB radius를 계산해 `frame_box`로 맞춘다. 따라서 all-state trajectory도 좌표 전체를 materialize하지
+AABB를 결과로 보고하고, camera는 선택 좌표 평균과 weighted half extent로 `frame_sphere_pymol`에 맞춘다. 따라서 all-state trajectory도 좌표 전체를 materialize하지
 않고 bounded frame cache를 사용하며 cancellation 전에는 camera를 commit하지 않는다.
 
 `view clip`은 PyMOL user-facing seven-mode surface를 hyphenated canonical mode로 제공한다: relative `near/far/move`,
@@ -113,8 +117,9 @@ Selection-based slab/atoms clipping도 같은 state scope kernel을 사용한다
 
 `view move`와 `view turn`의 x/y/z는 현재 camera-local axis다. Move x/y는 model origin을 변경하지
 않고 target을 local right/up의 반대 방향으로 이동한다. Move z는 distance와 clip plane을 같은
-거리만큼 줄이며 orthographic height의 encoded field-of-view span을 비율로 보존한다. Turn은 local
-quaternion을 현재 orientation의 오른쪽에 합성하고 target/eye를 model origin 주위로 회전한다.
+거리만큼 줄이며 orthographic height의 encoded field-of-view span을 비율로 보존한다. Turn은 PyMOL `turn`과 같은
+방향(view 회전 행렬에 `Rᵀ`)이 되도록 음의 각도 local quaternion을 현재 orientation의 오른쪽에 합성하고 target/eye를
+model origin 주위로 회전한다.
 따라서 off-axis PyMOL view에서도 pivot이 보존된다. 두 operation은 `Workspace::set_camera`로 최종
 validated snapshot만 commit하며 invalid distance, clip crossing과 non-finite input은 failure-atomic이다.
 

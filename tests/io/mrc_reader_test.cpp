@@ -203,6 +203,30 @@ int main(int argc, char **argv) {
       "MRC must infer legacy endian safely and reject invalid axes, complex, "
       "skew, geometry, non-finite, truncated and trailing input");
 
+  {
+    // PyMOL writes an identity skew matrix whose translation is the origin.
+    auto identity_skew = source;
+    put_i32(identity_skew, 96U, 1);
+    for (std::size_t index = 0; index < 9U; ++index)
+      put_f32(identity_skew, 100U + index * 4U,
+              index % 4U == 0U ? 1.0F : 0.0F);
+    put_f32(identity_skew, 136U, -3.0F);
+    put_f32(identity_skew, 140U, -2.0F);
+    put_f32(identity_skew, 144U, -1.0F);
+    const auto baseline = io::read_volume(source, mrc_options());
+    const auto shifted = io::read_volume(identity_skew, mrc_options());
+    passed &= expect(
+        baseline.has_value() && shifted.has_value() &&
+            std::abs(shifted.value().volumes.front().grid->origin().x -
+                     (baseline.value().volumes.front().grid->origin().x - 3.0)) <
+                1.0e-6 &&
+            std::abs(shifted.value().volumes.front().grid->origin().z -
+                     (baseline.value().volumes.front().grid->origin().z - 1.0)) <
+                1.0e-6 &&
+            shifted.value().volumes.front().grid->metadata().fields.contains(
+                "mrc_skew_translation"),
+        "identity CCP4 skew must apply its translation to the origin");
+  }
   passed &= expect(io::to_string(io::VolumeFormat::mrc) == "mrc",
                    "MRC volume format name must be stable");
   return passed ? 0 : 1;

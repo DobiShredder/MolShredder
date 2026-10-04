@@ -1,0 +1,2066 @@
+{
+ "cases": [
+  {
+   "id": "load_pdb",
+   "pml": "load 1abc.pdb",
+   "invocations": [
+    {
+     "command": "load",
+     "arguments": {
+      "path": "1abc.pdb",
+      "file-format": "pdb",
+      "name": "1abc"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "load_named",
+   "pml": "load a.cif, myobj",
+   "invocations": [
+    {
+     "command": "load",
+     "arguments": {
+      "path": "a.cif",
+      "file-format": "mmcif",
+      "name": "myobj"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "load_quoted_path",
+   "pml": "load \"my file.pdb\"",
+   "invocations": [
+    {
+     "command": "load",
+     "arguments": {
+      "path": "my file.pdb",
+      "file-format": "pdb",
+      "name": "my file"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "load_format_hint",
+   "pml": "load data.txt, x, format=xyz",
+   "invocations": [
+    {
+     "command": "load",
+     "arguments": {
+      "path": "data.txt",
+      "file-format": "xyz",
+      "name": "x"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "load_map",
+   "pml": "load density.ccp4, map1",
+   "invocations": [
+    {
+     "command": "volume load",
+     "arguments": {
+      "path": "density.ccp4",
+      "file-format": "ccp4",
+      "name": "map1"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "load_dx",
+   "pml": "load pot.dx",
+   "invocations": [
+    {
+     "command": "volume load",
+     "arguments": {
+      "path": "pot.dx",
+      "file-format": "dx",
+      "name": "pot"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "load_traj_by_load",
+   "pml": "load run.dcd",
+   "invocations": [
+    {
+     "command": "traj load",
+     "arguments": {
+      "path": "run.dcd",
+      "file-format": "dcd",
+      "mapping": "index"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "load_traj_cmd",
+   "pml": "load_traj run.xtc, prot",
+   "invocations": [
+    {
+     "command": "traj load",
+     "arguments": {
+      "path": "run.xtc",
+      "file-format": "xtc",
+      "mapping": "index"
+     }
+    }
+   ],
+   "diagnostics": [
+    "applied_to_active_object"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "load_state_unsupported",
+   "pml": "load a.pdb, x, 2",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_argument"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "load_gz",
+   "pml": "load a.pdb.gz",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_argument"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "load_pse",
+   "pml": "load s.pse",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_format"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "load_pml_needs_trust",
+   "pml": "load other.pml",
+   "invocations": [],
+   "diagnostics": [
+    "requires_python_trust"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "load_unknown_ext",
+   "pml": "load a.zzz",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_format"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "load_too_many",
+   "pml": "load a.pdb, b, 0, pdb, 1, -1, 1, None, -1, 0, 1, None, None, extra",
+   "invocations": [],
+   "diagnostics": [
+    "too_many_arguments"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "load_unknown_kw",
+   "pml": "load a.pdb, nosuch=1",
+   "invocations": [],
+   "diagnostics": [
+    "unknown_argument"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "load_missing",
+   "pml": "load",
+   "invocations": [],
+   "diagnostics": [
+    "missing_argument"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "load_zoom_ignored",
+   "pml": "load a.pdb, zoom=1",
+   "invocations": [
+    {
+     "command": "load",
+     "arguments": {
+      "path": "a.pdb",
+      "file-format": "pdb",
+      "name": "a"
+     }
+    }
+   ],
+   "diagnostics": [
+    "ignored_argument"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "save_pdb",
+   "pml": "save out.pdb",
+   "invocations": [
+    {
+     "command": "save",
+     "arguments": {
+      "path": "out.pdb",
+      "file-format": "pdb",
+      "frames": "current",
+      "overwrite": "true"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "save_all_states",
+   "pml": "save out.pdb, all, 0",
+   "invocations": [
+    {
+     "command": "save",
+     "arguments": {
+      "path": "out.pdb",
+      "file-format": "pdb",
+      "frames": "all",
+      "overwrite": "true"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "save_selection",
+   "pml": "save out.pdb, chain A",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_argument"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "save_dcd",
+   "pml": "save out.dcd",
+   "invocations": [
+    {
+     "command": "traj save",
+     "arguments": {
+      "path": "out.dcd",
+      "file-format": "dcd",
+      "overwrite": "true"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "save_png",
+   "pml": "save pic.png",
+   "invocations": [
+    {
+     "command": "image save",
+     "arguments": {
+      "path": "pic.png"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "save_pse",
+   "pml": "save s.pse",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_format"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "show_cartoon",
+   "pml": "show cartoon",
+   "invocations": [
+    {
+     "command": "show",
+     "arguments": {
+      "representation": "cartoon",
+      "selection": "all",
+      "scope": "workspace"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "show_sel",
+   "pml": "show sticks, resn LIG",
+   "invocations": [
+    {
+     "command": "show",
+     "arguments": {
+      "representation": "sticks",
+      "selection": "resn LIG",
+      "scope": "workspace"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "show_default",
+   "pml": "show",
+   "invocations": [
+    {
+     "command": "show",
+     "arguments": {
+      "representation": "wire",
+      "selection": "all",
+      "scope": "workspace"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "show_surface",
+   "pml": "show surface, chain A",
+   "invocations": [
+    {
+     "command": "surface show",
+     "arguments": {
+      "selection": "chain A"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "show_mesh",
+   "pml": "show mesh",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_representation"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "hide_default",
+   "pml": "hide",
+   "invocations": [
+    {
+     "command": "hide",
+     "arguments": {
+      "representation": "everything",
+      "selection": "all",
+      "scope": "workspace"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "hide_surface",
+   "pml": "hide surface",
+   "invocations": [
+    {
+     "command": "surface hide",
+     "arguments": {}
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "hide_surface_selection",
+   "pml": "hide surface, chain A",
+   "invocations": [
+    {
+     "command": "surface hide",
+     "arguments": {}
+    }
+   ],
+   "diagnostics": [
+    "selection_not_applied"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "as_sticks",
+   "pml": "as sticks, organic",
+   "invocations": [
+    {
+     "command": "as",
+     "arguments": {
+      "representation": "sticks",
+      "selection": "organic",
+      "scope": "workspace"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "show_as_alias",
+   "pml": "show_as lines",
+   "invocations": [
+    {
+     "command": "as",
+     "arguments": {
+      "representation": "lines",
+      "selection": "all",
+      "scope": "workspace"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "as_surface",
+   "pml": "as surface",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_representation"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "toggle_lines",
+   "pml": "toggle",
+   "invocations": [
+    {
+     "command": "toggle",
+     "arguments": {
+      "representation": "lines",
+      "selection": "all",
+      "scope": "workspace"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "show_abbrev",
+   "pml": "sho cartoon",
+   "invocations": [],
+   "diagnostics": [
+    "ambiguous_command"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "color",
+   "pml": "color red, resn ALA",
+   "invocations": [
+    {
+     "command": "color",
+     "arguments": {
+      "color": "red",
+      "selection": "resn ALA",
+      "scope": "workspace"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "color_all",
+   "pml": "color marine",
+   "invocations": [
+    {
+     "command": "color",
+     "arguments": {
+      "color": "marine",
+      "selection": "all",
+      "scope": "workspace"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "color_flags",
+   "pml": "color red, all, 1, 1",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_argument"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "select",
+   "pml": "select site, resi 1-5+10",
+   "invocations": [
+    {
+     "command": "select",
+     "arguments": {
+      "name": "site",
+      "expression": "resi 1-5+10"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "select_one_arg",
+   "pml": "select chain A",
+   "invocations": [
+    {
+     "command": "select",
+     "arguments": {
+      "name": "sele",
+      "expression": "chain A"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "select_parens",
+   "pml": "select pocket, (byres (resn LIG around 4))",
+   "invocations": [
+    {
+     "command": "select",
+     "arguments": {
+      "name": "pocket",
+      "expression": "(byres (resn LIG around 4))"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "select_merge",
+   "pml": "select a, b, merge=1",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_argument"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "select_enable_ignored",
+   "pml": "select a, resi 1, enable=0",
+   "invocations": [
+    {
+     "command": "select",
+     "arguments": {
+      "name": "a",
+      "expression": "resi 1"
+     }
+    }
+   ],
+   "diagnostics": [
+    "ignored_argument"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "zoom",
+   "pml": "zoom",
+   "invocations": [
+    {
+     "command": "view zoom",
+     "arguments": {
+      "selection": "all",
+      "state": "0",
+      "complete": "false",
+      "duration": "0"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "zoom_args",
+   "pml": "zoom chain A, 5, complete=1, animate=2",
+   "invocations": [
+    {
+     "command": "view zoom",
+     "arguments": {
+      "selection": "chain A",
+      "state": "0",
+      "complete": "true",
+      "duration": "2",
+      "buffer": "5"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "center",
+   "pml": "center resn LIG",
+   "invocations": [
+    {
+     "command": "view center",
+     "arguments": {
+      "selection": "resn LIG",
+      "state": "0",
+      "move-origin": "true",
+      "duration": "0"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "center_origin0",
+   "pml": "center all, origin=0",
+   "invocations": [
+    {
+     "command": "view center",
+     "arguments": {
+      "selection": "all",
+      "state": "0",
+      "move-origin": "false",
+      "duration": "0"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "orient",
+   "pml": "orient chain A",
+   "invocations": [
+    {
+     "command": "view orient",
+     "arguments": {
+      "selection": "chain A",
+      "state": "0",
+      "duration": "0"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "reset",
+   "pml": "reset",
+   "invocations": [
+    {
+     "command": "view reset",
+     "arguments": {}
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "reset_object",
+   "pml": "reset obj1",
+   "invocations": [
+    {
+     "command": "view reset",
+     "arguments": {
+      "object": "obj1"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "turn",
+   "pml": "turn y, 90",
+   "invocations": [
+    {
+     "command": "view turn",
+     "arguments": {
+      "axis": "y",
+      "angle": "90"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "turn_bad_axis",
+   "pml": "turn w, 90",
+   "invocations": [],
+   "diagnostics": [
+    "invalid_argument"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "move",
+   "pml": "move x, -2.5",
+   "invocations": [
+    {
+     "command": "view move",
+     "arguments": {
+      "axis": "x",
+      "distance": "-2.5"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "clip",
+   "pml": "clip slab, 20",
+   "invocations": [
+    {
+     "command": "view clip",
+     "arguments": {
+      "mode": "slab",
+      "distance": "20"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "clip_near_set",
+   "pml": "clip near_set, 5",
+   "invocations": [
+    {
+     "command": "view clip",
+     "arguments": {
+      "mode": "near-set",
+      "distance": "5"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "origin_position",
+   "pml": "origin position=[1,2,3]",
+   "invocations": [
+    {
+     "command": "view origin",
+     "arguments": {
+      "state": "0",
+      "position": "1,2,3"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "origin_selection",
+   "pml": "origin resn LIG",
+   "invocations": [
+    {
+     "command": "view origin",
+     "arguments": {
+      "state": "0",
+      "selection": "resn LIG"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "set_view",
+   "pml": "set_view (0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1,2,3,4,5,6,7,8,9)",
+   "invocations": [
+    {
+     "command": "view import-pymol",
+     "arguments": {
+      "values": "(0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1,2,3,4,5,6,7,8,9)",
+      "duration": "0"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "get_view",
+   "pml": "get_view",
+   "invocations": [
+    {
+     "command": "view export-pymol",
+     "arguments": {}
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "view_store",
+   "pml": "view v1, store",
+   "invocations": [
+    {
+     "command": "view store",
+     "arguments": {
+      "name": "v1"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "view_recall",
+   "pml": "view v1",
+   "invocations": [
+    {
+     "command": "view recall",
+     "arguments": {
+      "name": "v1",
+      "duration": "0"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "scene_store",
+   "pml": "scene F1, store",
+   "invocations": [
+    {
+     "command": "scene store",
+     "arguments": {
+      "name": "F1"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "scene_recall",
+   "pml": "scene F1",
+   "invocations": [
+    {
+     "command": "scene recall",
+     "arguments": {
+      "name": "F1"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "scene_next",
+   "pml": "scene next",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_argument"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "scene_clear",
+   "pml": "scene F1, clear",
+   "invocations": [
+    {
+     "command": "scene delete",
+     "arguments": {
+      "name": "F1"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "set_global",
+   "pml": "set cartoon_fancy_helices, 1",
+   "invocations": [
+    {
+     "command": "setting set",
+     "arguments": {
+      "name": "cartoon_fancy_helices",
+      "value": "1"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "set_default_value",
+   "pml": "set ray_shadow",
+   "invocations": [
+    {
+     "command": "setting set",
+     "arguments": {
+      "name": "ray_shadow",
+      "value": "1"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "set_object",
+   "pml": "set cartoon_transparency, 0.4, obj1",
+   "invocations": [
+    {
+     "command": "setting set",
+     "arguments": {
+      "name": "cartoon_transparency",
+      "value": "0.4",
+      "scope": "object",
+      "object": "obj1"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": [
+    "obj1"
+   ]
+  },
+  {
+   "id": "set_unknown_name",
+   "pml": "set stick_radius, 0.2, thing",
+   "invocations": [
+    {
+     "command": "setting set",
+     "arguments": {
+      "name": "stick_radius",
+      "value": "0.2",
+      "scope": "object",
+      "object": "thing"
+     }
+    }
+   ],
+   "diagnostics": [
+    "assumed_object_scope"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "set_selection",
+   "pml": "set sphere_scale, 0.5, resn LIG",
+   "invocations": [
+    {
+     "command": "setting set",
+     "arguments": {
+      "name": "sphere_scale",
+      "value": "0.5",
+      "scope": "atom",
+      "selection": "resn LIG"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "set_state",
+   "pml": "set stick_radius, 0.2, all, 2",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_argument"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "unset",
+   "pml": "unset cartoon_transparency",
+   "invocations": [
+    {
+     "command": "setting unset",
+     "arguments": {
+      "name": "cartoon_transparency"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "unset_object",
+   "pml": "unset cartoon_transparency, obj1",
+   "invocations": [
+    {
+     "command": "setting unset",
+     "arguments": {
+      "name": "cartoon_transparency",
+      "scope": "object",
+      "object": "obj1"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": [
+    "obj1"
+   ]
+  },
+  {
+   "id": "bg_color",
+   "pml": "bg_color white",
+   "invocations": [
+    {
+     "command": "background set",
+     "arguments": {
+      "color": "white"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "bg_colour",
+   "pml": "bg_colour grey80",
+   "invocations": [
+    {
+     "command": "background set",
+     "arguments": {
+      "color": "grey80"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "png",
+   "pml": "png out.png",
+   "invocations": [
+    {
+     "command": "image save",
+     "arguments": {
+      "path": "out.png"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "png_args",
+   "pml": "png \"my pic.png\", 1600, 1200, dpi=300, ray=1",
+   "invocations": [
+    {
+     "command": "image save",
+     "arguments": {
+      "path": "my pic.png",
+      "width": "1600",
+      "height": "1200",
+      "dpi": "300",
+      "ray": "true"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "png_prior",
+   "pml": "png a.png, prior=1",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_argument"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "label",
+   "pml": "label all, name",
+   "invocations": [
+    {
+     "command": "label",
+     "arguments": {
+      "selection": "all",
+      "expression": "name"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "label_expr",
+   "pml": "label n. CA, resn+resi",
+   "invocations": [
+    {
+     "command": "label",
+     "arguments": {
+      "selection": "n. CA",
+      "expression": "resn+resi"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "label_literal",
+   "pml": "label chain A, \"hello, world\"",
+   "invocations": [
+    {
+     "command": "label literal",
+     "arguments": {
+      "selection": "chain A",
+      "text": "hello, world"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "label_clear",
+   "pml": "label all,",
+   "invocations": [
+    {
+     "command": "hide",
+     "arguments": {
+      "representation": "labels",
+      "selection": "all",
+      "scope": "workspace"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "spectrum",
+   "pml": "spectrum b, blue_white_red, all, minimum=10, maximum=90",
+   "invocations": [
+    {
+     "command": "spectrum",
+     "arguments": {
+      "expression": "b",
+      "palette": "blue_white_red",
+      "selection": "all",
+      "minimum": "10",
+      "maximum": "90"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "spectrum_defaults",
+   "pml": "spectrum",
+   "invocations": [
+    {
+     "command": "spectrum",
+     "arguments": {
+      "selection": "all"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "spectrum_byres",
+   "pml": "spectrum count, rainbow, byres=1",
+   "invocations": [
+    {
+     "command": "spectrum",
+     "arguments": {
+      "expression": "count",
+      "palette": "rainbow",
+      "selection": "all",
+      "byres": "true"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "cartoon",
+   "pml": "cartoon tube, chain A",
+   "invocations": [
+    {
+     "command": "cartoon",
+     "arguments": {
+      "type": "tube",
+      "selection": "chain A"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "set_color",
+   "pml": "set_color mycol, [0.2, 0.4, 0.8]",
+   "invocations": [
+    {
+     "command": "color define",
+     "arguments": {
+      "name": "mycol",
+      "red": "0.2",
+      "green": "0.4",
+      "blue": "0.8"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "set_color_bad",
+   "pml": "set_color mycol, [0.2, 0.4]",
+   "invocations": [],
+   "diagnostics": [
+    "invalid_argument"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "distance",
+   "pml": "distance d1, /obj//A/10/CA, /obj//A/20/CA",
+   "invocations": [
+    {
+     "command": "measure distance",
+     "arguments": {
+      "from": "/obj//A/10/CA",
+      "to": "/obj//A/20/CA",
+      "mode": "atom",
+      "result-name": "d1"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "distance_centroid",
+   "pml": "distance d2, chain A, chain B, mode=4",
+   "invocations": [
+    {
+     "command": "measure distance",
+     "arguments": {
+      "from": "chain A",
+      "to": "chain B",
+      "mode": "centroid",
+      "result-name": "d2"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "distance_cutoff",
+   "pml": "distance d3, chain A, chain B, cutoff=4",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_argument"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "distance_picked",
+   "pml": "distance",
+   "invocations": [],
+   "diagnostics": [
+    "missing_argument"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "angle",
+   "pml": "angle a1, id 1, id 2, id 3",
+   "invocations": [
+    {
+     "command": "measure angle",
+     "arguments": {
+      "first": "id 1",
+      "vertex": "id 2",
+      "third": "id 3",
+      "result-name": "a1"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "dihedral",
+   "pml": "dihedral t1, id 1, id 2, id 3, id 4",
+   "invocations": [
+    {
+     "command": "measure dihedral",
+     "arguments": {
+      "first": "id 1",
+      "second": "id 2",
+      "third": "id 3",
+      "fourth": "id 4",
+      "result-name": "t1"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "delete_object",
+   "pml": "delete obj1",
+   "invocations": [
+    {
+     "command": "object delete",
+     "arguments": {
+      "object": "obj1"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": [
+    "obj1"
+   ]
+  },
+  {
+   "id": "delete_all",
+   "pml": "delete all",
+   "invocations": [
+    {
+     "command": "object delete",
+     "arguments": {
+      "object": "a"
+     }
+    },
+    {
+     "command": "object delete",
+     "arguments": {
+      "object": "b"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": [
+    "a",
+    "b"
+   ]
+  },
+  {
+   "id": "delete_all_empty",
+   "pml": "delete all",
+   "invocations": [],
+   "diagnostics": [
+    "nothing_to_delete"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "delete_after_load",
+   "pml": "load a.pdb\ndelete a",
+   "invocations": [
+    {
+     "command": "load",
+     "arguments": {
+      "path": "a.pdb",
+      "file-format": "pdb",
+      "name": "a"
+     }
+    },
+    {
+     "command": "object delete",
+     "arguments": {
+      "object": "a"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "delete_selection",
+   "pml": "select s, all\ndelete s",
+   "invocations": [
+    {
+     "command": "select",
+     "arguments": {
+      "name": "s",
+      "expression": "all"
+     }
+    }
+   ],
+   "diagnostics": [
+    "selection_delete_not_applied"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "delete_wildcard",
+   "pml": "delete a*",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_argument"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "delete_unknown",
+   "pml": "delete mystery",
+   "invocations": [
+    {
+     "command": "object delete",
+     "arguments": {
+      "object": "mystery"
+     }
+    }
+   ],
+   "diagnostics": [
+    "assumed_object"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "frame",
+   "pml": "frame 10",
+   "invocations": [
+    {
+     "command": "traj frame",
+     "arguments": {
+      "frame": "9"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "frame_zero",
+   "pml": "frame 0",
+   "invocations": [],
+   "diagnostics": [
+    "invalid_argument"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "mplay",
+   "pml": "mplay",
+   "invocations": [
+    {
+     "command": "movie play",
+     "arguments": {}
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "mstop",
+   "pml": "mstop",
+   "invocations": [
+    {
+     "command": "movie pause",
+     "arguments": {}
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "refresh",
+   "pml": "refresh",
+   "invocations": [
+    {
+     "command": "view refresh",
+     "arguments": {}
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "recolor",
+   "pml": "recolor",
+   "invocations": [
+    {
+     "command": "recolor",
+     "arguments": {}
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "quit",
+   "pml": "show lines\nquit\nshow cartoon",
+   "invocations": [
+    {
+     "command": "show",
+     "arguments": {
+      "representation": "lines",
+      "selection": "all",
+      "scope": "workspace"
+     }
+    }
+   ],
+   "diagnostics": [
+    "script_stopped"
+   ],
+   "stop": true,
+   "objects": []
+  },
+  {
+   "id": "python_statement",
+   "pml": "import os",
+   "invocations": [],
+   "diagnostics": [
+    "python_statement_requires_trust"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "python_block",
+   "pml": "python\nx = 1\npython end",
+   "invocations": [],
+   "diagnostics": [
+    "python_block_requires_trust"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "slash_line",
+   "pml": "/print(1)",
+   "invocations": [],
+   "diagnostics": [
+    "python_statement_requires_trust"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "run",
+   "pml": "run helper.py",
+   "invocations": [],
+   "diagnostics": [
+    "requires_python_trust"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "system",
+   "pml": "system rm -rf x",
+   "invocations": [],
+   "diagnostics": [
+    "requires_python_trust"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "include",
+   "pml": "@other.pml",
+   "invocations": [],
+   "diagnostics": [
+    "requires_python_trust"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "alter",
+   "pml": "alter all, b=0",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_command"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "fetch",
+   "pml": "fetch 1abc",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_command"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "create",
+   "pml": "create obj2, chain A",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_command"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "align",
+   "pml": "align a, b",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_command"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "unknown",
+   "pml": "frobnicate 1",
+   "invocations": [],
+   "diagnostics": [
+    "unknown_command"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "abort",
+   "pml": "show lines\nabort\nshow cartoon",
+   "invocations": [
+    {
+     "command": "show",
+     "arguments": {
+      "representation": "lines",
+      "selection": "all",
+      "scope": "workspace"
+     }
+    }
+   ],
+   "diagnostics": [
+    "script_aborted"
+   ],
+   "stop": true,
+   "objects": []
+  },
+  {
+   "id": "skip_block",
+   "pml": "skip\nshow cartoon\nskip end\nshow lines",
+   "invocations": [
+    {
+     "command": "show",
+     "arguments": {
+      "representation": "lines",
+      "selection": "all",
+      "scope": "workspace"
+     }
+    }
+   ],
+   "diagnostics": [
+    "skip_block"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "embed_block",
+   "pml": "embed d, txt\nshow cartoon\nembed end\nshow lines",
+   "invocations": [
+    {
+     "command": "show",
+     "arguments": {
+      "representation": "lines",
+      "selection": "all",
+      "scope": "workspace"
+     }
+    }
+   ],
+   "diagnostics": [
+    "embed_block_skipped"
+   ],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "multi_line_script",
+   "pml": "load a.pdb\nshow cartoon\ncolor green, chain A; zoom chain A\n# comment\nbg_color white",
+   "invocations": [
+    {
+     "command": "load",
+     "arguments": {
+      "path": "a.pdb",
+      "file-format": "pdb",
+      "name": "a"
+     }
+    },
+    {
+     "command": "show",
+     "arguments": {
+      "representation": "cartoon",
+      "selection": "all",
+      "scope": "workspace"
+     }
+    },
+    {
+     "command": "color",
+     "arguments": {
+      "color": "green",
+      "selection": "chain A",
+      "scope": "workspace"
+     }
+    },
+    {
+     "command": "view zoom",
+     "arguments": {
+      "selection": "chain A",
+      "state": "0",
+      "complete": "false",
+      "duration": "0"
+     }
+    },
+    {
+     "command": "background set",
+     "arguments": {
+      "color": "white"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "named_selection_operand",
+   "pml": "select site, resi 5-9\nzoom site\nshow sticks, site and chain A",
+   "invocations": [
+    {
+     "command": "select",
+     "arguments": {
+      "name": "site",
+      "expression": "resi 5-9"
+     }
+    },
+    {
+     "command": "view zoom",
+     "arguments": {
+      "selection": "@site",
+      "state": "0",
+      "complete": "false",
+      "duration": "0"
+     }
+    },
+    {
+     "command": "show",
+     "arguments": {
+      "representation": "sticks",
+      "selection": "@site and chain A",
+      "scope": "workspace"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "named_selection_composed",
+   "pml": "select a, resn ALA\nselect b, resn GLY\nselect c, a or (b and not a)",
+   "invocations": [
+    {
+     "command": "select",
+     "arguments": {
+      "name": "a",
+      "expression": "resn ALA"
+     }
+    },
+    {
+     "command": "select",
+     "arguments": {
+      "name": "b",
+      "expression": "resn GLY"
+     }
+    },
+    {
+     "command": "select",
+     "arguments": {
+      "name": "c",
+      "expression": "@a or (@b and not @a)"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "object_operand",
+   "pml": "show cartoon, obj1\ncolor red, obj1 and chain A",
+   "invocations": [
+    {
+     "command": "show",
+     "arguments": {
+      "representation": "cartoon",
+      "selection": "object obj1",
+      "scope": "workspace"
+     }
+    },
+    {
+     "command": "color",
+     "arguments": {
+      "color": "red",
+      "selection": "object obj1 and chain A",
+      "scope": "workspace"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": [
+    "obj1"
+   ]
+  },
+  {
+   "id": "selection_name_as_field_value",
+   "pml": "select name, resn ALA\nshow sticks, name CA",
+   "invocations": [
+    {
+     "command": "select",
+     "arguments": {
+      "name": "name",
+      "expression": "resn ALA"
+     }
+    },
+    {
+     "command": "show",
+     "arguments": {
+      "representation": "sticks",
+      "selection": "name CA",
+      "scope": "workspace"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "selection_byres_operand",
+   "pml": "select site, resn LIG\nselect shell, byres (site around 4)",
+   "invocations": [
+    {
+     "command": "select",
+     "arguments": {
+      "name": "site",
+      "expression": "resn LIG"
+     }
+    },
+    {
+     "command": "select",
+     "arguments": {
+      "name": "shell",
+      "expression": "byres (@site around 4)"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "selection_in_distance",
+   "pml": "select a, id 1\nselect b, id 5\ndistance d, a, b",
+   "invocations": [
+    {
+     "command": "select",
+     "arguments": {
+      "name": "a",
+      "expression": "id 1"
+     }
+    },
+    {
+     "command": "select",
+     "arguments": {
+      "name": "b",
+      "expression": "id 5"
+     }
+    },
+    {
+     "command": "measure distance",
+     "arguments": {
+      "from": "@a",
+      "to": "@b",
+      "mode": "atom",
+      "result-name": "d"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "set_atom_scope_named_selection",
+   "pml": "select site, resn LIG\nset sphere_scale, 0.5, site",
+   "invocations": [
+    {
+     "command": "select",
+     "arguments": {
+      "name": "site",
+      "expression": "resn LIG"
+     }
+    },
+    {
+     "command": "setting set",
+     "arguments": {
+      "name": "sphere_scale",
+      "value": "0.5",
+      "scope": "atom",
+      "selection": "@site"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  }
+ ]
+}

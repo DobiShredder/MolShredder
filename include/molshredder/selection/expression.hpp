@@ -174,6 +174,12 @@ struct Node {
   std::shared_ptr<const Node> right;
 };
 
+// Parses a standalone numeric atom expression using the selection numeric
+// grammar (literals, b/q/pc/formal_charge/index/id/x/y/z/p.NAME, + - * /,
+// unary minus and parentheses).
+[[nodiscard]] operation::Result<std::shared_ptr<const NumericNode>>
+parse_numeric_expression(std::string_view source);
+
 class Expression {
  public:
   [[nodiscard]] static operation::Result<Expression> parse(

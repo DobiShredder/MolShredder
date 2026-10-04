@@ -14,7 +14,7 @@ namespace molshredder::application {
 namespace {
 
 constexpr std::array<std::string_view, kRepresentationKindCount> kKindNames{
-    "lines", "sticks", "spheres", "ribbon", "cartoon"};
+    "lines", "sticks", "spheres", "ribbon", "cartoon", "labels"};
 
 operation::Error invalid(std::string message) {
   return {operation::ErrorCode::invalid_argument, std::move(message), {}};
@@ -32,6 +32,8 @@ operation::Result<std::size_t> kind_index(render::RepresentationKind kind) {
     return operation::Result<std::size_t>::success(3U);
   case render::RepresentationKind::cartoon:
     return operation::Result<std::size_t>::success(4U);
+  case render::RepresentationKind::labels:
+    return operation::Result<std::size_t>::success(5U);
   }
   return operation::Result<std::size_t>::failure(
       invalid("unknown representation kind"));
@@ -303,7 +305,15 @@ parse_representation_visibility(std::string_view text) {
   snapshot.schema_version = static_cast<unsigned int>(schema.value());
   snapshot.atom_count = atoms.value();
   const auto words = word_count(snapshot.atom_count);
-  for (std::size_t kind = 0; kind < snapshot.masks.size(); ++kind) {
+  // Schema 1 predates the labels mask; it is migrated with labels hidden.
+  const auto stored_kinds =
+      snapshot.schema_version == 1U ? kRepresentationKindCount - 1U
+                                    : snapshot.masks.size();
+  if (snapshot.schema_version == 1U) {
+    snapshot.schema_version = kRepresentationVisibilitySchemaVersion;
+    snapshot.masks.back().assign(words, 0U);
+  }
+  for (std::size_t kind = 0; kind < stored_kinds; ++kind) {
     if (!(input >> label) || label != kKindNames[kind]) {
       return operation::Result<RepresentationVisibilitySnapshot>::failure(
           invalid("missing or out-of-order representation visibility kind"));

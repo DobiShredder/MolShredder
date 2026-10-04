@@ -79,7 +79,8 @@ scalar이며 `color`는 `blue|cyan|green|magenta|orange|red|white|yellow`, `opac
 `--replace true`는 새 mesh 생성이 성공한 뒤 기존 volume representation을 교체한다. 실패나 cancellation은
 기존 packet을 보존한다.
 
-커널은 cube마다 고정된 여섯 tetrahedron을 사용하는 deterministic marching tetrahedra v1이다. 교차
+커널은 cube마다 고정된 여섯 tetrahedron을 사용하는 deterministic marching tetrahedra v1이다(molecular surface 등 기본값). `IsosurfaceTessellation::marching_cubes`는 PyMOL 3.1.0을
+black-box로 관찰한 256-case triangle table을 쓰며 map contour(`volume contour`)가 사용한다. 교차
 grid edge를 전역 key로 공유하고, non-orthogonal delta basis의 inverse transpose로 scalar gradient를
 world-space normal로 변환한다. 면은 낮은 scalar 방향을 향하는 vertex normal과 일치하도록 winding한다.
 결과는 vertex/triangle count, bounds, level/color와 algorithm provenance를 반환한다. Grid 한 축이 2보다

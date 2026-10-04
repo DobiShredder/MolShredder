@@ -77,6 +77,17 @@ struct TextLabelInstance {
   std::string text;
   ColorRgba color;
   std::uint64_t pick_id{};
+  // Font size in pixels (negative: world units); 0 uses the frontend default.
+  double size{};
+  // PyMOL-compatible font id; 0 uses the frontend default face.
+  std::int64_t font_id{};
+  // Offset applied in camera space after the anchor is transformed, in the
+  // packet coordinate unit (label_position + label_placement_offset).
+  model::Vec3d camera_offset;
+  // Source atom for atom labels (0 for analysis overlays), used by
+  // interactive label placement.
+  std::uint64_t object_id{};
+  std::uint64_t atom_id{};
 };
 
 struct MeshVertex {

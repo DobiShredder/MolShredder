@@ -10,14 +10,150 @@ setting get --name sphere_scale --scope global
 setting set --name line_width --value 2.0 --scope object
 setting set --name sphere_color --value '#33aaff' --scope atom --target 12
 setting unset --name sphere_color --scope atom --target 12
+setting set --name sphere_scale --value 0.5 --scope atom --selection 'resi 1-5'
+setting set --name stick_color --value blue --scope bond --selection 'resi 2'
 setting reset --scope state
 ```
 
 Scope는 `global`, `object`, `state`, `atom`, `bond`이다. 명시적 state는 1-based이고 atom/bond
-`--target`은 topology가 발급한 non-zero 64-bit stable ID다. Atom/bond scope에서 target은
-필수다. 오류는 기존 setting과 scene을
+`--target`은 topology가 발급한 non-zero 64-bit stable ID다. Atom/bond scope에서는 `--target` 또는
+`--selection`이 필요하다. `--selection`은 PyMOL `set NAME, VALUE, SELECTION`처럼 atom scope에서는 선택된 모든 원자에,
+bond scope에서는 두 원자가 모두 선택된 결합에 한 번에 적용한다(`stick_color`, `stick_radius`, `line_color`, `line_width`는
+bond setting). 오류는 기존 setting과 scene을
 변경하지 않는다. 전체 catalog와 value contract은 [Render setting service](RENDER_SETTINGS.md)를
 참고한다.
+
+## Color
+
+Atom color와 color table은 GUI, CLI, Python이 공유하는 canonical operation으로 바꾼다.
+
+```text
+color --color red --selection 'chain A'
+color --color atomic
+color --color auto --selection 'index 3'
+color define --name mycolor --red 255 --green 128 --blue 0
+color get --color 0xff8000
+color list --scope custom
+recolor
+```
+
+- `color`는 active object의 selection에 색을 지정한다. 지정하지 않은 원자는 MolShredder 기본 palette를 쓴다.
+- `color`, `show`, `hide`, `as`, `toggle`의 `--scope workspace`는 PyMOL처럼 모든 molecular object에 같은 selection을 적용한다
+  (기본 `active`). Object는 `model NAME`/`model PATTERN`(wildcard)으로 좁힌다. Toggle은 모든 대상 원자 기준으로 끄거나 켠다.
+- `setting set --name auto_color --value true`면 이후 load에서 PyMOL처럼 carbon을 object auto color(26, 5, 154, …)로, 다른 원소를
+  원소 색으로 칠한다. MolShredder 기본값은 off다(PyMOL 기본 on).
+- Color token은 대소문자를 무시한 이름(앞부분이 같은 이름 중 가장 낮은 index), 10진 index, `0xRRGGBB`,
+  `#RRGGBB`, `atomic`(원소별 기준 색), `object`(object 색), `auto`(object 생성과 공유하는 40색 순환),
+  `default`(기본 palette로 되돌림)를 받는다.
+- 내장 table은 Open-Source PyMOL 3.1.0과 같은 5,388개 index/이름/RGB를 쓴다. `color define`은 새 이름에 5388부터
+  index를 붙이고, 기존 이름은 index를 유지한 채 RGB만 바꾼다. 성분 중 하나라도 1보다 크면 세 성분을 0-255 범위로 본다.
+- `color`와 `color define`은 session journal에 기록되어 replay 때 table, atom color와 auto 순환 위치가 복원된다.
+- 실패한 지정(알 수 없는 색, 잘못된 selection, atom color로 쓴 `front`/`back`)은 상태를 바꾸지 않는다.
+- `color`와 `background set`은 접두사가 여러 named color에 맞으면(`bl` → black/blue/bluewhite) `ambiguous color` 오류를
+  낸다. named color가 하나만 맞으면 그 색, 하나도 없으면 생성 ramp 중 가장 낮은 index(`s0` → `s000`)를 쓴다. Render setting
+  값과 `color get`은 가장 낮은 index를 쓴다.
+
+```text
+spectrum --expression b --palette blue_white_red --selection 'chain A'
+spectrum --expression count --palette rainbow --byres true
+spectrum --expression 'b*q' --palette 'red green blue' --interpolation hls
+spectrum --expression b --palette rainbow --minimum 10 --maximum 60
+background set --color white
+background get
+bg_color --color 0x336699
+```
+
+- `spectrum`의 내장 palette(60개, 고유 접두사 허용)와 단순 속성(`count`, `b`, `q`, `pc`/`partial_charge`, `formal_charge`,
+  `resi`, `resv`, `index`, `rank`, `ID`, `vdw`, `elec_radius`, `numeric_type`, `cartoon`, `chain`, `resn`, `name`, `elem`, `segi`, `alt`,
+  `ss`, `type`, `text_type`)은 생성 ramp 색 index를 지정한다. `fc`, `stereo`, `state`는 PyMOL처럼 오류다. `ss`는 PDB HELIX/SHEET
+  code이며 기록이 없는 file은 빈 값이다(PyMOL은 load 때 dss로 정한다). 문자열 속성은 처음 등장한
+  순서로 번호를 붙이고, `byres`는 각 잔기의 첫 선택 원자 값을 쓴다. 범위는 최소·최대를 모두 주고 최대≥최소일 때만 쓰며,
+  범위를 벗어난 값은 양 끝 색으로 맞춘다.
+- 그 밖의 식(`b*q` 등, selection 숫자 문법)이나 공백으로 나눈 색 목록은 RGB/HLS/HSV 보간 literal 색(`0xRRGGBB`)을
+  지정한다. 이때 문자열 속성은 정렬 순서로 번호를 붙이고, 값이 없는 원자는 색을 유지한다. 반환값은 사용한 최소·최대다.
+- `background set --color default`는 MolShredder 기본 배경으로 되돌린다. 알 수 없는 색은 오류다. Render setting color의
+  `front`는 배경의 반전색, `back`은 배경색이다.
+
+## Labels와 measurement 표시
+
+```text
+label --selection 'name CA' --expression '"%s-%s" % (resn, resi)'
+label --expression b
+label --selection all --expression "''"
+label literal --selection 'index 1' --text 'active site'
+show --representation labels --selection all
+setting set --name label_digits --value 2 --scope object
+setting set --name label_position --value '[0, 0, 3]'
+setting set --name dash_gap --value 0.2
+```
+
+- `label`은 선택 원자마다 식을 평가해 label을 붙이고 labels 표시를 켠다. 빈 식은 text만 지운다. 식은 Python 부분집합이다:
+  원자 field(`name`, `resn`, `resi`, `resv`, `chain`, `segi`, `alt`, `elem`, `type`, `model`, `ss`, `text_type`, `b`, `q`,
+  `partial_charge`, `formal_charge`, `ID`, `index`, `rank`, `vdw`), 문자열·숫자 literal, `+ - * / // % **`, `%` 서식, 괄호와 tuple,
+  `str()`/`int()`/`float()`/`len()`/`round()`/`abs()`. 실수 결과는 `label_digits` 자릿수로 쓴다. 알 수 없는 이름은 오류이며 상태를
+  바꾸지 않는다. `ss`는 PDB HELIX/SHEET code다.
+- `label literal`은 text를 평가하지 않고 그대로 붙인다.
+- `labels`는 representation 종류이며 `show`/`hide`/`as`/`toggle`과 `everything`에 포함된다.
+- Measurement overlay label은 `label_distance_digits`/`label_angle_digits`/`label_dihedral_digits`(음수면 `label_digits`) 자릿수의
+  숫자다(Å가 아닌 단위만 붙임). Dash는 중점에서 대칭으로 `dash_length`+`dash_gap` 간격으로 놓이고 `dash_width`, `dash_color`를 쓴다.
+
+## Color ramp
+
+```text
+ramp new --name potential --source esp_map --range '-10 0 10' --color 'red white blue'
+ramp_new --name heat --source dens --range '0 1' --color hot
+ramp new --name near --source ligand --range '0 2 4' --color 'red green blue'
+color --color potential --selection all
+ramp update --name potential --range '-5 0 5'
+```
+
+- `ramp new`(alias `ramp_new`)는 volume map 값 또는 molecular object까지의 근접 거리(마지막 level이 cutoff)로 색을 정하는 ramp를
+  만든다. 색은 이름 목록이나 내장 spectrum(`traditional`, `sludge`, `ocean`, `hot`, `grayable`, `rainbow`, `afmhot`, `grayscale`)이다.
+- Ramp 이름은 `color` token으로 쓸 수 있다(color code −10, −11, …). 원자 색은 rebuild 때 원자 위치에서 계산하며 map 밖은 경계 값을
+  쓴다. 색 수가 level 수와 다르면 첫~끝 level 사이에 균등 재배치한다. Proximity ramp은 PyMOL처럼 현재 frame과 무관하게 source의 첫
+  frame(state 1)을 쓰고, 그 좌표를 편집하면 다시 칠한다.
+- `ramp update`(alias `ramp_update`)는 range나 color를 바꾸고 그 ramp를 쓰는 원자를 다시 칠한다.
+
+## Map contour과 cartoon type
+
+```text
+isomesh --name mesh1 --map dens --level 1.0
+isosurface --name surf1 --map dens --level 1.5 --color red
+isodot --name dots --map dens --level 1.0
+volume contour --name pocket --map dens --level 1.0 --mode mesh --selection 'resi 45' --carve 2.0
+isolevel --name mesh1 --level 0.8
+volume isolevel get --name mesh1
+cartoon --type tube --selection 'chain A'
+cartoon --type automatic
+```
+
+- `volume contour`(alias `isosurface`/`isomesh`/`isodot`)는 map의 이름 있는 contour를 만든다. 같은 이름·같은 mode는 교체하고 다른
+  mode면 오류다. `--carve`는 선택 원자로부터 그 거리 안의 geometry만, `--buffer`는 선택 범위를 그 거리만큼 넓힌 상자 안만 남긴다(PyMOL처럼 triangle·mesh 선의
+  모든 정점이 영역 안일 때만 남긴다).
+  결과 extent는 carve/buffer 영역 또는 map 범위다. Level은 float32로 저장되며 `volume isolevel`(alias `isolevel`)로 바꾸고
+  `volume isolevel get`으로 읽는다. Contour는 PyMOL에서 관찰한 256-case table의 marching cubes로 만들어 isosurface triangle, isomesh(grid 평면 위의 triangle 변)와 isodot(surface 정점마다 점)이
+  PyMOL export와 같다. `isosurface_algorithm`이 0이 아니면 PyMOL의 다른 algorithm을 확인하지 못해 결과 `warnings`에 fallback을 보고한다.
+- `cartoon`은 PyMOL type(`skip`, `automatic`, `loop`, `rectangle`, `oval`, `tube`, `arrow`, `dumbbell`, `putty`, `dash`, `cylinder`,
+  고유 접두사 허용)을 지정한다. `dumbbell`/`putty`/`dash`/`cylinder`는 가장 가까운 profile로 그리고 packet provenance에 남긴다.
+- CCP4 reader는 identity skew matrix의 translation을 map origin으로 받는다(PyMOL 저장 형식). 다른 skew는 지원하지 않는다.
+
+## Image export
+
+```text
+image save --path figure.png --width 1200
+png --path figure.png --width 800 --height 600 --dpi 300
+image save --path draw.png --ray false
+setting set --name opaque_background --value true
+view refresh
+```
+
+- `image save`(alias `png`)는 보이는 object의 표현과 measurement overlay를 deterministic reference ray caster로 그려 8-bit RGBA
+  PNG로 저장한다. Width 0은 640, height 0은 camera 비율을 따른다. dpi는 PNG pHYs에 기록한다. 저장은 임시 파일을 거쳐
+  원자적으로 바꾸며, 없는 directory는 오류다.
+- 배경 alpha: `--ray true`는 `ray_opaque_background`가 0 이상이면 그 값, −1이면 `opaque_background`(기본 off: 투명)를 따른다.
+  `--ray false`는 `opaque_background`만 따른다. 투명 pixel도 배경 RGB를 유지한다.
+- PyMOL ray tracing, OpenGL draw, `ray_default_renderer`의 외부 renderer는 이 reference ray caster로 대체하는 명시적 fallback이며
+  결과 `warnings`에 기록한다. Text label은 image에 그리지 않는다. `ambient`과 `light`만 image 음영에 반영한다.
 
 ## Object lifecycle
 
@@ -58,6 +194,7 @@ edit residue-properties --atom-id 1 --name LIG --chain A --residue-number 7 \
 edit bond-order --bond-id 1 --order single \
   --expected-topology-version 3 \
   --expected-coordinate-source-revision 3
+# order: single, double, triple, aromatic, amide, zero(PyMOL zero-order/coordination bond)
 build molecule --name carbonyl \
   --atoms "C,6,0,0,0,0;O,8,1.2,0,0,0" \
   --bonds "1,2,double" --residue-name LIG --chain A \
@@ -89,6 +226,8 @@ molshredder format list [--family all|structure|trajectory|volume]
                            [--direction all|read|write]
 molshredder volume load --path PATH [--name NAME]
                            [--file-format auto|dx|opendx|mrc|map|ccp4|mrcs]
+                           [--provider auto|native|molfile:dx|molfile:ccp4]
+                           [--plugin-path ABSOLUTE_PATH]
                            [--coordinate-unit angstrom|nanometer]
 molshredder volume list
 molshredder volume save --path PATH [--file-format auto|dx|opendx|mrc|map|ccp4|mrcs]
@@ -150,6 +289,19 @@ molshredder script run-isolated --path SCRIPT.py --trust true
                          [--timeout-ms 30000]
                          [--max-output-bytes 8388608]
                          [--environment-policy minimal|inherit]
+molshredder pml translate (--path SCRIPT.pml | --text "PML")
+molshredder pml run (--path SCRIPT.pml | --text "PML") [--on-error stop|continue]
+molshredder tcl translate (--path SCRIPT.tcl | --text "TCL")
+molshredder tcl run (--path SCRIPT.tcl | --text "TCL") [--on-error stop|continue]
+molshredder plugin list [--directory DIRECTORY] [--trust-store PATH]
+molshredder plugin approve --manifest PATH [--allow-in-process false|true]
+                           [--trust-store PATH]
+molshredder plugin revoke --id ID [--trust-store PATH]
+molshredder plugin status
+molshredder plugin invoke --plugin ID --operation NAME
+                          [--arguments-json '{}'] [--timeout-ms 60000]
+                          [--trust-store PATH]
+molshredder plugin NAMESPACE OPERATION [--PARAMETER VALUE ...]
 molshredder system version
 molshredder system info
 molshredder view get
@@ -289,21 +441,26 @@ Additive `format list`와 `save` 문법, atomic output 및 semantic loss table�
 - `view center/zoom/orient/origin`: active object에서 selection을 평가하고 missing coordinate는 제외한다.
   `state=current`는 현재 trajectory frame(기본값), `all`은 알려진 모든 coordinate frame,
   양의 정수는 1-based explicit state를 사용한다. PyMOL script 이식을 위해 `-1=current`, `0=all`도
-  받는다. All-state extent는 trajectory를 메모리에 전체 복사하지 않고 frame source/cache에서 streaming하며,
+  받는다. PyMOL은 `state`를 생략하면 모든 state를 frame하지만 MolShredder 기본은 현재 state다(`--state all`로 PyMOL과 같게 쓸 수 있다).
+  All-state extent는 trajectory를 메모리에 전체 복사하지 않고 frame source/cache에서 streaming하며,
   exact complete-fit radius를 위해 bounds/radius 두 pass를 수행한다. Result의 `evaluated_frame_count`로 실제
   평가 frame 수를 확인할 수 있다.
-  Center는 selection AABB midpoint로 target을 옮기며 `move-origin=true`가 기본이다. Zoom은 같은 midpoint와 extent를
-  사용하고 `complete=true`이면 모든 선택 atom center까지의 최대 거리를 사용한다. `buffer`는 Angstrom 단위의
-  절대 여백이다. Orient는 uniform-coordinate covariance의 principal axes를 variance 내림차순으로 camera
-  right/up/backward에 맞춘 후 회전된 AABB를 frame한다. 축 부호는 현재 camera에서 회전 변화가 가장 작은 조합을
+  Center는 PyMOL처럼 선택 atom 좌표 평균으로 target을 옮기며 `move-origin=true`가 기본이다. `move-origin=false`는
+  회전 origin의 깊이를 유지한다. Zoom은 같은 평균을 중심으로 축별 `max(mean-min, max-mean)` 중 최댓값(weighted
+  half extent)을 radius로 사용하고 `complete=true`이면 평균에서 가장 먼 atom center까지의 거리를 사용한다. `buffer`는
+  Angstrom 단위의 절대 여백이며 radius 최소값은 2.5 Angstrom(PyMOL `MAX_VDW`)이다. Distance는
+  `radius / tan(fov/2)`, clip은 `distance ± 1.2 radius`다. Orient는 uniform-coordinate covariance의 principal axes를
+  variance 내림차순으로 camera right/up/backward에 맞춘 후 zoom과 같은 평균·weighted extent로 frame한다. 축 부호는 현재 camera에서 회전 변화가 가장 작은 조합을
   선택하고, eigenvalue가 퇴화한 subspace는 현재 camera 축을 투영해 갑작스러운 회전을 피한다. Origin은 기본적으로
   selection AABB midpoint를 camera의 model-space rotation pivot으로 사용한다. `--position x,y,z`는 selection 없이
   명시 좌표를 사용한다. `--object current|NAME|ID`를 함께 주면 camera 대신 해당 object의 local transform pivot을
   설정하며, position이 없으면 그 object 안에서 selection/state를 평가한다. Pivot만 바꿀 때 현재 affine placement는
   유지한다. Empty selection은 기존 camera/scene을 보존한 채 `invalid_selection`으로 실패한다.
-  Atom-radius-aware exact PyMOL `MAX_VDW` framing은 후속 범위다.
-- `view reset`: object option이 없으면 camera 기본 projection/FOV/clip/orientation을 복원하고 모든 effectively-visible molecular object의
-  current frame과 volume grid bounds를 함께 frame한다. Live viewport aspect ratio는 보존하며 molecule이나 volume이
+  Orient, zoom, center, origin, clip, turn, move, projection과 reset의 18-value view는 PyMOL 3.1.0 capture와
+  float32 오차(1e-4) 안에서 같다.
+- `view reset`: object option이 없으면 identity orientation과 기본 clip/target을 복원하고 모든 effectively-visible molecular object의
+  current frame 좌표 평균과 weighted extent(volume grid bounds 포함)로 frame한다. PyMOL에서 setting인 projection
+  mode와 field of view, live viewport aspect ratio는 보존하며 molecule이나 volume이
   없으면 canonical default camera로 돌아간다. Center, zoom과 reset의 `duration/hand`는 named-view recall과 같은
   committed-endpoint animation 계약을 사용한다. `--object current|all|NAME|ID`는 camera를 바꾸지 않고 대상 molecular
   object의 translation/rotation/scale/pivot을 identity transform으로 초기화한다.
@@ -318,7 +475,8 @@ Additive `format list`와 `save` 문법, atomic output 및 semantic loss table�
   x/y는 model을 화면 반대 방향으로 평행 이동하도록 target을 옮기며 model origin은 고정한다.
   양의 z는 camera distance와 near/far clip을 같은 Angstrom 만큼 줄이고, orthographic view의 height도
   같은 비율로 조정한다. Turn은 model origin을 pivot으로 camera-local 축 주위를 도(degree)로 회전하며
-  off-axis target과 eye도 같이 회전한다. Invalid/non-finite 요청이나 z 축이 camera/clip invariant를
+  off-axis target과 eye도 같이 회전한다. 회전 방향은 PyMOL `turn`과 같아(view 회전 행렬에 `Rᵀ` 적용) 양의
+  각도에서 camera quaternion은 음의 각도만큼 회전한다. Invalid/non-finite 요청이나 z 축이 camera/clip invariant를
   넘는 요청은 기존 camera를 보존하고 실패한다.
 - `view projection`: `--mode perspective|orthographic`와 degree 단위
   `--field-of-view-degrees`를 제공한다. 기본 `--preserve-scale true`는 전환 직전 target-plane vertical span을

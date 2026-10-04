@@ -29,6 +29,14 @@ action, `presentation`은 window/dialog/panel만 조작하는 UI action, `deferr
 | Scene | Typed movie timeline | canonical parameter family | `movie status/configure/keyframe/seek/play/pause/step/clear` | `scene.movie` menu·palette와 scene/trajectory-only keyframe panel 및 playback timer 완료 |
 | Help | System information panel | canonical/presentation | `system info` 결과를 panel에 표시 | `help.system-information` menu·palette·panel entry 완료 |
 | Represent | Render settings editor | canonical | `setting get/set/unset/reset` | `represent.settings` menu·palette·panel entry 완료 |
+| Represent | Atom color | canonical | `color`, `color get` | `represent.color` menu·palette entry, Render Settings overlay color row와 `All objects`(workspace scope) toggle 완료 |
+| Represent | Atom labels | canonical | `label`, `setting set label_placement_offset` | `represent.label` menu·palette entry, overlay label row, viewport label drag 완료 |
+| Represent | Cartoon type | canonical | `cartoon` | `represent.cartoon-type` menu·palette entry, overlay 행 완료 |
+| Represent | Color ramp | canonical | `ramp new`, `color` | `represent.ramp` menu·palette entry, overlay 행 완료 |
+| Represent | Map contour | canonical | `volume contour`, `volume isolevel` | `represent.contour` menu·palette entry, overlay 행 완료 |
+| Represent | Spectrum | canonical | `spectrum` | `represent.spectrum` menu·palette entry, Render Settings overlay spectrum row 완료 |
+| Scene | Export image | canonical | `image save` | `scene.export-image` menu·palette entry, Render Settings overlay image row 완료 |
+| Scene | Background color | canonical | `background set/get` | `scene.background` menu·palette entry, Render Settings overlay background row 완료 |
 | Volume | Isosurface decrement/midpoint/increment | canonical parameter family | `volume isosurface` | volume load 뒤 자동 표시되는 numeric parameter panel에 유지 |
 | Volume | X/Y/Z scalar slice 선택과 plane 이동 | canonical parameter family | `volume slice` | `represent.volume-slice` menu·panel·palette 공유; 같은 panel에서 axis/index parameter 구성 |
 | Volume | Direct volume와 transfer preset | canonical parameter family | `volume render/hide`, `volume ramp set` | `represent.volume-render` menu·panel·palette 공유; background progress/cancel과 preset/step parameter 구성 |

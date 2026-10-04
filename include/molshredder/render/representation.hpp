@@ -1,20 +1,23 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "molshredder/model/coordinates.hpp"
 #include "molshredder/model/topology.hpp"
 #include "molshredder/analysis/secondary_structure.hpp"
 #include "molshredder/operation/result.hpp"
+#include "molshredder/render/color_table.hpp"
 #include "molshredder/render/packet.hpp"
 #include "molshredder/render/setting_store.hpp"
 
 namespace molshredder::render {
 
-enum class RepresentationKind { lines, sticks, spheres, ribbon, cartoon };
+enum class RepresentationKind { lines, sticks, spheres, ribbon, cartoon, labels };
 
 struct AtomVisual {
   ColorRgba color;
@@ -65,7 +68,26 @@ struct RepresentationRequest {
   const RenderSettingStore* settings{};
   std::uint64_t object_id{};
   SphereBackendCapabilities sphere_backend;
+  // Resolves color-valued render settings; null limits them to atomic,
+  // #RRGGBB and 0xRRGGBB tokens.
+  const ColorTable* colors{};
+  std::int32_t object_color{kColorDefault};
+  // Atom label text keyed by persistent AtomId (sorted); used by labels.
+  const std::vector<std::pair<std::uint64_t, std::string>>* atom_labels{};
+  // PyMOL cartoon type codes keyed by persistent AtomId (sorted); the CA
+  // atom's code selects the residue profile. Absent means automatic (0).
+  const std::vector<std::pair<std::uint64_t, std::int32_t>>* cartoon_types{};
 };
+
+// PyMOL 3.1.0 cartoon type codes (cmd.cartoon TYPE).
+struct CartoonTypeName {
+  std::string_view name;
+  std::int32_t code;
+};
+inline constexpr std::array<CartoonTypeName, 11> kCartoonTypes{{
+    {"skip", -1}, {"automatic", 0}, {"loop", 1}, {"rectangle", 2},
+    {"oval", 3}, {"tube", 4}, {"arrow", 5}, {"dumbbell", 6}, {"putty", 7},
+    {"dash", 8}, {"cylinder", 9}}};
 
 [[nodiscard]] operation::Result<RenderPacket> build_representation(
     const RepresentationRequest& request);

@@ -225,7 +225,9 @@ int main() {
           navigation_replay.value().applied_count == 4U &&
           std::abs(navigation_workspace->camera().parameters().target.x) <
               1.0e-12 &&
-          std::abs(navigation_workspace->camera().parameters().target.y +
+          // PyMOL turn rotates the view by M * R^T: +90 deg about z moves
+          // the camera-space target from +x to +y.
+          std::abs(navigation_workspace->camera().parameters().target.y -
                    1.0) < 1.0e-12 &&
           navigation_workspace->camera().parameters().model_origin ==
               model::Vec3d{} &&

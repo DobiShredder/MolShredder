@@ -154,6 +154,9 @@ def main() -> int:
         "typed camera snapshot fields were not preserved across frontends",
     )
 
+    # PyMOL reset keeps the projection mode, so return to the fresh-process
+    # perspective camera before comparing with the one-shot CLI and GUI runs.
+    molshredder.invoke("view projection", {"mode": "perspective"})
     molshredder.invoke("view reset")
     origin_position_arguments = {"position": "1.5,-2,3.25"}
     origin_position_python = molshredder.invoke(
@@ -319,6 +322,16 @@ def main() -> int:
         "CLI, GUI adapter and Python interleaved actions diverged",
     )
 
+    # Projection mode and field of view survive reset (PyMOL settings), so
+    # restore the fresh-process values before the one-shot comparison.
+    molshredder.invoke(
+        "view projection",
+        {
+            "field-of-view-degrees": "45",
+            "mode": "perspective",
+            "preserve-scale": "false",
+        },
+    )
     reset_python = molshredder.invoke("view reset")
     reset_cli = run_cli(cli_path, ["view", "reset"], 0)
     reset_gui = run_gui(gui_probe_path, "view-reset")
@@ -393,7 +406,8 @@ def main() -> int:
         turn_python == turn_cli == turn_gui,
         "CLI, GUI adapter and Python camera turn actions diverged",
     )
-    expected_orientation = [0.7071067811865476, 0.0, 0.0, 0.7071067811865475]
+    # PyMOL turn applies M * R^T, so the camera quaternion rotates by -angle.
+    expected_orientation = [0.7071067811865476, 0.0, 0.0, -0.7071067811865475]
     require(
         all(
             abs(actual - expected) <= 1.0e-15

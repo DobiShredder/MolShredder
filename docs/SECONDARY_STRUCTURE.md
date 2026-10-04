@@ -74,8 +74,7 @@ on a synthetic fixture. A 5,000-residue/25,000-atom fixture must finish the
 assignment in under five seconds in the warning-as-error debug test build. This
 is a regression ceiling, not a cross-platform performance guarantee.
 
-`show --representation cartoon`은 현재 frame에서 이 assignment를 실행하고 H/G/I에는 넓은 helix,
-E/B에는 terminal arrow profile, T/C에는 좁은 coil profile을 적용한다. `ribbon`은 state와 무관한 일정
-폭을 사용한다. 생성 packet은 `secondary_structure_method=molshredder-stride-method-v0`와
-`exact_stride_parity=false`를 보존한다. 이는 original STRIDE geometry나 PyMOL cartoon의 exact parity
-주장이 아니다.
+`show --representation cartoon`은 PDB HELIX/SHEET가 없을 때 현재 frame에서 이 assignment를 실행하고 H/G/I는 helix,
+E/B는 sheet, 나머지는 loop로 쓴다. 이때 packet은 `secondary_structure_method=molshredder-stride-method-v0`와
+`exact_stride_parity=false`를 보존한다. PyMOL은 header가 없으면 dss로 정하므로 이 경우 cartoon 모양이 PyMOL과 다를 수 있다.
+HELIX/SHEET가 있으면 PyMOL과 같은 code를 쓴다(`secondary_structure_method=pdb-helix-sheet`).

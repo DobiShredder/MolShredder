@@ -1,6 +1,9 @@
 #include "molshredder/application/workspace.hpp"
 
 #include <algorithm>
+#include <set>
+#include <sstream>
+#include <map>
 #include <charconv>
 #include "molshredder/core/parse_number.hpp"
 #include <cctype>
@@ -18,6 +21,10 @@
 #include <vector>
 
 #include "molshredder/operation/error.hpp"
+#include "molshredder/application/label_expression.hpp"
+#include "molshredder/render/image_png.hpp"
+#include "molshredder/render/reference_renderer.hpp"
+#include "molshredder/render/spectrum.hpp"
 #include "molshredder/selection/evaluator.hpp"
 #include "molshredder/selection/expression.hpp"
 
@@ -242,23 +249,355 @@ atom_visuals(const model::Topology &topology) {
       std::move(visuals));
 }
 
+// Text atom fields that spectrum enumerates instead of interpolating.
+std::optional<std::string> spectrum_text_field(const model::Topology &topology,
+                                               std::size_t atom,
+                                               std::string_view field) {
+  const auto &record = topology.atoms()[atom];
+  const auto &residue = topology.residues()[record.residue.value];
+  if (field == "chain")
+    return residue.chain_id;
+  if (field == "resn")
+    return residue.name;
+  if (field == "name")
+    return record.name;
+  if (field == "elem")
+    return selection::atom_element_symbol(record.atomic_number);
+  if (field == "segi")
+    return residue.segment_id;
+  if (field == "alt")
+    return record.alternate_location;
+  if (field == "ss") {
+    // PDB HELIX/SHEET codes; atoms without a record (or files without
+    // secondary-structure records) enumerate as "".
+    const auto *property = topology.properties().find("ss");
+    const auto *codes = property == nullptr
+                            ? nullptr
+                            : std::get_if<std::vector<std::string>>(&property->values);
+    return codes != nullptr && atom < codes->size() ? (*codes)[atom]
+                                                    : std::string{};
+  }
+  if (field == "type") {
+    const auto *property = topology.properties().find("pdb.is_hetero");
+    const auto *hetero = property == nullptr
+                             ? nullptr
+                             : std::get_if<model::BooleanColumn>(&property->values);
+    return hetero != nullptr && atom < hetero->values.size() &&
+                   hetero->values[atom] != 0U
+               ? std::string{"HETATM"}
+               : std::string{"ATOM"};
+  }
+  if (field == "text_type")
+    return std::string{};
+  return std::nullopt;
+}
+
+// Per-atom spectrum values for every atom (nullopt = missing). Supports
+// count (1-based or 0-based selection position), residue number, rank,
+// index, ID, text enumeration and the selection numeric grammar.
+operation::Result<std::vector<std::optional<double>>>
+spectrum_values(const WorkspaceObject &object, const model::CoordinateFrame &frame,
+                std::size_t frame_index, std::span<const std::size_t> selected,
+                std::string_view expression, bool palette_path) {
+  using R = operation::Result<std::vector<std::optional<double>>>;
+  const auto &topology = *object.system->topology();
+  std::vector<std::optional<double>> values(topology.atom_count());
+  if (expression == "count") {
+    for (std::size_t position = 0; position < selected.size(); ++position)
+      values[selected[position]] =
+          static_cast<double>(position + (palette_path ? 1U : 0U));
+    return R::success(std::move(values));
+  }
+  if (expression == "resi" || expression == "resv" || expression == "rank" ||
+      expression == "index" || expression == "ID") {
+    for (const auto atom : selected) {
+      const auto &record = topology.atoms()[atom];
+      if (expression == "resi" || expression == "resv")
+        values[atom] = static_cast<double>(
+            topology.residues()[record.residue.value].sequence_number);
+      else if (expression == "rank")
+        values[atom] = static_cast<double>(atom);
+      else if (expression == "index")
+        values[atom] = static_cast<double>(atom + 1U);
+      else if (record.source_serial.has_value())
+        values[atom] = static_cast<double>(*record.source_serial);
+    }
+    return R::success(std::move(values));
+  }
+  if (expression == "partial_charge" &&
+      topology.properties().find("partial_charge") == nullptr &&
+      !frame.metadata().atom_properties.contains("partial_charge")) {
+    // PyMOL atoms carry partial_charge 0 when the file has none.
+    for (const auto atom : selected)
+      values[atom] = 0.0;
+    return R::success(std::move(values));
+  }
+  if (expression == "elec_radius" || expression == "numeric_type") {
+    // Not modeled by MolShredder; PyMOL defaults are 0 for loaded files.
+    for (const auto atom : selected)
+      values[atom] = 0.0;
+    return R::success(std::move(values));
+  }
+  if (expression == "cartoon") {
+    for (const auto atom : selected)
+      values[atom] = 0.0;
+    if (object.cartoon_types != nullptr) {
+      for (const auto &[id, code] : *object.cartoon_types) {
+        const auto index = topology.atom_index(model::AtomId{id});
+        if (index.has_value() && values[index->value].has_value())
+          values[index->value] = static_cast<double>(code);
+      }
+    }
+    return R::success(std::move(values));
+  }
+  if (expression == "chain" || expression == "resn" || expression == "name" ||
+      expression == "elem" || expression == "segi" || expression == "alt" ||
+      expression == "ss" || expression == "type" || expression == "text_type") {
+    std::vector<std::string> text(topology.atom_count());
+    for (const auto atom : selected)
+      text[atom] = *spectrum_text_field(topology, atom, expression);
+    std::vector<std::string> order;
+    if (palette_path) {
+      // First-appearance enumeration in selection order.
+      for (const auto atom : selected)
+        if (std::find(order.begin(), order.end(), text[atom]) == order.end())
+          order.push_back(text[atom]);
+    } else {
+      for (const auto atom : selected)
+        order.push_back(text[atom]);
+      std::sort(order.begin(), order.end());
+      order.erase(std::unique(order.begin(), order.end()), order.end());
+    }
+    for (const auto atom : selected)
+      values[atom] = static_cast<double>(
+          std::find(order.begin(), order.end(), text[atom]) - order.begin());
+    return R::success(std::move(values));
+  }
+  if (expression == "vdw") {
+    const auto radii = selection::atom_vdw_radii(topology);
+    if (!radii.has_value())
+      return R::failure(radii.error());
+    // PyMOL stores vdw as float32.
+    for (const auto atom : selected)
+      values[atom] = static_cast<double>(static_cast<float>(radii.value()[atom]));
+    return R::success(std::move(values));
+  }
+  if (palette_path && expression != "b" && expression != "q" &&
+      expression != "pc" && expression != "partial_charge" &&
+      expression != "formal_charge")
+    return R::failure(operation::Error{
+        operation::ErrorCode::invalid_argument,
+        "Unknown expression: " + std::string{expression},
+        "use count, b, q, pc, partial_charge, formal_charge, vdw, resi, resv, "
+        "index, rank, ID, chain, resn, name, elem, segi, alt, ss, type, "
+        "text_type, elec_radius, numeric_type or cartoon with a built-in "
+        "palette"});
+  const auto parsed = selection::parse_numeric_expression(
+      expression == "fc" ? std::string_view{"formal_charge"} : expression);
+  if (!parsed.has_value())
+    return R::failure(parsed.error());
+  selection::EvaluationContext context{&frame, frame_index,
+                                       object.system->coordinates().get(),
+                                       object.system->name()};
+  context.float32_field_values = true;
+  auto evaluated =
+      selection::evaluate_numeric(*parsed.value(), topology, context);
+  if (!evaluated.has_value())
+    return R::failure(evaluated.error());
+  for (const auto atom : selected)
+    values[atom] = evaluated.value()[atom];
+  return R::success(std::move(values));
+}
+
+std::optional<operation::Error>
+validate_setting_color(const render::RenderSettingValue &value,
+                       const render::ColorTable &colors) {
+  const auto *token = std::get_if<std::string>(&value);
+  if (token == nullptr || *token == "-1")
+    return std::nullopt;
+  const auto index = colors.resolve(*token);
+  if (!index.has_value())
+    return invalid("unsupported render setting color token: " + *token,
+                   "use atomic, object, a color name or index, 0xRRGGBB or "
+                   "#RRGGBB");
+  return std::nullopt;
+}
+
+// Builds contour geometry from the map isosurface and applies carve/buffer.
+operation::Result<render::RenderPacket>
+build_contour_packet(const WorkspaceVolume &volume, const ContourRecord &record,
+                     const render::ColorTable &colors,
+                     operation::TaskContext &context) {
+  using R = operation::Result<render::RenderPacket>;
+  const auto rgba = record.color == render::kColorDefault
+                        ? render::ColorRgba{0.2F, 0.65F, 1.0F, 1.0F}
+                        : colors.rgba(record.color, 1.0F)
+                              .value_or(render::ColorRgba{0.2F, 0.65F, 1.0F, 1.0F});
+  // Contours tessellate like PyMOL (marching cubes, SEQ-311 S14).
+  render::IsosurfaceRequest request{volume.grid.get(), volume.scene_node.value,
+                                    {static_cast<double>(record.level), rgba},
+                                    &context};
+  request.tessellation = render::IsosurfaceTessellation::marching_cubes;
+  request.plane_edges = record.mode == ContourMode::mesh;
+  auto surface = render::build_isosurface(request);
+  if (!surface.has_value())
+    return surface;
+  auto &mesh = surface.value();
+  const auto keep = [&](model::Vec3d point) {
+    if (record.region_atoms.empty())
+      return true;
+    if (record.carve > 0.0) {
+      const auto limit = record.carve * record.carve;
+      return std::any_of(record.region_atoms.begin(), record.region_atoms.end(),
+                         [&](model::Vec3d atom) {
+                           const auto dx = point.x - atom.x;
+                           const auto dy = point.y - atom.y;
+                           const auto dz = point.z - atom.z;
+                           return dx * dx + dy * dy + dz * dz <= limit;
+                         });
+    }
+    // Grid-plane vertices sit exactly on the box faces; tolerate float32 noise.
+    constexpr double kBoxEpsilon = 1.0e-4;
+    return point.x >= record.extent.minimum.x - kBoxEpsilon &&
+           point.x <= record.extent.maximum.x + kBoxEpsilon &&
+           point.y >= record.extent.minimum.y - kBoxEpsilon &&
+           point.y <= record.extent.maximum.y + kBoxEpsilon &&
+           point.z >= record.extent.minimum.z - kBoxEpsilon &&
+           point.z <= record.extent.maximum.z + kBoxEpsilon;
+  };
+  render::RenderPacket packet;
+  packet.scene_node_id = mesh.scene_node_id;
+  packet.provenance = mesh.provenance;
+  packet.provenance.insert_or_assign(
+      "contour_mode", record.mode == ContourMode::surface ? "surface"
+                      : record.mode == ContourMode::mesh  ? "mesh"
+                                                          : "dot");
+  std::vector<std::uint8_t> kept(mesh.mesh_triangles.size(), 0U);
+  for (std::size_t index = 0; index < mesh.mesh_triangles.size(); ++index) {
+    const auto &triangle = mesh.mesh_triangles[index];
+    // PyMOL drops a triangle unless all three vertices are inside the
+    // carve distance or buffered box.
+    kept[index] = keep(mesh.mesh_vertices[triangle.first].position) &&
+                          keep(mesh.mesh_vertices[triangle.second].position) &&
+                          keep(mesh.mesh_vertices[triangle.third].position)
+                      ? 1U
+                      : 0U;
+  }
+  if (record.mode == ContourMode::surface) {
+    packet.mesh_vertices = mesh.mesh_vertices;
+    for (std::size_t index = 0; index < kept.size(); ++index)
+      if (kept[index] != 0U)
+        packet.mesh_triangles.push_back(mesh.mesh_triangles[index]);
+    for (const auto &triangle : packet.mesh_triangles)
+      for (const auto vertex : {triangle.first, triangle.second, triangle.third})
+        render::include(packet.bounds, packet.mesh_vertices[vertex].position);
+    return R::success(std::move(packet));
+  }
+  if (record.mode == ContourMode::mesh) {
+    // PyMOL isomesh: the contour lines in each grid plane.
+    for (const auto &line : mesh.lines) {
+      if (!keep(line.start) || !keep(line.end))
+        continue;
+      packet.lines.push_back({line.start, line.end, rgba, rgba, 1.0F, 0U});
+      render::include(packet.bounds, line.start);
+      render::include(packet.bounds, line.end);
+    }
+    return R::success(std::move(packet));
+  }
+  // Dots: one small sphere per kept vertex (PyMOL isodot is an explicit
+  // fallback approximation; dot spacing follows the triangulation).
+  std::vector<std::uint8_t> used(mesh.mesh_vertices.size(), 0U);
+  for (std::size_t index = 0; index < kept.size(); ++index)
+    if (kept[index] != 0U)
+      for (const auto vertex : {mesh.mesh_triangles[index].first,
+                                mesh.mesh_triangles[index].second,
+                                mesh.mesh_triangles[index].third})
+        used[vertex] = 1U;
+  for (std::size_t vertex = 0; vertex < used.size(); ++vertex)
+    if (used[vertex] != 0U) {
+      packet.spheres.push_back({mesh.mesh_vertices[vertex].position, 0.05, rgba, 0U});
+      render::include(packet.bounds, mesh.mesh_vertices[vertex].position, 0.05);
+    }
+  return R::success(std::move(packet));
+}
+
+render::Bounds3d grid_extent(const model::VolumeGrid &grid) {
+  render::Bounds3d bounds;
+  const auto shape = grid.shape();
+  for (const auto x : {std::size_t{0}, shape.x - 1U})
+    for (const auto y : {std::size_t{0}, shape.y - 1U})
+      for (const auto z : {std::size_t{0}, shape.z - 1U})
+        render::include(bounds, grid.position(x, y, z));
+  return bounds;
+}
+
+// PyMOL weighted extent half size: per axis the larger distance from the
+// mean center to the bounding box, maximized over axes.
+double weighted_half_extent(const SpatialExtent &extent) {
+  return std::max({std::max(extent.center.x - extent.minimum.x,
+                            extent.maximum.x - extent.center.x),
+                   std::max(extent.center.y - extent.minimum.y,
+                            extent.maximum.y - extent.center.y),
+                   std::max(extent.center.z - extent.minimum.z,
+                            extent.maximum.z - extent.center.z)});
+}
+
+// Applies explicit atom color indices on top of the default palette. Entries
+// whose atom no longer exists in the topology are ignored.
+void apply_atom_colors(std::vector<render::AtomVisual> &visuals,
+                       const WorkspaceObject &object,
+                       const model::Topology &topology,
+                       const render::ColorTable &colors,
+                       const model::CoordinateFrame *frame = nullptr) {
+  if (object.atom_colors == nullptr)
+    return;
+  for (const auto &[atom_id, index] : *object.atom_colors) {
+    const auto atom = topology.atom_index(model::AtomId{atom_id});
+    if (!atom.has_value() || atom->value >= visuals.size())
+      continue;
+    if (index <= render::kColorRampFirst) {
+      // Ramp colors are evaluated at the atom position of this frame.
+      if (frame == nullptr || !frame->atom_present(atom->value))
+        continue;
+      const auto position = std::visit(
+          [&](const auto &values) {
+            return model::Vec3d{static_cast<double>(values[atom->value].x),
+                                static_cast<double>(values[atom->value].y),
+                                static_cast<double>(values[atom->value].z)};
+          },
+          frame->positions().values());
+      if (const auto rgb = colors.ramp_rgb(index, position); rgb.has_value())
+        visuals[atom->value].color = {rgb->red, rgb->green, rgb->blue, 1.0F};
+      continue;
+    }
+    const auto resolved =
+        index == render::kColorObject ? object.object_color : index;
+    if (const auto rgba = colors.rgba(resolved, 1.0F); rgba.has_value())
+      visuals[atom->value].color = *rgba;
+  }
+}
+
 operation::Result<std::vector<RepresentationRecord>> rebuild_representations(
     const WorkspaceObject &object,
     const std::shared_ptr<const model::MolecularSystem> &system,
     const model::CoordinateFrame &frame, std::size_t frame_index,
     const render::RenderSettingStore &settings,
+    const render::ColorTable &colors,
     const RepresentationVisibilityState *visibility_override = nullptr) {
-  const auto visuals = atom_visuals(*system->topology());
+  auto visuals = atom_visuals(*system->topology());
   if (!visuals.has_value()) {
     return operation::Result<std::vector<RepresentationRecord>>::failure(
         visuals.error());
   }
+  apply_atom_colors(visuals.value(), object, *system->topology(), colors,
+                    &frame);
   std::vector<RepresentationRecord> rebuilt;
   constexpr std::array kinds{render::RepresentationKind::lines,
                              render::RepresentationKind::sticks,
                              render::RepresentationKind::spheres,
                              render::RepresentationKind::ribbon,
-                             render::RepresentationKind::cartoon};
+                             render::RepresentationKind::cartoon,
+                             render::RepresentationKind::labels};
   rebuilt.reserve(kinds.size());
   const auto &visibility = visibility_override == nullptr
                                ? object.representation_visibility
@@ -282,7 +621,11 @@ operation::Result<std::vector<RepresentationRecord>> rebuild_representations(
                                           {},
                                           &settings,
                                           object.id,
-                                          {}};
+                                          {},
+                                          &colors,
+                                          object.object_color,
+                                          object.atom_labels.get(),
+                                          object.cartoon_types.get()};
     request.style.kind = kind;
     const auto packet = render::build_representation(request);
     if (!packet.has_value()) {
@@ -1389,7 +1732,7 @@ operation::Result<TopologyMutationResult> Workspace::retain_active_atoms(
   candidate.molecular_surface.reset();
   const auto rebuilt = rebuild_representations(
       candidate, target_system.value(), *frame.value(), frame_index,
-      settings.value());
+      settings.value(), color_table_);
   if (!rebuilt.has_value())
     return operation::Result<TopologyMutationResult>::failure(rebuilt.error());
   candidate.representations = rebuilt.value();
@@ -1420,6 +1763,7 @@ operation::Result<TopologyMutationResult> Workspace::retain_active_atoms(
   scene_ = next_scene.value();
   if (object->trajectory.has_value())
     static_cast<void>(schedule_prefetch(*object->trajectory));
+  refresh_proximity_ramps(object->id);
 
   std::vector<std::uint64_t> ids;
   ids.reserve(target_topology.value()->atom_ids().size());
@@ -1527,7 +1871,8 @@ operation::Result<CoordinateEditResult> Workspace::set_active_atom_position(
   if (!frame.has_value())
     return operation::Result<CoordinateEditResult>::failure(frame.error());
   const auto rebuilt = rebuild_representations(
-      candidate, candidate.system, *frame.value(), 0U, render_settings_);
+      candidate, candidate.system, *frame.value(), 0U, render_settings_,
+      color_table_);
   if (!rebuilt.has_value())
     return operation::Result<CoordinateEditResult>::failure(rebuilt.error());
   candidate.representations = rebuilt.value();
@@ -1572,6 +1917,7 @@ operation::Result<CoordinateEditResult> Workspace::set_active_atom_position(
   *object = std::move(candidate);
   scene_ = next_scene.value();
   measurements_.swap(next_measurements);
+  refresh_proximity_ramps(object->id);
   return operation::Result<CoordinateEditResult>::success(
       {transaction_id, object->id, atom_id, 0U, previous, position,
        previous_source_revision, previous_coordinate_revision,
@@ -1664,7 +2010,8 @@ Workspace::commit_active_topology_edit(
     return operation::Result<TopologyPropertyEditResult>::failure(
         frame.error());
   const auto rebuilt = rebuild_representations(
-      candidate, candidate.system, *frame.value(), 0U, render_settings_);
+      candidate, candidate.system, *frame.value(), 0U, render_settings_,
+      color_table_);
   if (!rebuilt.has_value())
     return operation::Result<TopologyPropertyEditResult>::failure(
         rebuilt.error());
@@ -1806,7 +2153,7 @@ operation::Result<std::size_t> Workspace::apply_edit_record(
   if (!frame.has_value())
     return operation::Result<std::size_t>::failure(frame.error());
   const auto rebuilt = rebuild_representations(
-      candidate, target, *frame.value(), 0U, render_settings_);
+      candidate, target, *frame.value(), 0U, render_settings_, color_table_);
   if (!rebuilt.has_value())
     return operation::Result<std::size_t>::failure(rebuilt.error());
   candidate.representations = rebuilt.value();
@@ -1828,6 +2175,7 @@ operation::Result<std::size_t> Workspace::apply_edit_record(
   *object = std::move(candidate);
   scene_ = next_scene.value();
   measurements_.swap(next_measurements);
+  refresh_proximity_ramps(object->id);
   return operation::Result<std::size_t>::success(invalidated);
 }
 
@@ -2052,7 +2400,7 @@ Workspace::apply_active_chemical_perception(
   }
   const auto rebuilt = rebuild_representations(
       candidate, candidate.system, *frame.value(), frame_index,
-      render_settings_);
+      render_settings_, color_table_);
   if (!rebuilt.has_value()) {
     return operation::Result<ChemicalPerceptionApplyResult>::failure(
         rebuilt.error());
@@ -2093,12 +2441,888 @@ Workspace::commit_render_settings(render::RenderSettingStore candidate) {
                                  : 0U;
     auto records = rebuild_representations(object, object.system,
                                            *frame.value(), frame_index,
-                                           candidate);
+                                           candidate, color_table_);
     if (!records.has_value())
       return records.error();
     rebuilt.push_back(std::move(records.value()));
   }
   render_settings_ = std::move(candidate);
+  for (std::size_t index = 0; index < objects_.size(); ++index)
+    objects_[index].representations = std::move(rebuilt[index]);
+  return std::nullopt;
+}
+
+operation::Result<SpectrumResult>
+Workspace::spectrum(const SpectrumRequest &request) {
+  using R = operation::Result<SpectrumResult>;
+  auto *object = mutable_active_object();
+  if (object == nullptr)
+    return R::failure(missing_active());
+  const auto interpolation =
+      render::parse_spectrum_interpolation(request.interpolation);
+  if (!interpolation.has_value())
+    return R::failure(interpolation.error());
+  const auto mask = selection_mask(*object, request.selection);
+  if (!mask.has_value())
+    return R::failure(mask.error());
+  std::vector<std::size_t> selected;
+  for (std::size_t atom = 0; atom < mask.value().size(); ++atom)
+    if (mask.value()[atom] != 0U)
+      selected.push_back(atom);
+  const auto frame = active_frame(*object);
+  if (!frame.has_value())
+    return R::failure(frame.error());
+  const auto frame_index = object->trajectory.has_value()
+                               ? object->trajectory->timeline.snapshot().frame
+                               : 0U;
+  const auto *palette = render::find_spectrum_palette(request.palette);
+  auto stripped = request.expression;
+  std::erase(stripped, '_');
+  const auto alphabetic =
+      !stripped.empty() &&
+      std::all_of(stripped.begin(), stripped.end(), [](char item) {
+        return std::isalpha(static_cast<unsigned char>(item)) != 0;
+      });
+  const auto palette_path = palette != nullptr && alphabetic;
+  SpectrumResult result;
+  result.object_id = object->id;
+  result.mode = palette_path ? "palette" : "color-list";
+  result.palette =
+      palette != nullptr ? std::string{palette->name} : request.palette;
+
+  std::vector<std::int32_t> color_indices;
+  if (!palette_path) {
+    std::string colors = result.palette;
+    if (colors.find(' ') == std::string::npos) {
+      const auto listed = render::spectrum_palette_color_list(colors);
+      if (!listed.empty())
+        colors = std::string{listed};
+      else
+        std::replace(colors.begin(), colors.end(), '_', ' ');
+    }
+    std::istringstream stream{colors};
+    for (std::string token; stream >> token;) {
+      const auto index = color_table_.resolve(token);
+      if (!index.has_value() || !color_table_.rgb(index.value()).has_value())
+        return R::failure(operation::Error{
+            operation::ErrorCode::invalid_argument, "unknown color",
+            "spectrum colors must be table names, indices or hex values",
+            {{"color", token}}});
+      color_indices.push_back(index.value());
+    }
+    if (color_indices.size() < 2U)
+      return R::failure(invalid("please provide at least 2 colors"));
+  }
+  if (selected.empty())
+    return R::success(std::move(result));
+
+  const auto expression =
+      request.expression == "pc" ? std::string{"partial_charge"}
+      : !palette_path && request.expression == "fc"
+          ? std::string{"formal_charge"}
+          : request.expression;
+  const auto values = spectrum_values(*object, *frame.value(), frame_index,
+                                      selected, expression, palette_path);
+  if (!values.has_value())
+    return R::failure(values.error());
+  const auto &topology = *object->system->topology();
+  std::vector<std::pair<std::uint64_t, std::int32_t>> updates;
+  const auto add = [&](std::size_t atom, std::int32_t color)
+      -> std::optional<operation::Error> {
+    const auto id = topology.atom_id(model::AtomIndex{atom});
+    if (!id.has_value())
+      return invalid("topology atom identity is missing");
+    updates.emplace_back(id->value, color);
+    return std::nullopt;
+  };
+  if (palette_path) {
+    std::vector<float> numbers;
+    numbers.reserve(selected.size());
+    for (const auto atom : selected)
+      numbers.push_back(static_cast<float>(values.value()[atom].value_or(0.0)));
+    const auto mapped = render::palette_spectrum(
+        numbers, request.minimum, request.maximum, *palette, color_table_);
+    if (!mapped.has_value())
+      return R::failure(mapped.error());
+    result.minimum = mapped.value().range.minimum;
+    result.maximum = mapped.value().range.maximum;
+    std::map<std::size_t, std::int32_t> residue_color;
+    for (std::size_t position = 0; position < selected.size(); ++position) {
+      const auto atom = selected[position];
+      auto color = mapped.value().colors[position];
+      if (request.by_residue) {
+        const auto residue = topology.atoms()[atom].residue.value;
+        color = residue_color.try_emplace(residue, color).first->second;
+      }
+      if (const auto error = add(atom, color); error.has_value())
+        return R::failure(*error);
+    }
+  } else {
+    std::vector<std::optional<double>> selected_values;
+    selected_values.reserve(selected.size());
+    for (const auto atom : selected)
+      selected_values.push_back(values.value()[atom]);
+    const auto mapped = render::color_list_spectrum(
+        selected_values, request.minimum, request.maximum, color_indices,
+        interpolation.value(), color_table_);
+    if (!mapped.has_value())
+      return R::failure(mapped.error());
+    result.minimum = mapped.value().range.minimum;
+    result.maximum = mapped.value().range.maximum;
+    for (std::size_t position = 0; position < selected.size(); ++position)
+      if (const auto color = mapped.value().colors[position]; color.has_value())
+        if (const auto error = add(selected[position], *color);
+            error.has_value())
+          return R::failure(*error);
+  }
+  result.affected_atom_count = updates.size();
+  if (const auto error = commit_atom_colors(*object, std::move(updates));
+      error.has_value())
+    return R::failure(*error);
+  result.colored_atom_count =
+      object->atom_colors == nullptr ? 0U : object->atom_colors->size();
+  result.representation_count = object->representations.size();
+  return R::success(std::move(result));
+}
+
+operation::Result<LabelResult>
+Workspace::label(std::string selection_expression, std::string_view expression,
+                 bool literal) {
+  using R = operation::Result<LabelResult>;
+  auto *object = mutable_active_object();
+  if (object == nullptr)
+    return R::failure(missing_active());
+  const auto mask = selection_mask(*object, selection_expression);
+  if (!mask.has_value())
+    return R::failure(mask.error());
+  std::optional<LabelExpression> program;
+  if (!literal) {
+    auto parsed = LabelExpression::parse(expression);
+    if (!parsed.has_value())
+      return R::failure(parsed.error());
+    program = std::move(parsed.value());
+  }
+  const auto frame_index = object->trajectory.has_value()
+                               ? object->trajectory->timeline.snapshot().frame
+                               : 0U;
+  const auto digits = render_settings_.resolve(
+      "label_digits", {object->id, frame_index, 0U, 0U});
+  if (!digits.has_value())
+    return R::failure(digits.error());
+  const auto &topology = *object->system->topology();
+  const auto label_frame = active_frame(*object);
+  if (!label_frame.has_value())
+    return R::failure(label_frame.error());
+  const LabelExpression::AtomContext context{
+      &topology, object->system->name(),
+      std::get<std::int64_t>(digits.value().value), label_frame.value().get()};
+  std::vector<std::pair<std::uint64_t, std::string>> updates;
+  for (std::size_t atom = 0; atom < mask.value().size(); ++atom) {
+    if (mask.value()[atom] == 0U)
+      continue;
+    const auto id = topology.atom_id(model::AtomIndex{atom});
+    if (!id.has_value())
+      return R::failure(invalid("topology atom identity is missing"));
+    std::string text{expression};
+    if (program.has_value()) {
+      auto evaluated = program->evaluate(context, atom);
+      if (!evaluated.has_value())
+        return R::failure(evaluated.error());
+      text = std::move(evaluated.value());
+    }
+    updates.emplace_back(id->value, std::move(text));
+  }
+  LabelResult result;
+  result.object_id = object->id;
+  result.affected_atom_count = updates.size();
+  if (!updates.empty())
+    result.first_text = updates.front().second;
+  std::sort(updates.begin(), updates.end());
+  auto merged =
+      std::make_shared<std::vector<std::pair<std::uint64_t, std::string>>>();
+  const auto &existing =
+      object->atom_labels != nullptr
+          ? *object->atom_labels
+          : std::vector<std::pair<std::uint64_t, std::string>>{};
+  auto left = existing.begin();
+  auto right = updates.begin();
+  while (left != existing.end() || right != updates.end()) {
+    std::pair<std::uint64_t, std::string> item;
+    if (right == updates.end() ||
+        (left != existing.end() && left->first < right->first)) {
+      item = *left++;
+    } else {
+      if (left != existing.end() && left->first == right->first)
+        ++left;
+      item = *right++;
+    }
+    if (!item.second.empty())
+      merged->push_back(std::move(item));
+  }
+  auto candidate = *object;
+  candidate.atom_labels =
+      merged->empty() ? nullptr
+                      : std::shared_ptr<const std::vector<
+                            std::pair<std::uint64_t, std::string>>>{merged};
+  if (const auto error = candidate.representation_visibility.apply(
+          render::RepresentationKind::labels, mask.value(),
+          RepresentationVisibilityMutation::show);
+      error.has_value())
+    return R::failure(*error);
+  const auto frame = active_frame(candidate);
+  if (!frame.has_value())
+    return R::failure(frame.error());
+  auto rebuilt =
+      rebuild_representations(candidate, candidate.system, *frame.value(),
+                              frame_index, render_settings_, color_table_);
+  if (!rebuilt.has_value())
+    return R::failure(rebuilt.error());
+  object->atom_labels = std::move(candidate.atom_labels);
+  object->representation_visibility =
+      std::move(candidate.representation_visibility);
+  object->representations = std::move(rebuilt.value());
+  result.labeled_atom_count =
+      object->atom_labels == nullptr ? 0U : object->atom_labels->size();
+  for (const auto &record : object->representations)
+    if (record.kind == render::RepresentationKind::labels)
+      result.visible_label_count = record.packet.labels.size();
+  return R::success(std::move(result));
+}
+
+AnalysisOverlayStyle Workspace::analysis_overlay_style() const {
+  const render::RenderSettingContext global{};
+  const auto setting = [&](std::string_view name) {
+    return render_settings_.resolve(name, global).value().value;
+  };
+  AnalysisOverlayStyle style;
+  style.dash_length = std::get<double>(setting("dash_length"));
+  style.dash_gap = std::get<double>(setting("dash_gap"));
+  style.dash_width = static_cast<float>(std::get<double>(setting("dash_width")));
+  style.angle_size = std::get<double>(setting("angle_size"));
+  style.dihedral_size = std::get<double>(setting("dihedral_size"));
+  if (const auto index =
+          color_table_.resolve(std::get<std::string>(setting("dash_color")));
+      index.has_value())
+    style.dash_color = color_table_.rgba(index.value(), 1.0F);
+  if (const auto *object = active_object(); object != nullptr) {
+    const auto frame = active_frame(*object);
+    if (frame.has_value() && frame.value()->metadata().coordinate_unit ==
+                                 operation::LengthUnit::nanometer)
+      style.units_per_angstrom = 0.1;
+  }
+  return style;
+}
+
+render::RenderPacket Workspace::analysis_overlay_packet() const {
+  return build_analysis_overlay_packet(analysis_results_.records(),
+                                       analysis_overlay_style());
+}
+
+operation::Result<ImageSaveResult>
+Workspace::save_image(const ImageSaveRequest &request) const {
+  using R = operation::Result<ImageSaveResult>;
+  if (!camera_.has_value() || objects_.empty())
+    return R::failure(operation::Error{
+        operation::ErrorCode::not_found, "no scene is available to render",
+        "load a structure before saving an image"});
+  if (request.path.empty())
+    return R::failure(invalid("image path must not be empty"));
+  if (request.dpi.has_value() &&
+      (!std::isfinite(*request.dpi) || *request.dpi <= 0.0))
+    return R::failure(invalid("image dpi must be positive"));
+  constexpr std::size_t kMaximumEdge = 8192U;
+  auto parameters = camera_->parameters();
+  const auto width = request.width == 0U ? std::size_t{640U} : request.width;
+  const auto height =
+      request.height != 0U
+          ? request.height
+          : std::max<std::size_t>(
+                1U, static_cast<std::size_t>(std::lround(
+                        static_cast<double>(width) /
+                        std::max(1.0e-6, parameters.aspect_ratio))));
+  if (width > kMaximumEdge || height > kMaximumEdge)
+    return R::failure(operation::Error{
+        operation::ErrorCode::resource_exhausted,
+        "image dimensions exceed the 8192 pixel limit", {}});
+  parameters.aspect_ratio =
+      static_cast<double>(width) / static_cast<double>(height);
+  const auto camera = scene::Camera::create(parameters);
+  if (!camera.has_value())
+    return R::failure(camera.error());
+
+  render::RenderPacket scene;
+  const auto append = [&scene](const render::RenderPacket &packet) {
+    const auto base = static_cast<std::uint32_t>(scene.mesh_vertices.size());
+    scene.lines.insert(scene.lines.end(), packet.lines.begin(), packet.lines.end());
+    scene.cylinders.insert(scene.cylinders.end(), packet.cylinders.begin(),
+                           packet.cylinders.end());
+    scene.spheres.insert(scene.spheres.end(), packet.spheres.begin(),
+                         packet.spheres.end());
+    scene.labels.insert(scene.labels.end(), packet.labels.begin(),
+                        packet.labels.end());
+    scene.mesh_vertices.insert(scene.mesh_vertices.end(),
+                               packet.mesh_vertices.begin(),
+                               packet.mesh_vertices.end());
+    for (auto triangle : packet.mesh_triangles) {
+      triangle.first += base;
+      triangle.second += base;
+      triangle.third += base;
+      scene.mesh_triangles.push_back(triangle);
+    }
+  };
+  for (const auto &info : list_objects()) {
+    if (!info.effectively_visible)
+      continue;
+    const auto found = std::ranges::find(objects_, info.id, &WorkspaceObject::id);
+    if (found == objects_.end())
+      continue;
+    for (const auto &record : found->representations)
+      append(record.packet);
+    if (found->molecular_surface.has_value())
+      append(*found->molecular_surface);
+  }
+  for (const auto &volume : volumes_) {
+    if (!scene_->effectively_visible(volume.scene_node))
+      continue;
+    for (const auto &packet : volume.representations)
+      append(packet);
+    for (const auto &contour : volume.contours)
+      append(contour.packet);
+  }
+  const render::RenderSettingContext global{};
+  const auto setting = [&](std::string_view name) {
+    return render_settings_.resolve(name, global).value().value;
+  };
+  append(analysis_overlay_packet());
+  const auto opaque = std::get<bool>(setting("opaque_background"));
+  const auto ray_opaque = std::get<std::int64_t>(setting("ray_opaque_background"));
+  const auto effective_opaque =
+      request.ray && ray_opaque >= 0 ? ray_opaque != 0 : opaque;
+  const auto light =
+      std::get<render::RenderSettingVector3>(setting("light"));
+  render::ReferenceRenderSettings settings;
+  settings.width = width;
+  settings.height = height;
+  const auto background = color_table_.background_rgb();
+  settings.background = {background.red, background.green, background.blue,
+                         effective_opaque ? 1.0F : 0.0F};
+  settings.ambient_light =
+      std::clamp(std::get<double>(setting("ambient")), 0.0, 1.0);
+  settings.light_direction = {-light[0], -light[1], -light[2]};
+  auto image = render::render_reference(scene, camera.value(), settings);
+  if (!image.has_value())
+    return R::failure(image.error());
+  if (const auto error = render::write_png_atomic(request.path, image.value(),
+                                                  request.dpi);
+      error.has_value())
+    return R::failure(*error);
+
+  ImageSaveResult result;
+  result.path = request.path;
+  result.width = width;
+  result.height = height;
+  std::error_code size_error;
+  result.bytes = static_cast<std::size_t>(
+      std::filesystem::file_size(request.path, size_error));
+  result.renderer = "molshredder-reference-raycast";
+  result.opaque_background = effective_opaque;
+  result.primitive_count = scene.lines.size() + scene.cylinders.size() +
+                           scene.spheres.size() + scene.mesh_triangles.size();
+  result.warnings.push_back(
+      request.ray
+          ? "PyMOL ray tracing is approximated by the reference ray caster"
+          : "PyMOL OpenGL draw is approximated by the reference ray caster");
+  if (const auto renderer = std::get<std::int64_t>(setting("ray_default_renderer"));
+      request.ray && renderer != 0)
+    result.warnings.push_back("ray_default_renderer " + std::to_string(renderer) +
+                              " is not available; the reference ray caster was used");
+  if (!scene.labels.empty())
+    result.warnings.push_back(std::to_string(scene.labels.size()) +
+                              " text labels are not rasterized");
+  return R::success(std::move(result));
+}
+
+operation::Result<CartoonTypeResult>
+Workspace::set_cartoon_type(std::string_view type,
+                            std::string selection_expression) {
+  using R = operation::Result<CartoonTypeResult>;
+  auto *object = mutable_active_object();
+  if (object == nullptr)
+    return R::failure(missing_active());
+  const render::CartoonTypeName *match = nullptr;
+  std::size_t prefix_matches{};
+  for (const auto &candidate : render::kCartoonTypes) {
+    if (candidate.name == type) {
+      match = &candidate;
+      prefix_matches = 1U;
+      break;
+    }
+    if (!type.empty() && candidate.name.starts_with(type)) {
+      match = &candidate;
+      ++prefix_matches;
+    }
+  }
+  if (match == nullptr || prefix_matches != 1U)
+    return R::failure(operation::Error{
+        operation::ErrorCode::invalid_argument,
+        "unknown type: '" + std::string{type} + "'",
+        "choices: arrow cylinder dumbbell oval rectangle tube automatic dash "
+        "loop putty skip"});
+  const auto mask = selection_mask(*object, selection_expression);
+  if (!mask.has_value())
+    return R::failure(mask.error());
+  const auto &topology = *object->system->topology();
+  std::map<std::uint64_t, std::int32_t> types;
+  if (object->cartoon_types != nullptr)
+    types.insert(object->cartoon_types->begin(), object->cartoon_types->end());
+  std::size_t affected{};
+  for (std::size_t atom = 0; atom < mask.value().size(); ++atom) {
+    if (mask.value()[atom] == 0U)
+      continue;
+    const auto id = topology.atom_id(model::AtomIndex{atom});
+    if (!id.has_value())
+      return R::failure(invalid("topology atom identity is missing"));
+    ++affected;
+    if (match->code == 0)
+      types.erase(id->value);
+    else
+      types[id->value] = match->code;
+  }
+  auto candidate = *object;
+  candidate.cartoon_types =
+      types.empty()
+          ? nullptr
+          : std::make_shared<const std::vector<std::pair<std::uint64_t, std::int32_t>>>(
+                types.begin(), types.end());
+  const auto frame = active_frame(candidate);
+  if (!frame.has_value())
+    return R::failure(frame.error());
+  const auto frame_index = candidate.trajectory.has_value()
+                               ? candidate.trajectory->timeline.snapshot().frame
+                               : 0U;
+  auto rebuilt =
+      rebuild_representations(candidate, candidate.system, *frame.value(),
+                              frame_index, render_settings_, color_table_);
+  if (!rebuilt.has_value())
+    return R::failure(rebuilt.error());
+  object->cartoon_types = std::move(candidate.cartoon_types);
+  object->representations = std::move(rebuilt.value());
+  return R::success({object->id, std::string{match->name}, match->code,
+                     affected, object->representations.size()});
+}
+
+operation::Result<ContourResult>
+Workspace::create_contour(const ContourRequest &request,
+                          operation::TaskContext &context) {
+  using R = operation::Result<ContourResult>;
+  if (request.name.empty())
+    return R::failure(invalid("contour name must not be empty"));
+  if (!std::isfinite(request.level) || !std::isfinite(request.carve) ||
+      !std::isfinite(request.buffer) || request.carve < 0.0 ||
+      request.buffer < 0.0)
+    return R::failure(invalid("contour level, carve and buffer must be finite "
+                              "(carve and buffer non-negative)"));
+  WorkspaceVolume *volume = nullptr;
+  for (auto &candidate : volumes_)
+    if ((request.map == "current" && active_volume() == &candidate) ||
+        candidate.name == request.map ||
+        std::to_string(candidate.id) == request.map)
+      volume = &candidate;
+  if (volume == nullptr)
+    return R::failure(operation::Error{
+        operation::ErrorCode::not_found,
+        "Map object \"" + request.map + "\" not found",
+        "load a volume map and pass its name with --map"});
+  for (const auto &other : volumes_)
+    for (const auto &contour : other.contours)
+      if (contour.name == request.name && contour.mode != request.mode)
+        return R::failure(operation::Error{
+            operation::ErrorCode::invalid_argument,
+            "Object name " + request.name +
+                " already exists as another type. Cannot overwrite.",
+            "choose another contour name"});
+  ContourRecord record;
+  record.name = request.name;
+  record.mode = request.mode;
+  record.level = static_cast<float>(request.level);
+  if (request.color == "default") {
+    record.color = render::kColorDefault;
+  } else {
+    const auto color = color_table_.resolve_assignment(request.color);
+    if (!color.has_value())
+      return R::failure(color.error());
+    record.color = color.value();
+  }
+  record.extent = grid_extent(*volume->grid);
+  if (!request.selection.empty()) {
+    const auto *object = active_object();
+    if (object == nullptr)
+      return R::failure(missing_active());
+    const auto mask = selection_mask(*object, request.selection);
+    if (!mask.has_value())
+      return R::failure(mask.error());
+    const auto frame = active_frame(*object);
+    if (!frame.has_value())
+      return R::failure(frame.error());
+    render::Bounds3d region;
+    for (std::size_t atom = 0; atom < mask.value().size(); ++atom) {
+      if (mask.value()[atom] == 0U || !frame.value()->atom_present(atom))
+        continue;
+      const auto point = std::visit(
+          [atom](const auto &values) {
+            return model::Vec3d{static_cast<double>(values[atom].x),
+                                static_cast<double>(values[atom].y),
+                                static_cast<double>(values[atom].z)};
+          },
+          frame.value()->positions().values());
+      record.region_atoms.push_back(point);
+      render::include(region, point);
+    }
+    if (record.region_atoms.empty())
+      return R::failure(operation::Error{operation::ErrorCode::invalid_selection,
+                                         "contour selection selects no atoms", {}});
+    const auto pad = request.carve > 0.0 ? request.carve : request.buffer;
+    record.carve = request.carve;
+    record.buffer = request.carve > 0.0 ? 0.0 : request.buffer;
+    record.extent = {{region.minimum.x - pad, region.minimum.y - pad, region.minimum.z - pad},
+                     {region.maximum.x + pad, region.maximum.y + pad, region.maximum.z + pad},
+                     false};
+  }
+  auto packet = build_contour_packet(*volume, record, color_table_, context);
+  if (!packet.has_value())
+    return R::failure(packet.error());
+  record.packet = std::move(packet.value());
+  ContourResult result{volume->id, record.name, record.mode,
+                       static_cast<double>(record.level), false,
+                       record.packet.lines.size() + record.packet.spheres.size() +
+                           record.packet.mesh_triangles.size(),
+                       record.extent,
+                       {}};
+  if (const auto algorithm =
+          render_settings_.resolve("isosurface_algorithm", render::RenderSettingContext{});
+      algorithm.has_value()) {
+    if (const auto *code = std::get_if<std::int64_t>(&algorithm.value().value);
+        code != nullptr && *code != 0)
+      result.warnings.push_back(
+          "isosurface_algorithm " + std::to_string(*code) +
+          " is not implemented; the contour uses MolShredder marching tetrahedra");
+  }
+  for (auto &other : volumes_)
+    std::erase_if(other.contours, [&](const auto &contour) {
+      if (contour.name != record.name)
+        return false;
+      result.replaced = true;
+      return true;
+    });
+  volume->contours.push_back(std::move(record));
+  ++volume->presentation_revision;
+  return R::success(std::move(result));
+}
+
+operation::Result<ContourResult>
+Workspace::contour_level(std::string_view name, std::optional<double> level,
+                         operation::TaskContext &context) {
+  using R = operation::Result<ContourResult>;
+  for (auto &volume : volumes_)
+    for (auto &contour : volume.contours) {
+      if (contour.name != name)
+        continue;
+      if (level.has_value()) {
+        if (!std::isfinite(*level))
+          return R::failure(invalid("contour level must be finite"));
+        auto candidate = contour;
+        candidate.level = static_cast<float>(*level);
+        auto packet = build_contour_packet(volume, candidate, color_table_, context);
+        if (!packet.has_value())
+          return R::failure(packet.error());
+        candidate.packet = std::move(packet.value());
+        contour = std::move(candidate);
+        ++volume.presentation_revision;
+      }
+      return R::success({volume.id, contour.name, contour.mode,
+                         static_cast<double>(contour.level), false,
+                         contour.packet.lines.size() + contour.packet.spheres.size() +
+                             contour.packet.mesh_triangles.size(),
+                         contour.extent, {}});
+    }
+  return R::failure(operation::Error{operation::ErrorCode::not_found,
+                                     "Object not found", "use a contour name"});
+}
+
+namespace {
+
+operation::Result<std::vector<float>> parse_ramp_levels(std::string_view text) {
+  using R = operation::Result<std::vector<float>>;
+  std::string normalized{text};
+  for (auto &item : normalized)
+    if (item == '[' || item == ']' || item == ',')
+      item = ' ';
+  std::istringstream stream{normalized};
+  std::vector<float> levels;
+  for (std::string token; stream >> token;) {
+    double value{};
+    const auto parsed = core::from_chars(token.data(), token.data() + token.size(), value);
+    if (parsed.ec != std::errc{} || parsed.ptr != token.data() + token.size() ||
+        !std::isfinite(value))
+      return R::failure(operation::Error{operation::ErrorCode::invalid_argument,
+                                         "invalid range", "use numeric levels"});
+    levels.push_back(static_cast<float>(value));
+  }
+  if (levels.empty())
+    return R::failure(operation::Error{operation::ErrorCode::invalid_argument,
+                                       "invalid range", "use numeric levels"});
+  return R::success(std::move(levels));
+}
+
+struct RampColors {
+  std::vector<render::ColorRgb> colors;
+  int spectrum{};
+};
+
+operation::Result<RampColors> parse_ramp_colors(std::string_view text,
+                                                const render::ColorTable &table) {
+  using R = operation::Result<RampColors>;
+  static constexpr std::array<std::string_view, 8> spectra{
+      "traditional", "sludge", "ocean", "hot", "grayable", "rainbow", "afmhot",
+      "grayscale"};
+  std::string normalized{text};
+  const auto looks_like_list = normalized.find_first_of("[, ") != std::string::npos;
+  for (auto &item : normalized)
+    if (item == '[' || item == ']' || item == ',')
+      item = ' ';
+  std::istringstream stream{normalized};
+  std::vector<std::string> tokens;
+  for (std::string token; stream >> token;)
+    tokens.push_back(token);
+  RampColors result;
+  if (!looks_like_list && tokens.size() == 1U) {
+    std::size_t matches{};
+    for (std::size_t index = 0; index < spectra.size(); ++index)
+      if (spectra[index] == tokens.front()) {
+        result.spectrum = static_cast<int>(index) + 1;
+        matches = 1U;
+        break;
+      } else if (spectra[index].starts_with(tokens.front())) {
+        result.spectrum = static_cast<int>(index) + 1;
+        ++matches;
+      }
+    if (matches != 1U)
+      return R::failure(operation::Error{
+          operation::ErrorCode::invalid_argument,
+          "unknown ramp color spectrum: '" + tokens.front() + "'",
+          "choices: afmhot grayscale rainbow traditional grayable hot ocean "
+          "sludge, or a color list"});
+    return R::success(std::move(result));
+  }
+  for (const auto &token : tokens) {
+    const auto index = table.resolve(token);
+    const auto rgb = index.has_value() ? table.rgb(index.value()) : std::nullopt;
+    if (!rgb.has_value())
+      return R::failure(operation::Error{operation::ErrorCode::invalid_argument,
+                                         "unknown ramp color: " + token,
+                                         "special ramp colors are not supported"});
+    result.colors.push_back(*rgb);
+  }
+  if (result.colors.empty())
+    return R::failure(invalid("ramp colors must not be empty"));
+  return R::success(std::move(result));
+}
+
+// Proximity ramp source atoms: PyMOL measures against state 1 of the source
+// regardless of the current frame, using its current coordinates.
+operation::Result<std::vector<model::Vec3d>>
+ramp_source_atoms(const WorkspaceObject &object) {
+  using R = operation::Result<std::vector<model::Vec3d>>;
+  const auto frame = object.system->coordinates()->read_frame(0U);
+  if (!frame.has_value())
+    return R::failure(frame.error());
+  std::vector<model::Vec3d> atoms;
+  for (std::size_t atom = 0; atom < frame.value()->atom_count(); ++atom) {
+    if (!frame.value()->atom_present(atom))
+      continue;
+    atoms.push_back(std::visit(
+        [atom](const auto &values) {
+          return model::Vec3d{static_cast<double>(values[atom].x),
+                              static_cast<double>(values[atom].y),
+                              static_cast<double>(values[atom].z)};
+        },
+        frame.value()->positions().values()));
+  }
+  return R::success(std::move(atoms));
+}
+
+} // namespace
+
+void Workspace::refresh_proximity_ramps(std::uint64_t object_id) {
+  const auto object = std::find_if(
+      objects_.begin(), objects_.end(),
+      [object_id](const auto &item) { return item.id == object_id; });
+  if (object == objects_.end())
+    return;
+  auto candidate = color_table_;
+  bool changed = false;
+  for (auto code = render::kColorRampFirst; color_table_.ramp(code) != nullptr;
+       --code) {
+    auto ramp = *color_table_.ramp(code);
+    if (ramp.source_object != object_id)
+      continue;
+    auto atoms = ramp_source_atoms(*object);
+    if (!atoms.has_value() || atoms.value() == ramp.atoms)
+      continue;
+    ramp.atoms = std::move(atoms.value());
+    static_cast<void>(candidate.define_ramp(std::move(ramp)));
+    changed = true;
+  }
+  // The coordinate edit is already committed; a failed recolor keeps the
+  // previous ramp atoms rather than undoing the edit.
+  if (changed)
+    static_cast<void>(commit_color_table(std::move(candidate)));
+}
+
+operation::Result<RampResult>
+Workspace::define_ramp(std::string name, std::string_view source,
+                       std::string_view range, std::string_view colors) {
+  using R = operation::Result<RampResult>;
+  if (name.empty())
+    return R::failure(invalid("ramp name must not be empty"));
+  render::ColorRamp ramp;
+  ramp.name = name;
+  std::string kind;
+  for (const auto &volume : volumes_)
+    if (volume.name == source || std::to_string(volume.id) == source) {
+      ramp.map = volume.grid;
+      kind = "map";
+    }
+  if (ramp.map == nullptr) {
+    for (const auto &object : objects_) {
+      if (object.system->name() != source && std::to_string(object.id) != source)
+        continue;
+      auto atoms = ramp_source_atoms(object);
+      if (!atoms.has_value())
+        return R::failure(atoms.error());
+      ramp.atoms = std::move(atoms.value());
+      ramp.source_object = object.id;
+      kind = "molecule";
+    }
+  }
+  if (kind.empty())
+    return R::failure(operation::Error{operation::ErrorCode::not_found,
+                                       std::string{source} + " not found.",
+                                       "use a loaded map or molecular object"});
+  auto levels = parse_ramp_levels(range.empty() ? std::string_view{"-1 0 1"} : range);
+  if (!levels.has_value())
+    return R::failure(levels.error());
+  auto parsed = parse_ramp_colors(colors.empty() ? std::string_view{"red white blue"}
+                                                 : colors,
+                                  color_table_);
+  if (!parsed.has_value())
+    return R::failure(parsed.error());
+  ramp.levels = std::move(levels.value());
+  ramp.colors = std::move(parsed.value().colors);
+  ramp.spectrum = parsed.value().spectrum;
+  auto candidate = color_table_;
+  const auto existed = candidate.ramp_code(name).has_value();
+  RampResult result{name, 0, kind, {}, ramp.colors.size(), ramp.spectrum, existed};
+  for (const auto level : ramp.levels)
+    result.levels.push_back(static_cast<double>(level));
+  result.color_index = candidate.define_ramp(std::move(ramp));
+  if (const auto error = commit_color_table(std::move(candidate)); error.has_value())
+    return R::failure(*error);
+  return R::success(std::move(result));
+}
+
+operation::Result<RampResult>
+Workspace::update_ramp(std::string_view name, std::string_view range,
+                       std::string_view colors) {
+  using R = operation::Result<RampResult>;
+  const auto code = color_table_.ramp_code(name);
+  if (!code.has_value())
+    return R::failure(operation::Error{
+        operation::ErrorCode::not_found,
+        "Missing 'range' or 'color' to create new ramp.",
+        "create the ramp with ramp new first"});
+  auto ramp = *color_table_.ramp(*code);
+  if (!range.empty()) {
+    auto levels = parse_ramp_levels(range);
+    if (!levels.has_value())
+      return R::failure(levels.error());
+    ramp.levels = std::move(levels.value());
+  }
+  if (!colors.empty()) {
+    auto parsed = parse_ramp_colors(colors, color_table_);
+    if (!parsed.has_value())
+      return R::failure(parsed.error());
+    ramp.colors = std::move(parsed.value().colors);
+    ramp.spectrum = parsed.value().spectrum;
+  }
+  RampResult result{ramp.name, *code, ramp.map != nullptr ? "map" : "molecule",
+                    {}, ramp.colors.size(), ramp.spectrum, true};
+  for (const auto level : ramp.levels)
+    result.levels.push_back(static_cast<double>(level));
+  auto candidate = color_table_;
+  static_cast<void>(candidate.define_ramp(std::move(ramp)));
+  if (const auto error = commit_color_table(std::move(candidate)); error.has_value())
+    return R::failure(*error);
+  return R::success(std::move(result));
+}
+
+operation::Result<BackgroundResult>
+Workspace::set_background(std::string_view color) {
+  using R = operation::Result<BackgroundResult>;
+  std::optional<std::int32_t> index;
+  const auto lowered_default =
+      color.size() == 7U &&
+      std::equal(color.begin(), color.end(), "default",
+                 [](char left, char right) {
+                   return std::tolower(static_cast<unsigned char>(left)) == right;
+                 });
+  if (!lowered_default) {
+    const auto resolved = color_table_.resolve_assignment(color);
+    if (!resolved.has_value())
+      return R::failure(resolved.error());
+    if (!color_table_.rgb(resolved.value()).has_value())
+      return R::failure(operation::Error{
+          operation::ErrorCode::invalid_argument,
+          "background color must resolve to an RGB color: " + std::string{color},
+          "use a color name, index, 0xRRGGBB, #RRGGBB or default"});
+    index = resolved.value();
+  }
+  auto candidate = color_table_;
+  if (const auto error = candidate.set_background(index); error.has_value())
+    return R::failure(invalid(*error));
+  if (const auto error = commit_color_table(std::move(candidate));
+      error.has_value())
+    return R::failure(*error);
+  return R::success(background());
+}
+
+BackgroundResult Workspace::background() const {
+  const auto index = color_table_.background();
+  return {index,
+          index.has_value() ? color_table_.name(*index).value_or("")
+                            : std::string{"default"},
+          color_table_.background_rgb()};
+}
+
+std::optional<operation::Error>
+Workspace::commit_color_table(render::ColorTable candidate) {
+  std::vector<std::vector<RepresentationRecord>> rebuilt;
+  rebuilt.reserve(objects_.size());
+  for (const auto &object : objects_) {
+    const auto frame = active_frame(object);
+    if (!frame.has_value())
+      return frame.error();
+    const auto frame_index = object.trajectory.has_value()
+                                 ? object.trajectory->timeline.snapshot().frame
+                                 : 0U;
+    auto records =
+        rebuild_representations(object, object.system, *frame.value(),
+                                frame_index, render_settings_, candidate);
+    if (!records.has_value())
+      return records.error();
+    rebuilt.push_back(std::move(records.value()));
+  }
+  color_table_ = std::move(candidate);
   for (std::size_t index = 0; index < objects_.size(); ++index)
     objects_[index].representations = std::move(rebuilt[index]);
   return std::nullopt;
@@ -2335,7 +3559,8 @@ operation::Result<BatchLoadResult> Workspace::load_structure_documents(
         object_id, node.value(), system.value(), 1U, 1U, {},
         RepresentationVisibilityState::create(data.topology->atom_count())
             .value(),
-        {}, std::move(embedded_trajectory), std::nullopt});
+        {}, std::move(embedded_trajectory), std::nullopt,
+        render::kColorDefault, nullptr, nullptr, nullptr});
     loaded_objects.push_back(LoadedObjectResult{
         object_id, candidate.name, data.topology->atom_count(),
         data.coordinates->frame_count().value_or(0U), candidate.record_index});
@@ -2360,9 +3585,55 @@ operation::Result<BatchLoadResult> Workspace::load_structure_documents(
         operation::ErrorCode::cancelled,
         "structure batch cancelled before commit", {}});
   }
+  // Object colors come from the auto cycle. With auto_color on (Q-022 b),
+  // atoms also get PyMOL load colors: carbon = object color, other elements
+  // = element color; representations are rebuilt before anything commits.
+  const auto cycle = render::ColorTable::auto_cycle();
+  auto cursor = auto_color_cursor_;
+  const auto pymol_load_colors = render_settings_.resolve(
+      "auto_color", render::RenderSettingContext{});
+  const auto *pymol_load_flag =
+      pymol_load_colors.has_value()
+          ? std::get_if<bool>(&pymol_load_colors.value().value)
+          : nullptr;
+  for (auto &pending : pending_objects) {
+    pending.object_color = cycle[cursor % cycle.size()];
+    cursor = (cursor + 1U) % cycle.size();
+    if (pymol_load_flag == nullptr || !*pymol_load_flag)
+      continue;
+    const auto &topology = *pending.system->topology();
+    std::vector<std::pair<std::uint64_t, std::int32_t>> colors;
+    colors.reserve(topology.atom_count());
+    for (std::size_t atom = 0; atom < topology.atom_count(); ++atom) {
+      const auto id = topology.atom_id(model::AtomIndex{atom});
+      if (!id.has_value())
+        return operation::Result<BatchLoadResult>::failure(
+            invalid("topology atom identity is missing"));
+      const auto element = topology.atoms()[atom].atomic_number;
+      const auto color = element == 6U
+                             ? pending.object_color
+                             : render::ColorTable::element_color(element);
+      // Unknown elements get index 0 like PyMOL.
+      colors.emplace_back(id->value, color);
+    }
+    std::sort(colors.begin(), colors.end());
+    pending.atom_colors =
+        std::make_shared<const std::vector<std::pair<std::uint64_t, std::int32_t>>>(
+            std::move(colors));
+    const auto frame = active_frame(pending);
+    if (!frame.has_value())
+      return operation::Result<BatchLoadResult>::failure(frame.error());
+    auto rebuilt = rebuild_representations(pending, pending.system,
+                                           *frame.value(), 0U, render_settings_,
+                                           color_table_);
+    if (!rebuilt.has_value())
+      return operation::Result<BatchLoadResult>::failure(rebuilt.error());
+    pending.representations = std::move(rebuilt.value());
+  }
   // Reserve before publishing either the object vector or scene. Candidate
   // creation and every potentially allocating validation step completed above.
   objects_.reserve(objects_.size() + pending_objects.size());
+  auto_color_cursor_ = cursor;
   objects_.insert(objects_.end(),
                   std::make_move_iterator(pending_objects.begin()),
                   std::make_move_iterator(pending_objects.end()));
@@ -2391,15 +3662,21 @@ Workspace::load_volume(const std::filesystem::path &path,
   options.format = format;
   options.coordinate_unit = coordinate_unit;
   options.name = name;
-  const auto document = io::read_volume_file(path, std::move(options));
+  auto document = io::read_volume_file(path, std::move(options));
   if (!document.has_value()) {
     return operation::Result<VolumeLoadResult>::failure(document.error());
   }
-  if (document.value().volumes.size() != 1U) {
+  return load_volume_document(std::move(document.value()), path);
+}
+
+operation::Result<VolumeLoadResult>
+Workspace::load_volume_document(io::VolumeDocument document,
+                                const std::filesystem::path &path) {
+  if (document.volumes.size() != 1U) {
     return operation::Result<VolumeLoadResult>::failure(
         invalid("volume import requires exactly one scalar field"));
   }
-  const auto &data = document.value().volumes.front();
+  const auto &data = document.volumes.front();
   const auto duplicate_molecule =
       std::any_of(objects_.begin(), objects_.end(), [&](const auto &object) {
         return object.system->name() == data.name;
@@ -2435,18 +3712,19 @@ Workspace::load_volume(const std::filesystem::path &path,
                                      node.value(),
                                      data.name,
                                      path,
-                                     document.value().format,
+                                     document.format,
                                      data.grid,
                                      1U,
                                      {},
                                      std::nullopt,
                                      {},
-                                     nullptr});
+                                     nullptr,
+                                     {}});
   active_volume_index_ = volumes_.size() - 1U;
   scene_ = next_scene.value();
   const auto [minimum, maximum] = data.grid->scalars().range();
   return operation::Result<VolumeLoadResult>::success(VolumeLoadResult{
-      object_id, data.name, document.value().format, data.grid->shape(),
+      object_id, data.name, document.format, data.grid->shape(),
       data.grid->value_count(), data.grid->scalars().precision(),
       data.grid->origin(), data.grid->deltas(), minimum, maximum,
       data.grid->metadata().coordinate_unit});
@@ -2737,12 +4015,35 @@ operation::Result<MolecularSurfaceResult> Workspace::show_molecular_surface(
   const auto frame = active_frame(*object);
   if (!frame.has_value())
     return operation::Result<MolecularSurfaceResult>::failure(frame.error());
-  const auto visuals = atom_visuals(*object->system->topology());
+  auto visuals = atom_visuals(*object->system->topology());
   if (!visuals.has_value())
     return operation::Result<MolecularSurfaceResult>::failure(visuals.error());
+  apply_atom_colors(visuals.value(), *object, *object->system->topology(),
+                    color_table_, frame.value().get());
   const auto frame_index = object->trajectory.has_value()
                                ? object->trajectory->timeline.snapshot().frame
                                : 0U;
+  // Object-level PyMOL surface settings: transparency scales the requested
+  // opacity and an explicit surface_color replaces the requested color.
+  {
+    const render::RenderSettingContext object_context{object->id, frame_index,
+                                                      0U, 0U};
+    const auto transparency =
+        render_settings_.resolve("transparency", object_context);
+    const auto surface_color =
+        render_settings_.resolve("surface_color", object_context);
+    if (transparency.has_value())
+      style.color.alpha = static_cast<float>(
+          static_cast<double>(style.color.alpha) *
+          std::clamp(1.0 - std::get<double>(transparency.value().value), 0.0, 1.0));
+    if (surface_color.has_value() && surface_color.value().source_scope.has_value()) {
+      const auto index =
+          color_table_.resolve(std::get<std::string>(surface_color.value().value));
+      if (index.has_value())
+        if (const auto rgb = color_table_.rgb(index.value()); rgb.has_value())
+          style.color = {rgb->red, rgb->green, rgb->blue, style.color.alpha};
+    }
+  }
   const render::MolecularSurfaceRequest request{
       object->system->topology().get(), frame.value().get(), frame_index,
       object->scene_node.value, visuals.value(), mask.value(), style, &context};
@@ -2892,11 +4193,164 @@ std::optional<operation::Error> Workspace::set_render_setting(
   if (const auto error = validate_render_setting_target(objects_, scope);
       error.has_value())
     return error;
+  if (const auto error = validate_setting_color(value, color_table_);
+      error.has_value())
+    return error;
   auto candidate = render_settings_;
   if (const auto error = candidate.set(name, scope, std::move(value));
       error.has_value())
     return error;
   return commit_render_settings(std::move(candidate));
+}
+
+operation::Result<SelectionSnapshot>
+Workspace::selection_snapshot(std::string_view selection_expression,
+                              std::size_t max_atoms) const {
+  using R = operation::Result<SelectionSnapshot>;
+  const auto *object = active_object();
+  if (object == nullptr) return R::failure(missing_active());
+  const auto mask = selection_mask(*object, selection_expression);
+  if (!mask.has_value()) return R::failure(mask.error());
+  const auto frame = active_frame(*object);
+  if (!frame.has_value()) return R::failure(frame.error());
+  const auto &topology = *object->system->topology();
+  const auto &presence = frame.value()->presence();
+  SelectionSnapshot snapshot;
+  snapshot.object_id = object->id;
+  snapshot.object_name = object->system->name();
+  snapshot.coordinate_unit = frame.value()->metadata().coordinate_unit;
+  snapshot.frame_index =
+      object->trajectory.has_value() ? object->trajectory->timeline.snapshot().frame : 0U;
+  for (std::size_t atom = 0; atom < mask.value().size(); ++atom) {
+    if (mask.value()[atom] == 0U) continue;
+    if (!presence.empty() && !frame.value()->atom_present(atom)) continue;
+    if (snapshot.atom_ids.size() >= max_atoms) {
+      return R::failure(invalid("the selection has more than " + std::to_string(max_atoms) +
+                                " atoms",
+                                "narrow the selection"));
+    }
+    const auto id = topology.atom_id(model::AtomIndex{atom});
+    if (!id.has_value()) return R::failure(invalid("topology atom identity is missing"));
+    snapshot.atom_ids.push_back(id->value);
+    snapshot.atom_names.push_back(topology.atoms()[atom].name);
+    snapshot.atomic_numbers.push_back(topology.atoms()[atom].atomic_number);
+    snapshot.positions.push_back(std::visit(
+        [atom](const auto &values) {
+          const auto &point = values[atom];
+          return model::Vec3d{static_cast<double>(point.x), static_cast<double>(point.y),
+                              static_cast<double>(point.z)};
+        },
+        frame.value()->positions().values()));
+  }
+  return R::success(std::move(snapshot));
+}
+
+operation::Result<std::vector<std::uint64_t>>
+Workspace::selected_atom_ids(std::uint64_t object_id,
+                             std::string_view selection_expression) const {
+  using R = operation::Result<std::vector<std::uint64_t>>;
+  const auto object = std::find_if(
+      objects_.begin(), objects_.end(),
+      [object_id](const auto &item) { return item.id == object_id; });
+  if (object == objects_.end())
+    return R::failure(operation::Error{operation::ErrorCode::not_found,
+                                       "render setting object was not found",
+                                       {}});
+  const auto mask = selection_mask(*object, selection_expression);
+  if (!mask.has_value())
+    return R::failure(mask.error());
+  const auto &topology = *object->system->topology();
+  std::vector<std::uint64_t> ids;
+  for (std::size_t atom = 0; atom < mask.value().size(); ++atom) {
+    if (mask.value()[atom] == 0U)
+      continue;
+    const auto id = topology.atom_id(model::AtomIndex{atom});
+    if (!id.has_value())
+      return R::failure(invalid("topology atom identity is missing"));
+    ids.push_back(id->value);
+  }
+  return R::success(std::move(ids));
+}
+
+operation::Result<std::vector<std::uint64_t>>
+Workspace::selected_bond_ids(std::uint64_t object_id,
+                             const std::vector<std::uint64_t> &atom_ids) const {
+  using R = operation::Result<std::vector<std::uint64_t>>;
+  const auto object = std::find_if(
+      objects_.begin(), objects_.end(),
+      [object_id](const auto &item) { return item.id == object_id; });
+  if (object == objects_.end())
+    return R::failure(operation::Error{operation::ErrorCode::not_found,
+                                       "render setting object was not found",
+                                       {}});
+  const auto &topology = *object->system->topology();
+  auto sorted = atom_ids;
+  std::sort(sorted.begin(), sorted.end());
+  std::vector<std::uint64_t> bonds;
+  for (std::size_t index = 0; index < topology.bonds().size(); ++index) {
+    const auto &bond = topology.bonds()[index];
+    const auto first = topology.atom_id(bond.first);
+    const auto second = topology.atom_id(bond.second);
+    const auto id = topology.bond_id(index);
+    if (!first.has_value() || !second.has_value() || !id.has_value())
+      return R::failure(invalid("topology atom or bond identity is missing"));
+    if (std::binary_search(sorted.begin(), sorted.end(), first->value) &&
+        std::binary_search(sorted.begin(), sorted.end(), second->value))
+      bonds.push_back(id->value);
+  }
+  return R::success(std::move(bonds));
+}
+
+operation::Result<std::size_t> Workspace::set_render_setting_selection(
+    std::string_view name, const render::RenderSettingScope &scope,
+    std::string_view selection_expression,
+    std::optional<render::RenderSettingValue> value) {
+  using R = operation::Result<std::size_t>;
+  const auto bond_level = scope.level == render::RenderSettingScopeLevel::bond;
+  if (scope.level != render::RenderSettingScopeLevel::atom && !bond_level)
+    return R::failure(
+        invalid("--selection applies to the atom and bond render setting scopes"));
+  auto ids = selected_atom_ids(scope.object_id, selection_expression);
+  if (!ids.has_value())
+    return R::failure(ids.error());
+  if (bond_level) {
+    // Bond scope covers bonds whose two atoms are both selected (PyMOL).
+    ids = selected_bond_ids(scope.object_id, ids.value());
+    if (!ids.has_value())
+      return R::failure(ids.error());
+  }
+  if (ids.value().empty())
+    return R::failure(invalid(bond_level ? "render setting selection matched no bonds"
+                                         : "render setting selection matched no atoms"));
+  if (value.has_value()) {
+    if (const auto error = validate_setting_color(*value, color_table_);
+        error.has_value())
+      return R::failure(*error);
+  }
+  auto candidate = render_settings_;
+  for (const auto id : ids.value()) {
+    auto atom_scope = scope;
+    if (bond_level)
+      atom_scope.bond_id = id;
+    else
+      atom_scope.atom_id = id;
+    if (const auto error = validate_render_setting_target(objects_, atom_scope);
+        error.has_value())
+      return R::failure(*error);
+    if (value.has_value()) {
+      if (const auto error = candidate.set(name, atom_scope, *value);
+          error.has_value())
+        return R::failure(*error);
+    } else {
+      const auto removed = candidate.unset(name, atom_scope);
+      if (!removed.has_value())
+        return R::failure(removed.error());
+    }
+  }
+  if (const auto error = commit_render_settings(std::move(candidate));
+      error.has_value())
+    return R::failure(*error);
+  return R::success(ids.value().size());
 }
 
 operation::Result<bool> Workspace::unset_render_setting(
@@ -2972,8 +4426,202 @@ std::optional<operation::Error> Workspace::restore_render_settings(
     if (const auto error = validate_render_setting_target(objects_, item.scope);
         error.has_value())
       return error;
+    if (const auto error = validate_setting_color(item.value, color_table_);
+        error.has_value())
+      return error;
   }
   return commit_render_settings(restored.value());
+}
+
+operation::Result<Workspace::AtomColorCandidate>
+Workspace::prepare_atom_colors(
+    const WorkspaceObject &target,
+    std::vector<std::pair<std::uint64_t, std::int32_t>> updates) const {
+  using R = operation::Result<AtomColorCandidate>;
+  const auto *object = &target;
+  std::sort(updates.begin(), updates.end());
+  auto merged = std::make_shared<
+      std::vector<std::pair<std::uint64_t, std::int32_t>>>();
+  const auto &existing =
+      object->atom_colors != nullptr
+          ? *object->atom_colors
+          : std::vector<std::pair<std::uint64_t, std::int32_t>>{};
+  merged->reserve(existing.size() + updates.size());
+  auto left = existing.begin();
+  auto right = updates.begin();
+  while (left != existing.end() || right != updates.end()) {
+    std::pair<std::uint64_t, std::int32_t> item;
+    if (right == updates.end() ||
+        (left != existing.end() && left->first < right->first)) {
+      item = *left++;
+    } else {
+      if (left != existing.end() && left->first == right->first)
+        ++left;
+      item = *right++;
+    }
+    if (item.second != render::kColorDefault)
+      merged->push_back(item);
+  }
+  auto candidate = *object;
+  candidate.atom_colors =
+      merged->empty() ? nullptr
+                      : std::shared_ptr<const std::vector<
+                            std::pair<std::uint64_t, std::int32_t>>>{merged};
+  const auto frame = active_frame(candidate);
+  if (!frame.has_value())
+    return R::failure(frame.error());
+  const auto frame_index = candidate.trajectory.has_value()
+                               ? candidate.trajectory->timeline.snapshot().frame
+                               : 0U;
+  auto rebuilt =
+      rebuild_representations(candidate, candidate.system, *frame.value(),
+                              frame_index, render_settings_, color_table_);
+  if (!rebuilt.has_value())
+    return R::failure(rebuilt.error());
+  return R::success({std::move(candidate.atom_colors), std::move(rebuilt.value())});
+}
+
+std::optional<operation::Error> Workspace::commit_atom_colors(
+    WorkspaceObject &target,
+    std::vector<std::pair<std::uint64_t, std::int32_t>> updates) {
+  auto prepared = prepare_atom_colors(target, std::move(updates));
+  if (!prepared.has_value())
+    return prepared.error();
+  target.atom_colors = std::move(prepared.value().colors);
+  target.representations = std::move(prepared.value().representations);
+  return std::nullopt;
+}
+
+operation::Result<std::vector<WorkspaceObject *>>
+Workspace::scope_targets(ObjectScope scope) {
+  using R = operation::Result<std::vector<WorkspaceObject *>>;
+  if (scope == ObjectScope::active) {
+    auto *object = mutable_active_object();
+    if (object == nullptr)
+      return R::failure(missing_active());
+    return R::success({object});
+  }
+  if (objects_.empty())
+    return R::failure(missing_active());
+  std::vector<WorkspaceObject *> targets;
+  targets.reserve(objects_.size());
+  for (auto &object : objects_)
+    targets.push_back(&object);
+  return R::success(std::move(targets));
+}
+
+operation::Result<ColorAssignResult>
+Workspace::assign_color(std::string_view color,
+                        std::string selection_expression, ObjectScope scope) {
+  using R = operation::Result<ColorAssignResult>;
+  const auto targets = scope_targets(scope);
+  if (!targets.has_value())
+    return R::failure(targets.error());
+  const auto cycle = render::ColorTable::auto_cycle();
+  auto next_cursor = auto_color_cursor_;
+  std::int32_t index{};
+  if (color.size() == 4U &&
+      std::equal(color.begin(), color.end(), "auto", [](char left, char right) {
+        return std::tolower(static_cast<unsigned char>(left)) == right;
+      })) {
+    index = cycle[auto_color_cursor_ % cycle.size()];
+    next_cursor = (auto_color_cursor_ + 1U) % cycle.size();
+  } else if (const auto ramp = color_table_.ramp_code(color); ramp.has_value()) {
+    index = *ramp;
+  } else {
+    const auto resolved = color_table_.resolve_assignment(color);
+    if (!resolved.has_value())
+      return R::failure(resolved.error());
+    index = resolved.value();
+    if (index == render::kColorFront || index == render::kColorBack)
+      return R::failure(operation::Error{
+          operation::ErrorCode::unsupported,
+          "front/back are render-setting color tokens, not atom colors",
+          "use an explicit color name, index or hex value"});
+  }
+  // Every target is prepared before any commits (failure-atomic).
+  std::vector<AtomColorCandidate> prepared;
+  prepared.reserve(targets.value().size());
+  std::size_t affected{};
+  for (auto *object : targets.value()) {
+    const auto mask = selection_mask(*object, selection_expression);
+    if (!mask.has_value())
+      return R::failure(mask.error());
+    const auto &topology = *object->system->topology();
+    std::vector<std::pair<std::uint64_t, std::int32_t>> updates;
+    for (std::size_t atom = 0; atom < mask.value().size(); ++atom) {
+      if (mask.value()[atom] == 0U)
+        continue;
+      const auto id = topology.atom_id(model::AtomIndex{atom});
+      if (!id.has_value())
+        return R::failure(invalid("topology atom identity is missing"));
+      const auto value =
+          index == render::kColorAtomic
+              ? render::ColorTable::element_color(
+                    topology.atoms()[atom].atomic_number)
+              : index;
+      updates.emplace_back(id->value, value);
+    }
+    affected += updates.size();
+    auto candidate = prepare_atom_colors(*object, std::move(updates));
+    if (!candidate.has_value())
+      return R::failure(candidate.error());
+    prepared.push_back(std::move(candidate.value()));
+  }
+  std::size_t colored{};
+  std::size_t representations{};
+  for (std::size_t target = 0; target < prepared.size(); ++target) {
+    auto *object = targets.value()[target];
+    object->atom_colors = std::move(prepared[target].colors);
+    object->representations = std::move(prepared[target].representations);
+    colored += object->atom_colors == nullptr ? 0U : object->atom_colors->size();
+    representations += object->representations.size();
+  }
+  auto_color_cursor_ = next_cursor;
+  const auto *active = active_object();
+  return R::success(
+      {active != nullptr ? active->id : targets.value().front()->id, index,
+       color_table_.name(index).value_or(std::string{color}), affected, colored,
+       representations});
+}
+
+operation::Result<ColorDefineResult>
+Workspace::define_color(std::string_view name,
+                        std::array<double, 3> components) {
+  using R = operation::Result<ColorDefineResult>;
+  auto candidate = color_table_;
+  const auto previous_size = candidate.size();
+  const auto index = candidate.define(name, components);
+  if (!index.has_value())
+    return R::failure(index.error());
+  const auto rgb = candidate.rgb(index.value());
+  const auto canonical = candidate.name(index.value());
+  if (const auto error = commit_color_table(std::move(candidate));
+      error.has_value())
+    return R::failure(*error);
+  return R::success({index.value(), canonical.value_or(std::string{name}),
+                     rgb.value_or(render::ColorRgb{}),
+                     static_cast<std::size_t>(index.value()) >= previous_size});
+}
+
+operation::Result<ColorQueryResult>
+Workspace::query_color(std::string_view color) const {
+  using R = operation::Result<ColorQueryResult>;
+  const auto index = color_table_.resolve(color);
+  if (!index.has_value())
+    return R::failure(index.error());
+  return R::success({index.value(),
+                     color_table_.name(index.value()).value_or(std::string{color}),
+                     color_table_.rgb(index.value())});
+}
+
+operation::Result<std::size_t> Workspace::recolor() {
+  if (const auto error = commit_color_table(color_table_); error.has_value())
+    return operation::Result<std::size_t>::failure(*error);
+  std::size_t count{};
+  for (const auto &object : objects_)
+    count += object.representations.size();
+  return operation::Result<std::size_t>::success(count);
 }
 
 operation::Result<ShowResult> Workspace::show(render::RepresentationKind kind,
@@ -3016,44 +4664,47 @@ operation::Result<RepresentationVisibilityResult>
 Workspace::mutate_representation_visibility(
     std::span<const render::RepresentationKind> kinds,
     std::string selection_expression,
-    RepresentationVisibilityMutation mutation) {
-  auto *object = mutable_active_object();
-  if (object == nullptr) {
-    return operation::Result<RepresentationVisibilityResult>::failure(
-        missing_active());
-  }
-  const auto mask = selection_mask(*object, selection_expression);
-  if (!mask.has_value()) {
-    return operation::Result<RepresentationVisibilityResult>::failure(
-        mask.error());
-  }
-  if (kinds.empty()) {
-    return operation::Result<RepresentationVisibilityResult>::failure(
+    RepresentationVisibilityMutation mutation, ObjectScope scope) {
+  using R = operation::Result<RepresentationVisibilityResult>;
+  const auto targets = scope_targets(scope);
+  if (!targets.has_value())
+    return R::failure(targets.error());
+  if (kinds.empty())
+    return R::failure(
         invalid("representation visibility mask must not be empty"));
+  struct Plan {
+    WorkspaceObject *object{};
+    std::vector<std::uint8_t> mask;
+    RepresentationVisibilityState candidate;
+    std::vector<RepresentationRecord> rebuilt;
+  };
+  std::vector<Plan> plans;
+  plans.reserve(targets.value().size());
+  for (auto *object : targets.value()) {
+    auto mask = selection_mask(*object, selection_expression);
+    if (!mask.has_value())
+      return R::failure(mask.error());
+    plans.push_back({object, std::move(mask.value()),
+                     object->representation_visibility, {}});
   }
-  const auto frame = active_frame(*object);
-  if (!frame.has_value()) {
-    return operation::Result<RepresentationVisibilityResult>::failure(
-        frame.error());
-  }
-  const auto frame_index = object->trajectory.has_value()
-                               ? object->trajectory->timeline.snapshot().frame
-                               : 0U;
-  auto candidate = object->representation_visibility;
+  // Toggle hides when any selected atom (in any target) shows a requested
+  // representation, otherwise shows.
   auto effective_mutation = mutation;
   if (mutation == RepresentationVisibilityMutation::toggle) {
     bool any_visible = false;
-    for (const auto kind : kinds) {
-      const auto current = candidate.selection_mask(kind);
-      if (!current.has_value()) {
-        return operation::Result<RepresentationVisibilityResult>::failure(
-            current.error());
-      }
-      for (std::size_t atom = 0; atom < mask.value().size(); ++atom) {
-        if (mask.value()[atom] != 0U && current.value()[atom] != 0U) {
-          any_visible = true;
-          break;
+    for (const auto &plan : plans) {
+      for (const auto kind : kinds) {
+        const auto current = plan.candidate.selection_mask(kind);
+        if (!current.has_value())
+          return R::failure(current.error());
+        for (std::size_t atom = 0; atom < plan.mask.size(); ++atom) {
+          if (plan.mask[atom] != 0U && current.value()[atom] != 0U) {
+            any_visible = true;
+            break;
+          }
         }
+        if (any_visible)
+          break;
       }
       if (any_visible)
         break;
@@ -3061,41 +4712,52 @@ Workspace::mutate_representation_visibility(
     effective_mutation = any_visible ? RepresentationVisibilityMutation::hide
                                      : RepresentationVisibilityMutation::show;
   }
-  for (std::size_t index = 0; index < kinds.size(); ++index) {
-    const auto current_mutation =
-        mutation == RepresentationVisibilityMutation::exclusive
-            ? (index == 0U ? RepresentationVisibilityMutation::exclusive
-                           : RepresentationVisibilityMutation::show)
-            : effective_mutation;
-    if (const auto error =
-            candidate.apply(kinds[index], mask.value(), current_mutation);
-        error.has_value()) {
-      return operation::Result<RepresentationVisibilityResult>::failure(*error);
-    }
-  }
-  const auto rebuilt = rebuild_representations(
-      *object, object->system, *frame.value(), frame_index, render_settings_,
-      &candidate);
-  if (!rebuilt.has_value()) {
-    return operation::Result<RepresentationVisibilityResult>::failure(
-        rebuilt.error());
-  }
-  const auto affected = static_cast<std::size_t>(
-      std::count(mask.value().begin(), mask.value().end(), std::uint8_t{1U}));
+  std::size_t affected{};
   std::size_t visible{};
-  for (const auto kind : kinds) {
-    const auto count = candidate.visible_count(kind);
-    if (!count.has_value()) {
-      return operation::Result<RepresentationVisibilityResult>::failure(
-          count.error());
+  for (auto &plan : plans) {
+    for (std::size_t index = 0; index < kinds.size(); ++index) {
+      const auto current_mutation =
+          mutation == RepresentationVisibilityMutation::exclusive
+              ? (index == 0U ? RepresentationVisibilityMutation::exclusive
+                             : RepresentationVisibilityMutation::show)
+              : effective_mutation;
+      if (const auto error =
+              plan.candidate.apply(kinds[index], plan.mask, current_mutation);
+          error.has_value())
+        return R::failure(*error);
     }
-    visible += count.value();
+    const auto frame = active_frame(*plan.object);
+    if (!frame.has_value())
+      return R::failure(frame.error());
+    const auto frame_index =
+        plan.object->trajectory.has_value()
+            ? plan.object->trajectory->timeline.snapshot().frame
+            : 0U;
+    auto rebuilt = rebuild_representations(
+        *plan.object, plan.object->system, *frame.value(), frame_index,
+        render_settings_, color_table_, &plan.candidate);
+    if (!rebuilt.has_value())
+      return R::failure(rebuilt.error());
+    plan.rebuilt = std::move(rebuilt.value());
+    affected += static_cast<std::size_t>(
+        std::count(plan.mask.begin(), plan.mask.end(), std::uint8_t{1U}));
+    for (const auto kind : kinds) {
+      const auto count = plan.candidate.visible_count(kind);
+      if (!count.has_value())
+        return R::failure(count.error());
+      visible += count.value();
+    }
   }
-  object->representation_visibility = std::move(candidate);
-  object->representations = std::move(rebuilt.value());
-  return operation::Result<RepresentationVisibilityResult>::success(
-      {object->id, kinds.front(), mutation, affected, visible,
-       object->representations.size(),
+  std::size_t representations{};
+  for (auto &plan : plans) {
+    plan.object->representation_visibility = std::move(plan.candidate);
+    plan.object->representations = std::move(plan.rebuilt);
+    representations += plan.object->representations.size();
+  }
+  const auto *active = active_object();
+  return R::success(
+      {active != nullptr ? active->id : plans.front().object->id, kinds.front(),
+       mutation, affected, visible, representations,
        std::vector<render::RepresentationKind>{kinds.begin(), kinds.end()}});
 }
 
@@ -3157,7 +4819,7 @@ Workspace::restore_representation_visibility(
                                : 0U;
   const auto rebuilt = rebuild_representations(
       *object, object->system, *frame.value(), frame_index, render_settings_,
-      &restored.value());
+      color_table_, &restored.value());
   if (!rebuilt.has_value()) {
     return operation::Result<RepresentationVisibilityResult>::failure(
         rebuilt.error());
@@ -3167,7 +4829,8 @@ Workspace::restore_representation_visibility(
                              render::RepresentationKind::sticks,
                              render::RepresentationKind::spheres,
                              render::RepresentationKind::ribbon,
-                             render::RepresentationKind::cartoon};
+                             render::RepresentationKind::cartoon,
+                             render::RepresentationKind::labels};
   for (const auto kind : kinds)
     visible += restored.value().visible_count(kind).value();
   object->representation_visibility = restored.value();
@@ -3360,6 +5023,7 @@ Workspace::selection_camera_depth_extent(
 
   CameraDepthExtent result;
   auto &extent = result.spatial;
+  model::Vec3d weighted_sum{};
   extent.evaluated_frame_count = scoped_frame_count;
   extent.selected_atom_count = static_cast<std::size_t>(std::count_if(
       mask.value().begin(), mask.value().end(),
@@ -3396,6 +5060,7 @@ Workspace::selection_camera_depth_extent(
         result.maximum_depth = std::max(result.maximum_depth, depth);
       }
       include_point(coordinate, extent.minimum, extent.maximum, empty);
+      weighted_sum = weighted_sum + coordinate;
       ++extent.used_atom_count;
     }
     if (context != nullptr && context->report_progress) {
@@ -3411,7 +5076,8 @@ Workspace::selection_camera_depth_extent(
         "camera selection does not contain present coordinates",
         "choose a non-empty selection and state scope"});
   }
-  extent.center = (extent.minimum + extent.maximum) * 0.5;
+  // PyMOL weighted extent: the center is the mean selected coordinate.
+  extent.center = weighted_sum * (1.0 / static_cast<double>(extent.used_atom_count));
   for (std::size_t frame_offset = 0; frame_offset < scoped_frame_count;
        ++frame_offset) {
     if (context != nullptr && context->cancellation.is_cancelled()) {
@@ -3453,6 +5119,15 @@ Workspace::center_camera(std::string selection_expression,
   if (!extent.has_value())
     return operation::Result<CameraSelectionResult>::failure(extent.error());
   auto parameters = camera().parameters();
+  if (!move_origin) {
+    // PyMOL center(origin=0) re-centers the view on the selection without
+    // changing the camera-space depth of the rotation origin.
+    const auto origin_depth =
+        scene::dot(parameters.model_origin - camera().position(), camera().forward());
+    const auto center_offset =
+        scene::dot(extent.value().center - parameters.model_origin, camera().forward());
+    parameters.distance = origin_depth + center_offset;
+  }
   parameters.target = extent.value().center;
   if (move_origin)
     parameters.model_origin = extent.value().center;
@@ -3476,16 +5151,12 @@ Workspace::zoom_camera(std::string selection_expression, double buffer,
       selection_extent(selection_expression, state_scope, context);
   if (!extent.has_value())
     return operation::Result<CameraSelectionResult>::failure(extent.error());
-  const auto dimensions = extent.value().maximum - extent.value().minimum;
-  auto radius = complete
-                    ? extent.value().maximum_radius
-                    : 0.5 * std::max({dimensions.x, dimensions.y,
-                                      dimensions.z});
+  auto radius = complete ? extent.value().maximum_radius
+                        : weighted_half_extent(extent.value());
   radius += buffer;
-  // PyMOL applies a MAX_VDW floor for degenerate/small selections. Keep an
-  // explicit molecular-scale floor until atom-radius-aware framing lands.
-  radius = std::max(radius, 2.0);
-  const auto framed = camera().frame_sphere(extent.value().center, radius, 1.0);
+  // PyMOL applies a MAX_VDW (2.5 A) floor for degenerate/small selections.
+  radius = std::max(radius, 2.5);
+  const auto framed = camera().frame_sphere_pymol(extent.value().center, radius);
   if (!framed.has_value())
     return operation::Result<CameraSelectionResult>::failure(framed.error());
   const auto updated = set_camera(framed.value().parameters());
@@ -3648,6 +5319,7 @@ Workspace::orient_camera(std::string selection_expression,
       mask.value().begin(), mask.value().end(),
       [](std::uint8_t selected) { return selected != 0U; }));
   analysis::PrincipalMoments moments;
+  model::Vec3d orient_sum{};
   bool empty = true;
   for (std::size_t frame_offset = 0; frame_offset < frame_range.value().count;
        ++frame_offset) {
@@ -3671,6 +5343,7 @@ Workspace::orient_camera(std::string selection_expression,
         continue;
       }
       const auto coordinate = coordinate_at(*frame.value(), index);
+      orient_sum = orient_sum + coordinate;
       if (!analysis::accumulate(moments, coordinate)) {
         return operation::Result<CameraOrientResult>::failure(invalid(
             "principal-axis coordinate moments exceed the numeric range"));
@@ -3691,7 +5364,8 @@ Workspace::orient_camera(std::string selection_expression,
         "camera orientation selection contains no present coordinates",
         "choose a non-empty selection and state scope"});
   }
-  extent.center = (extent.minimum + extent.maximum) * 0.5;
+  // PyMOL orient zooms with the weighted (mean-centered) model-space extent.
+  extent.center = orient_sum * (1.0 / static_cast<double>(extent.used_atom_count));
   const std::array<model::Vec3d, 3U> preferred_axes{
       camera().right(), camera().up(), camera().forward() * -1.0};
   const auto principal =
@@ -3748,7 +5422,10 @@ Workspace::orient_camera(std::string selection_expression,
   const auto oriented = scene::Camera::create(parameters);
   if (!oriented.has_value())
     return operation::Result<CameraOrientResult>::failure(oriented.error());
-  const auto framed = oriented.value().frame_box(oriented_center, half_extents);
+  // PyMOL orient frames the atom mean with the weighted extent; the
+  // principal-frame bounding box is still reported for inspection.
+  const auto framed = oriented.value().frame_sphere_pymol(
+      extent.center, std::max(weighted_half_extent(extent), 2.5));
   if (!framed.has_value())
     return operation::Result<CameraOrientResult>::failure(framed.error());
   const auto updated = set_camera(framed.value().parameters());
@@ -3761,6 +5438,7 @@ Workspace::orient_camera(std::string selection_expression,
 
 operation::Result<CameraResetResult> Workspace::reset_camera() {
   SpatialExtent extent;
+  model::Vec3d reset_sum{};
   bool empty = true;
   std::size_t molecular_object_count{};
   std::size_t volume_object_count{};
@@ -3780,6 +5458,7 @@ operation::Result<CameraResetResult> Workspace::reset_camera() {
       }
       include_point(coordinate_at(*frame.value(), index), extent.minimum,
                     extent.maximum, empty);
+      reset_sum = reset_sum + coordinate_at(*frame.value(), index);
       ++extent.used_atom_count;
       contributed = true;
     }
@@ -3801,24 +5480,30 @@ operation::Result<CameraResetResult> Workspace::reset_camera() {
     ++volume_object_count;
   }
 
+  // PyMOL reset: identity rotation, then zoom on everything with the
+  // weighted extent. Projection mode and field of view are settings in
+  // PyMOL and survive reset, as does the live viewport shape; every other
+  // camera field returns to the application defaults.
   scene::CameraParameters parameters;
-  // Preserve the live viewport shape, but reset every other camera field to
-  // the application defaults before framing visible data.
   parameters.aspect_ratio = camera().parameters().aspect_ratio;
+  parameters.projection = camera().parameters().projection;
+  parameters.vertical_field_of_view_radians =
+      camera().parameters().vertical_field_of_view_radians;
   operation::Result<scene::Camera> reset = scene::Camera::create(parameters);
   if (!reset.has_value())
     return operation::Result<CameraResetResult>::failure(reset.error());
   std::optional<SpatialExtent> result_extent;
   if (!empty) {
-    extent.center = (extent.minimum + extent.maximum) * 0.5;
-    extent.maximum_radius =
-        scene::length((extent.maximum - extent.minimum) * 0.5);
-    const auto radius = std::max(extent.maximum_radius, 2.0);
+    extent.center = extent.used_atom_count > 0U
+                        ? reset_sum * (1.0 / static_cast<double>(extent.used_atom_count))
+                        : (extent.minimum + extent.maximum) * 0.5;
+    extent.maximum_radius = weighted_half_extent(extent);
+    const auto radius = std::max(extent.maximum_radius, 2.5);
     parameters.model_origin = extent.center;
     reset = scene::Camera::create(parameters);
     if (!reset.has_value())
       return operation::Result<CameraResetResult>::failure(reset.error());
-    reset = reset.value().frame_sphere(extent.center, radius, 1.0);
+    reset = reset.value().frame_sphere_pymol(extent.center, radius);
     result_extent = extent;
   }
   if (!reset.has_value())
@@ -3923,7 +5608,8 @@ Workspace::move_camera(scene::CameraAxis axis, double distance) {
 
 operation::Result<CameraNavigationResult>
 Workspace::turn_camera(scene::CameraAxis axis, double angle_degrees) {
-  const auto turned = camera().turn_axis_degrees(axis, angle_degrees);
+  // PyMOL turn rotates the scene by +angle, i.e. the camera by -angle.
+  const auto turned = camera().turn_axis_degrees(axis, -angle_degrees);
   if (!turned.has_value())
     return operation::Result<CameraNavigationResult>::failure(turned.error());
   const auto updated = set_camera(turned.value().parameters());
@@ -4710,11 +6396,13 @@ operation::Result<TrajectoryLoadResult> Workspace::load_trajectory(
     std::optional<std::string> h5md_particle_group,
     trajectory::AtomMappingPolicy mapping_policy,
     std::span<const model::AtomId> source_to_target_atom_ids,
-    std::optional<std::uint64_t> expected_topology_version) {
+    std::optional<std::uint64_t> expected_topology_version,
+    std::shared_ptr<const model::CoordinateSource> external_source) {
   auto plan = plan_trajectory_load(
       path, format, cache_budget_bytes, prefetch_frame_count, coordinate_unit,
       std::move(h5md_particle_group), mapping_policy,
-      source_to_target_atom_ids, expected_topology_version);
+      source_to_target_atom_ids, expected_topology_version,
+      std::move(external_source));
   if (!plan.has_value())
     return operation::Result<TrajectoryLoadResult>::failure(plan.error());
   operation::TaskContext context;
@@ -4733,7 +6421,8 @@ operation::Result<TrajectoryLoadPlan> Workspace::plan_trajectory_load(
     std::optional<std::string> h5md_particle_group,
     trajectory::AtomMappingPolicy mapping_policy,
     std::span<const model::AtomId> source_to_target_atom_ids,
-    std::optional<std::uint64_t> expected_topology_version) const {
+    std::optional<std::uint64_t> expected_topology_version,
+    std::shared_ptr<const model::CoordinateSource> external_source) const {
   const auto *object = active_object();
   if (object == nullptr) {
     return operation::Result<TrajectoryLoadPlan>::failure(missing_active());
@@ -4754,6 +6443,7 @@ operation::Result<TrajectoryLoadPlan> Workspace::plan_trajectory_load(
        scene_,
        render_settings_,
        render_settings_.snapshot(),
+       color_table_,
        path,
        format,
        cache_budget_bytes,
@@ -4763,7 +6453,8 @@ operation::Result<TrajectoryLoadPlan> Workspace::plan_trajectory_load(
        mapping_policy,
        std::vector<model::AtomId>{source_to_target_atom_ids.begin(),
                                   source_to_target_atom_ids.end()},
-       expected_topology_version});
+       expected_topology_version,
+       std::move(external_source)});
 }
 
 operation::Result<TrajectoryLoadCandidate>
@@ -4803,7 +6494,7 @@ Workspace::build_trajectory_load_candidate(TrajectoryLoadPlan plan,
   const io::TrajectoryOpenContext open_context{
       object->system->topology()->atom_count(), std::move(source_atom_ids),
       amber_box_angle, plan.coordinate_unit,
-      std::move(plan.h5md_particle_group)};
+      std::move(plan.h5md_particle_group), plan.external_source};
   const auto opened =
       io::open_trajectory(plan.path, plan.format, open_context);
   if (!opened.has_value()) {
@@ -4875,7 +6566,8 @@ Workspace::build_trajectory_load_candidate(TrajectoryLoadPlan plan,
   }
   const auto rebuilt = rebuild_representations(*object, system.value(),
                                                *first_frame.value(), 0U,
-                                               plan.render_settings);
+                                               plan.render_settings,
+                                               plan.color_table);
   if (!rebuilt.has_value()) {
     return fail(rebuilt.error());
   }
@@ -4947,6 +6639,11 @@ Workspace::commit_trajectory_load(TrajectoryLoadCandidate candidate) {
           candidate.plan.object.coordinate_revision ||
       scene_ != candidate.plan.scene ||
       render_settings_.snapshot() != candidate.plan.render_setting_snapshot ||
+      color_table_ != candidate.plan.color_table ||
+      object->object_color != candidate.plan.object.object_color ||
+      object->atom_colors != candidate.plan.object.atom_colors ||
+      object->atom_labels != candidate.plan.object.atom_labels ||
+      object->cartoon_types != candidate.plan.object.cartoon_types ||
       object->representation_visibility.snapshot() !=
           candidate.plan.object.representation_visibility.snapshot())
     return stale("trajectory load candidate uses stale molecular or visual state");
@@ -5025,7 +6722,8 @@ Workspace::plan_trajectory_frame(std::size_t frame_index) const {
     return operation::Result<TrajectoryFramePlan>::failure(*error);
   }
   return operation::Result<TrajectoryFramePlan>::success(
-      {*object, render_settings_, render_settings_.snapshot(), frame_index});
+      {*object, render_settings_, render_settings_.snapshot(), frame_index,
+       color_table_});
 }
 
 operation::Result<TrajectoryFrameCandidate>
@@ -5059,7 +6757,7 @@ Workspace::build_trajectory_frame_candidate(TrajectoryFramePlan plan,
                          {}});
   const auto rebuilt = rebuild_representations(
       plan.object, plan.object.system, *frame.value(), plan.frame_index,
-      plan.render_settings);
+      plan.render_settings, plan.color_table);
   if (!rebuilt.has_value()) {
     return operation::Result<TrajectoryFrameCandidate>::failure(
         rebuilt.error());
@@ -5094,6 +6792,11 @@ Workspace::commit_trajectory_frame(TrajectoryFrameCandidate candidate) {
           candidate.plan.object.system->topology()->version())
     return stale("trajectory frame candidate targets stale molecular data");
   if (render_settings_.snapshot() != candidate.plan.render_setting_snapshot ||
+      color_table_ != candidate.plan.color_table ||
+      object->object_color != candidate.plan.object.object_color ||
+      object->atom_colors != candidate.plan.object.atom_colors ||
+      object->atom_labels != candidate.plan.object.atom_labels ||
+      object->cartoon_types != candidate.plan.object.cartoon_types ||
       object->representation_visibility.snapshot() !=
           candidate.plan.object.representation_visibility.snapshot())
     return stale("trajectory frame candidate uses stale visual settings");
@@ -5174,7 +6877,7 @@ Workspace::play_trajectory(trajectory::PlaybackMode mode,
   if (frame_changed) {
     const auto candidate = rebuild_representations(
         *object, object->system, *frame.value(), advanced.snapshot.frame,
-        render_settings_);
+        render_settings_, color_table_);
     if (!candidate.has_value()) {
       return operation::Result<TrajectoryFrameResult>::failure(
           candidate.error());
@@ -5233,7 +6936,7 @@ Workspace::configure_trajectory_range(trajectory::PlaybackRange range,
   }
   const auto rebuilt = rebuild_representations(*object, object->system,
                                                *frame.value(), frame_index,
-                                               render_settings_);
+                                               render_settings_, color_table_);
   if (!rebuilt.has_value()) {
     return operation::Result<TrajectoryFrameResult>::failure(rebuilt.error());
   }
@@ -5349,7 +7052,7 @@ Workspace::tick_trajectory(double elapsed_seconds) {
   if (frame_changed) {
     const auto candidate = rebuild_representations(
         *object, object->system, *frame.value(), advanced.snapshot.frame,
-        render_settings_);
+        render_settings_, color_table_);
     if (!candidate.has_value()) {
       return operation::Result<TrajectoryFrameResult>::failure(
           candidate.error());

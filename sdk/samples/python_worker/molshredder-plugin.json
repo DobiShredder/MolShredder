@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "id": "org.molshredder.sample-python",
+  "namespace": "sample-python",
+  "name": "Sample Python worker",
+  "version": "1.0.0",
+  "license": "MIT",
+  "sdk": {"abi_major": 1, "abi_minor": 0},
+  "execution": {
+    "mode": "worker",
+    "command": ["run.sh"],
+    "files": ["plugin.py", "molshredder_plugin.py"]
+  },
+  "required_capabilities": ["host.selection.atoms"],
+  "optional_capabilities": ["progress", "cancellation", "result.table"],
+  "operations": [
+    {"name": "centroid", "summary": "Geometric center of a selection",
+     "parameters": [{"name": "selection", "type": "text", "default": "all"}]},
+    {"name": "radius-of-gyration", "summary": "Radius of gyration of a selection",
+     "parameters": [{"name": "selection", "type": "text", "default": "all"}]},
+    {"name": "element-table", "summary": "Atom counts per element",
+     "parameters": [{"name": "selection", "type": "text", "default": "all"}]}
+  ],
+  "examples": [
+    {"operation": "centroid", "arguments": {"selection": "all"}}
+  ]
+}

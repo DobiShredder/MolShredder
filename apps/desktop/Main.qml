@@ -42,6 +42,14 @@ Window {
     readonly property var representCartoonMetadata: localization.actionMetadata("represent.cartoon")
     readonly property var representSurfaceMetadata: localization.actionMetadata("represent.surface")
     readonly property var renderSettingsMetadata: localization.actionMetadata("represent.settings")
+    readonly property var representColorMetadata: localization.actionMetadata("represent.color")
+    readonly property var representSpectrumMetadata: localization.actionMetadata("represent.spectrum")
+    readonly property var representLabelMetadata: localization.actionMetadata("represent.label")
+    readonly property var representCartoonTypeMetadata: localization.actionMetadata("represent.cartoon-type")
+    readonly property var representContourMetadata: localization.actionMetadata("represent.contour")
+    readonly property var representRampMetadata: localization.actionMetadata("represent.ramp")
+    readonly property var sceneBackgroundMetadata: localization.actionMetadata("scene.background")
+    readonly property var sceneExportImageMetadata: localization.actionMetadata("scene.export-image")
     readonly property var volumeSliceMetadata: localization.actionMetadata("represent.volume-slice")
     readonly property var directVolumeMetadata: localization.actionMetadata("represent.volume-render")
     readonly property var analyzePanelMetadata: localization.actionMetadata("analyze.open-panel")
@@ -154,6 +162,12 @@ Window {
         renderSettingsOverlay.visible = true
         renderSettingNameInput.forceActiveFocus()
         renderSettingResult.text = qsTr("Choose a P0 setting, scope and value. Atom/bond targets are 1-based.")
+    }
+
+    function openColorAtoms() {
+        renderSettingsOverlay.visible = true
+        colorNameInput.forceActiveFocus()
+        renderSettingResult.text = qsTr("Enter a color and selection, then apply. CLI and Python run the same color operation.")
     }
 
     function refreshEditHistory() {
@@ -427,6 +441,109 @@ Window {
             return localization.translateUi(root.renderSettingsMetadata.label)
         }
         onTriggered: root.openRenderSettings()
+    }
+
+    Action {
+        id: representColorAction
+        objectName: "representColorAction"
+        text: {
+            localization.currentLanguage
+            return localization.translateUi(root.representColorMetadata.label)
+        }
+        enabled: root.hasWorkspace
+        onTriggered: root.openColorAtoms()
+    }
+
+    Action {
+        id: representSpectrumAction
+        objectName: "representSpectrumAction"
+        text: {
+            localization.currentLanguage
+            return localization.translateUi(root.representSpectrumMetadata.label)
+        }
+        enabled: root.hasWorkspace
+        onTriggered: root.openColorAtoms()
+    }
+
+    Action {
+        id: representLabelAction
+        objectName: "representLabelAction"
+        text: {
+            localization.currentLanguage
+            return localization.translateUi(root.representLabelMetadata.label)
+        }
+        enabled: root.hasWorkspace
+        onTriggered: {
+            renderSettingsOverlay.visible = true
+            labelExpressionInput.forceActiveFocus()
+        }
+    }
+
+    Action {
+        id: sceneExportImageAction
+        objectName: "sceneExportImageAction"
+        text: {
+            localization.currentLanguage
+            return localization.translateUi(root.sceneExportImageMetadata.label)
+        }
+        enabled: root.hasWorkspace
+        onTriggered: {
+            renderSettingsOverlay.visible = true
+            imagePathInput.forceActiveFocus()
+        }
+    }
+
+    Action {
+        id: representCartoonTypeAction
+        objectName: "representCartoonTypeAction"
+        text: {
+            localization.currentLanguage
+            return localization.translateUi(root.representCartoonTypeMetadata.label)
+        }
+        enabled: root.hasWorkspace
+        onTriggered: {
+            renderSettingsOverlay.visible = true
+            cartoonTypeInput.forceActiveFocus()
+        }
+    }
+
+    Action {
+        id: representContourAction
+        objectName: "representContourAction"
+        text: {
+            localization.currentLanguage
+            return localization.translateUi(root.representContourMetadata.label)
+        }
+        onTriggered: {
+            renderSettingsOverlay.visible = true
+            contourNameInput.forceActiveFocus()
+        }
+    }
+
+    Action {
+        id: representRampAction
+        objectName: "representRampAction"
+        text: {
+            localization.currentLanguage
+            return localization.translateUi(root.representRampMetadata.label)
+        }
+        onTriggered: {
+            renderSettingsOverlay.visible = true
+            rampNameInput.forceActiveFocus()
+        }
+    }
+
+    Action {
+        id: sceneBackgroundAction
+        objectName: "sceneBackgroundAction"
+        text: {
+            localization.currentLanguage
+            return localization.translateUi(root.sceneBackgroundMetadata.label)
+        }
+        onTriggered: {
+            renderSettingsOverlay.visible = true
+            backgroundColorInput.forceActiveFocus()
+        }
     }
 
     Action {
@@ -840,6 +957,30 @@ Window {
                 action: renderSettingsAction
             }
             MenuItem {
+                objectName: "representColorMenuItem"
+                action: representColorAction
+            }
+            MenuItem {
+                objectName: "representSpectrumMenuItem"
+                action: representSpectrumAction
+            }
+            MenuItem {
+                objectName: "representLabelMenuItem"
+                action: representLabelAction
+            }
+            MenuItem {
+                objectName: "representCartoonTypeMenuItem"
+                action: representCartoonTypeAction
+            }
+            MenuItem {
+                objectName: "representContourMenuItem"
+                action: representContourAction
+            }
+            MenuItem {
+                objectName: "representRampMenuItem"
+                action: representRampAction
+            }
+            MenuItem {
                 objectName: "volumeSliceMenuItem"
                 action: volumeSliceAction
             }
@@ -900,6 +1041,14 @@ Window {
             MenuItem {
                 objectName: "sceneViewsMenuItem"
                 action: sceneViewsAction
+            }
+            MenuItem {
+                objectName: "sceneBackgroundMenuItem"
+                action: sceneBackgroundAction
+            }
+            MenuItem {
+                objectName: "sceneExportImageMenuItem"
+                action: sceneExportImageAction
             }
             MenuItem {
                 objectName: "namedScenesMenuItem"
@@ -1152,6 +1301,62 @@ Window {
                 query: commandPaletteQuery.text
             }
             CommandPaletteEntry {
+                objectName: "commandPaletteRepresentColor"
+                width: parent.width
+                metadata: root.representColorMetadata
+                commandAction: representColorAction
+                query: commandPaletteQuery.text
+            }
+            CommandPaletteEntry {
+                objectName: "commandPaletteRepresentSpectrum"
+                width: parent.width
+                metadata: root.representSpectrumMetadata
+                commandAction: representSpectrumAction
+                query: commandPaletteQuery.text
+            }
+            CommandPaletteEntry {
+                objectName: "commandPaletteRepresentLabel"
+                width: parent.width
+                metadata: root.representLabelMetadata
+                commandAction: representLabelAction
+                query: commandPaletteQuery.text
+            }
+            CommandPaletteEntry {
+                objectName: "commandPaletteRepresentCartoonType"
+                width: parent.width
+                metadata: root.representCartoonTypeMetadata
+                commandAction: representCartoonTypeAction
+                query: commandPaletteQuery.text
+            }
+            CommandPaletteEntry {
+                objectName: "commandPaletteRepresentContour"
+                width: parent.width
+                metadata: root.representContourMetadata
+                commandAction: representContourAction
+                query: commandPaletteQuery.text
+            }
+            CommandPaletteEntry {
+                objectName: "commandPaletteRepresentRamp"
+                width: parent.width
+                metadata: root.representRampMetadata
+                commandAction: representRampAction
+                query: commandPaletteQuery.text
+            }
+            CommandPaletteEntry {
+                objectName: "commandPaletteSceneExportImage"
+                width: parent.width
+                metadata: root.sceneExportImageMetadata
+                commandAction: sceneExportImageAction
+                query: commandPaletteQuery.text
+            }
+            CommandPaletteEntry {
+                objectName: "commandPaletteSceneBackground"
+                width: parent.width
+                metadata: root.sceneBackgroundMetadata
+                commandAction: sceneBackgroundAction
+                query: commandPaletteQuery.text
+            }
+            CommandPaletteEntry {
                 objectName: "commandPaletteVolumeSlice"
                 width: parent.width
                 metadata: root.volumeSliceMetadata
@@ -1355,11 +1560,27 @@ Window {
             y: modelData.y - height - 6
             text: modelData.text
             color: modelData.color
-            font.pixelSize: 13
+            font.pixelSize: modelData.size
             font.bold: true
             style: Text.Outline
             styleColor: "#cc050812"
             z: 20
+
+            // Atom labels can be dragged; the canonical setting operation
+            // stores the move as label_placement_offset.
+            MouseArea {
+                anchors.fill: parent
+                enabled: parent.modelData.atomId > 0
+                cursorShape: enabled ? Qt.SizeAllCursor : Qt.ArrowCursor
+                property point pressPoint
+                onPressed: function(mouse) { pressPoint = mapToItem(null, mouse.x, mouse.y) }
+                onReleased: function(mouse) {
+                    const releasePoint = mapToItem(null, mouse.x, mouse.y)
+                    viewport.moveLabel(parent.modelData.objectId, parent.modelData.atomId,
+                                       releasePoint.x - pressPoint.x,
+                                       releasePoint.y - pressPoint.y)
+                }
+            }
         }
     }
 
@@ -3558,8 +3779,8 @@ Window {
 
         Rectangle {
             anchors.centerIn: parent
-            width: 590
-            height: 390
+            width: 640
+            height: 1010
             radius: 12
             color: "#f0101827"
             border.color: "#69aef0"
@@ -3666,6 +3887,388 @@ Window {
                             viewport.applyRenderSetting("reset", "", "",
                                                         renderSettingsOverlay.scopes[renderSettingsOverlay.scopeIndex],
                                                         renderSettingTargetInput.text)
+                        }
+                    }
+                }
+
+                Text {
+                    width: parent.width
+                    text: qsTr("Atom color: name, index, 0xRRGGBB, #RRGGBB, atomic, object, auto or default.")
+                    color: "#a9bdd5"
+                    font.pixelSize: 13
+                    wrapMode: Text.WordWrap
+                }
+
+                Row {
+                    spacing: 10
+
+                    Rectangle {
+                        width: 150; height: 36; radius: 6
+                        color: "#172235"; border.color: "#506889"
+                        TextInput {
+                            id: colorNameInput
+                            objectName: "colorNameInput"
+                            anchors.fill: parent; anchors.margins: 9
+                            text: "atomic"
+                            color: "#eef6ff"; selectByMouse: true
+                        }
+                    }
+                    Rectangle {
+                        width: 170; height: 36; radius: 6
+                        color: "#172235"; border.color: "#506889"
+                        TextInput {
+                            id: colorSelectionInput
+                            objectName: "colorSelectionInput"
+                            anchors.fill: parent; anchors.margins: 9
+                            text: "all"
+                            color: "#eef6ff"; selectByMouse: true
+                        }
+                    }
+                    ToolbarButton {
+                        label: qsTr("Apply color")
+                        selected: true
+                        action: function() {
+                            viewport.applyColor(colorNameInput.text, colorSelectionInput.text)
+                            renderSettingResult.text = viewport.colorJson(colorNameInput.text)
+                        }
+                    }
+                    ToolbarButton {
+                        label: qsTr("Color info")
+                        action: function() {
+                            renderSettingResult.text = viewport.colorJson(colorNameInput.text)
+                        }
+                    }
+                    ToolbarButton {
+                        objectName: "workspaceScopeButton"
+                        label: qsTr("All objects")
+                        selected: viewport.workspaceScope
+                        action: function() {
+                            viewport.workspaceScope = !viewport.workspaceScope
+                        }
+                    }
+                }
+
+                Text {
+                    width: parent.width
+                    text: qsTr("Spectrum: expression, palette or color list, selection.")
+                    color: "#a9bdd5"
+                    font.pixelSize: 13
+                    wrapMode: Text.WordWrap
+                }
+
+                Row {
+                    spacing: 8
+
+                    Rectangle {
+                        width: 90; height: 36; radius: 6
+                        color: "#172235"; border.color: "#506889"
+                        TextInput {
+                            id: spectrumExpressionInput
+                            objectName: "spectrumExpressionInput"
+                            anchors.fill: parent; anchors.margins: 9
+                            text: "count"
+                            color: "#eef6ff"; selectByMouse: true
+                        }
+                    }
+                    Rectangle {
+                        width: 130; height: 36; radius: 6
+                        color: "#172235"; border.color: "#506889"
+                        TextInput {
+                            id: spectrumPaletteInput
+                            objectName: "spectrumPaletteInput"
+                            anchors.fill: parent; anchors.margins: 9
+                            text: "rainbow"
+                            color: "#eef6ff"; selectByMouse: true
+                        }
+                    }
+                    Rectangle {
+                        width: 100; height: 36; radius: 6
+                        color: "#172235"; border.color: "#506889"
+                        TextInput {
+                            id: spectrumSelectionInput
+                            objectName: "spectrumSelectionInput"
+                            anchors.fill: parent; anchors.margins: 9
+                            text: "all"
+                            color: "#eef6ff"; selectByMouse: true
+                        }
+                    }
+                    ToolbarButton {
+                        id: spectrumByResidueButton
+                        property bool checkedState: false
+                        label: qsTr("By residue")
+                        selected: checkedState
+                        action: function() { checkedState = !checkedState }
+                    }
+                    ToolbarButton {
+                        label: qsTr("Apply spectrum")
+                        selected: true
+                        action: function() {
+                            viewport.applySpectrum(spectrumExpressionInput.text,
+                                                   spectrumPaletteInput.text,
+                                                   spectrumSelectionInput.text,
+                                                   spectrumByResidueButton.checkedState)
+                        }
+                    }
+                }
+
+                Text {
+                    width: parent.width
+                    text: qsTr("Labels: selection and expression (empty clears).")
+                    color: "#a9bdd5"
+                    font.pixelSize: 13
+                    wrapMode: Text.WordWrap
+                }
+
+                Row {
+                    spacing: 10
+
+                    Rectangle {
+                        width: 150; height: 36; radius: 6
+                        color: "#172235"; border.color: "#506889"
+                        TextInput {
+                            id: labelSelectionInput
+                            objectName: "labelSelectionInput"
+                            anchors.fill: parent; anchors.margins: 9
+                            text: "all"
+                            color: "#eef6ff"; selectByMouse: true
+                        }
+                    }
+                    Rectangle {
+                        width: 200; height: 36; radius: 6
+                        color: "#172235"; border.color: "#506889"
+                        TextInput {
+                            id: labelExpressionInput
+                            objectName: "labelExpressionInput"
+                            anchors.fill: parent; anchors.margins: 9
+                            text: "name"
+                            color: "#eef6ff"; selectByMouse: true
+                        }
+                    }
+                    ToolbarButton {
+                        label: qsTr("Apply labels")
+                        selected: true
+                        action: function() {
+                            viewport.applyLabel(labelSelectionInput.text, labelExpressionInput.text)
+                        }
+                    }
+                }
+
+                Text {
+                    width: parent.width
+                    text: qsTr("Background: color name, index, hex or default.")
+                    color: "#a9bdd5"
+                    font.pixelSize: 13
+                    wrapMode: Text.WordWrap
+                }
+
+                Row {
+                    spacing: 10
+
+                    Rectangle {
+                        width: 170; height: 36; radius: 6
+                        color: "#172235"; border.color: "#506889"
+                        TextInput {
+                            id: backgroundColorInput
+                            objectName: "backgroundColorInput"
+                            anchors.fill: parent; anchors.margins: 9
+                            text: "black"
+                            color: "#eef6ff"; selectByMouse: true
+                        }
+                    }
+                    ToolbarButton {
+                        label: qsTr("Set background")
+                        selected: true
+                        action: function() {
+                            viewport.applyBackground(backgroundColorInput.text)
+                        }
+                    }
+                }
+
+                Text {
+                    width: parent.width
+                    text: qsTr("Cartoon type and contour: type/selection, contour name/mode/level.")
+                    color: "#a9bdd5"
+                    font.pixelSize: 13
+                    wrapMode: Text.WordWrap
+                }
+
+                Row {
+                    spacing: 8
+
+                    Rectangle {
+                        width: 80; height: 36; radius: 6
+                        color: "#172235"; border.color: "#506889"
+                        TextInput {
+                            id: cartoonTypeInput
+                            objectName: "cartoonTypeInput"
+                            anchors.fill: parent; anchors.margins: 9
+                            text: "tube"
+                            color: "#eef6ff"; selectByMouse: true
+                        }
+                    }
+                    Rectangle {
+                        width: 90; height: 36; radius: 6
+                        color: "#172235"; border.color: "#506889"
+                        TextInput {
+                            id: cartoonSelectionInput
+                            objectName: "cartoonSelectionInput"
+                            anchors.fill: parent; anchors.margins: 9
+                            text: "all"
+                            color: "#eef6ff"; selectByMouse: true
+                        }
+                    }
+                    ToolbarButton {
+                        label: qsTr("Apply type")
+                        action: function() {
+                            viewport.applyCartoonType(cartoonTypeInput.text, cartoonSelectionInput.text)
+                        }
+                    }
+                    Rectangle {
+                        width: 80; height: 36; radius: 6
+                        color: "#172235"; border.color: "#506889"
+                        TextInput {
+                            id: contourNameInput
+                            objectName: "contourNameInput"
+                            anchors.fill: parent; anchors.margins: 9
+                            text: "mesh1"
+                            color: "#eef6ff"; selectByMouse: true
+                        }
+                    }
+                    Rectangle {
+                        width: 70; height: 36; radius: 6
+                        color: "#172235"; border.color: "#506889"
+                        TextInput {
+                            id: contourModeInput
+                            objectName: "contourModeInput"
+                            anchors.fill: parent; anchors.margins: 9
+                            text: "mesh"
+                            color: "#eef6ff"; selectByMouse: true
+                        }
+                    }
+                    Rectangle {
+                        width: 50; height: 36; radius: 6
+                        color: "#172235"; border.color: "#506889"
+                        TextInput {
+                            id: contourLevelInput
+                            objectName: "contourLevelInput"
+                            anchors.fill: parent; anchors.margins: 9
+                            text: "1.0"
+                            color: "#eef6ff"; selectByMouse: true
+                        }
+                    }
+                    ToolbarButton {
+                        label: qsTr("Contour")
+                        action: function() {
+                            renderSettingResult.text = viewport.applyContour(contourNameInput.text,
+                                contourModeInput.text, parseFloat(contourLevelInput.text))
+                        }
+                    }
+                }
+
+                Text {
+                    width: parent.width
+                    text: qsTr("Ramp: name, source map or object, levels, colors or spectrum.")
+                    color: "#a9bdd5"
+                    font.pixelSize: 13
+                    wrapMode: Text.WordWrap
+                }
+
+                Row {
+                    spacing: 8
+
+                    Rectangle {
+                        width: 70; height: 36; radius: 6
+                        color: "#172235"; border.color: "#506889"
+                        TextInput {
+                            id: rampNameInput
+                            objectName: "rampNameInput"
+                            anchors.fill: parent; anchors.margins: 9
+                            text: "ramp1"
+                            color: "#eef6ff"; selectByMouse: true; clip: true
+                        }
+                    }
+                    Rectangle {
+                        width: 90; height: 36; radius: 6
+                        color: "#172235"; border.color: "#506889"
+                        TextInput {
+                            id: rampSourceInput
+                            objectName: "rampSourceInput"
+                            anchors.fill: parent; anchors.margins: 9
+                            text: ""
+                            color: "#eef6ff"; selectByMouse: true; clip: true
+                        }
+                    }
+                    Rectangle {
+                        width: 100; height: 36; radius: 6
+                        color: "#172235"; border.color: "#506889"
+                        TextInput {
+                            id: rampRangeInput
+                            objectName: "rampRangeInput"
+                            anchors.fill: parent; anchors.margins: 9
+                            text: "-1 0 1"
+                            color: "#eef6ff"; selectByMouse: true; clip: true
+                        }
+                    }
+                    Rectangle {
+                        width: 140; height: 36; radius: 6
+                        color: "#172235"; border.color: "#506889"
+                        TextInput {
+                            id: rampColorInput
+                            objectName: "rampColorInput"
+                            anchors.fill: parent; anchors.margins: 9
+                            text: "red white blue"
+                            color: "#eef6ff"; selectByMouse: true; clip: true
+                        }
+                    }
+                    ToolbarButton {
+                        label: qsTr("Create ramp")
+                        action: function() {
+                            renderSettingResult.text = viewport.applyRamp(
+                                rampNameInput.text, rampSourceInput.text,
+                                rampRangeInput.text, rampColorInput.text)
+                        }
+                    }
+                }
+
+                Text {
+                    width: parent.width
+                    text: qsTr("Image: PNG path and width (0 = 640).")
+                    color: "#a9bdd5"
+                    font.pixelSize: 13
+                    wrapMode: Text.WordWrap
+                }
+
+                Row {
+                    spacing: 10
+
+                    Rectangle {
+                        width: 300; height: 36; radius: 6
+                        color: "#172235"; border.color: "#506889"
+                        TextInput {
+                            id: imagePathInput
+                            objectName: "imagePathInput"
+                            anchors.fill: parent; anchors.margins: 9
+                            text: "molshredder.png"
+                            color: "#eef6ff"; selectByMouse: true; clip: true
+                        }
+                    }
+                    Rectangle {
+                        width: 80; height: 36; radius: 6
+                        color: "#172235"; border.color: "#506889"
+                        TextInput {
+                            id: imageWidthInput
+                            objectName: "imageWidthInput"
+                            anchors.fill: parent; anchors.margins: 9
+                            text: "1200"
+                            color: "#eef6ff"; selectByMouse: true
+                        }
+                    }
+                    ToolbarButton {
+                        label: qsTr("Save image")
+                        selected: true
+                        action: function() {
+                            renderSettingResult.text =
+                                viewport.exportImage(imagePathInput.text, parseInt(imageWidthInput.text) || 0, 0, true)
                         }
                     }
                 }

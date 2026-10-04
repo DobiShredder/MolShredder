@@ -1409,6 +1409,291 @@
         <translation>렌더링 설정</translation>
     </message>
     <message>
+        <location filename="../apps/desktop/action_translation_sources.cpp"/>
+        <source>Color Atoms</source>
+        <translation>원자 색 지정</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/action_translation_sources.cpp"/>
+        <source>Assign a named, indexed or hex color to a selection</source>
+        <translation>선택 영역에 이름, 번호 또는 hex 색을 지정합니다</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/action_translation_sources.cpp"/>
+        <source>The color could not be assigned</source>
+        <translation>색을 지정하지 못했습니다</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/action_translation_sources.cpp"/>
+        <source>color colour atomic auto object palette define recolor</source>
+        <translation>색 색상 color colour atomic auto object palette define recolor</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/action_translation_sources.cpp"/>
+        <source>Open a structure before assigning colors</source>
+        <translation>색을 지정하려면 먼저 구조를 여세요</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/Main.qml"/>
+        <source>Enter a color and selection, then apply. CLI and Python run the same color operation.</source>
+        <translation>색과 선택식을 입력한 뒤 적용하세요. CLI와 Python도 같은 color operation을 실행합니다.</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/Main.qml"/>
+        <source>Atom color: name, index, 0xRRGGBB, #RRGGBB, atomic, object, auto or default.</source>
+        <translation>원자 색: 이름, 번호, 0xRRGGBB, #RRGGBB, atomic, object, auto 또는 default.</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/Main.qml"/>
+        <source>Apply color</source>
+        <translation>색 적용</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/Main.qml"/>
+        <source>Color info</source>
+        <translation>색 정보</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/Main.qml"/>
+        <source>All objects</source>
+        <translation>모든 object</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/action_translation_sources.cpp"/>
+        <source>Color by Spectrum</source>
+        <translation>스펙트럼 색 지정</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/action_translation_sources.cpp"/>
+        <source>Color atoms by a property with a palette or color list</source>
+        <translation>속성 값에 따라 palette 또는 색 목록으로 원자 색을 지정합니다</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/action_translation_sources.cpp"/>
+        <source>The spectrum could not be applied</source>
+        <translation>스펙트럼을 적용하지 못했습니다</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/action_translation_sources.cpp"/>
+        <source>spectrum palette rainbow b-factor property gradient</source>
+        <translation>스펙트럼 팔레트 spectrum palette rainbow b-factor property gradient</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/action_translation_sources.cpp"/>
+        <source>Open a structure before applying a spectrum</source>
+        <translation>스펙트럼을 적용하려면 먼저 구조를 여세요</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/action_translation_sources.cpp"/>
+        <source>Background Color</source>
+        <translation>배경색</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/action_translation_sources.cpp"/>
+        <source>Set the viewport background color</source>
+        <translation>viewport 배경색을 설정합니다</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/action_translation_sources.cpp"/>
+        <source>The background color could not be set</source>
+        <translation>배경색을 설정하지 못했습니다</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/action_translation_sources.cpp"/>
+        <source>background bg color viewport front back</source>
+        <translation>배경 background bg color viewport front back</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/Main.qml"/>
+        <source>Spectrum: expression, palette or color list, selection.</source>
+        <translation>스펙트럼: 표현식, palette 또는 색 목록, 선택식.</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/Main.qml"/>
+        <source>By residue</source>
+        <translation>잔기 단위</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/Main.qml"/>
+        <source>Apply spectrum</source>
+        <translation>스펙트럼 적용</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/Main.qml"/>
+        <source>Background: color name, index, hex or default.</source>
+        <translation>배경: 색 이름, 번호, hex 또는 default.</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/Main.qml"/>
+        <source>Set background</source>
+        <translation>배경 설정</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/action_translation_sources.cpp"/>
+        <source>Label Atoms</source>
+        <translation>원자 라벨</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/action_translation_sources.cpp"/>
+        <source>Label atoms with an expression such as name or resn</source>
+        <translation>name, resn 같은 식으로 원자에 라벨을 붙입니다</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/action_translation_sources.cpp"/>
+        <source>The labels could not be applied</source>
+        <translation>라벨을 적용하지 못했습니다</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/action_translation_sources.cpp"/>
+        <source>label text name residue annotation</source>
+        <translation>라벨 label text name residue annotation</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/action_translation_sources.cpp"/>
+        <source>Open a structure before labeling atoms</source>
+        <translation>라벨을 붙이려면 먼저 구조를 여세요</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/Main.qml"/>
+        <source>Labels: selection and expression (empty clears).</source>
+        <translation>라벨: 선택식과 식(비우면 지움).</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/Main.qml"/>
+        <source>Apply labels</source>
+        <translation>라벨 적용</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/action_translation_sources.cpp"/>
+        <source>Export Image</source>
+        <translation>이미지 내보내기</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/action_translation_sources.cpp"/>
+        <source>Save the visible scene as a PNG image</source>
+        <translation>보이는 장면을 PNG 이미지로 저장합니다</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/action_translation_sources.cpp"/>
+        <source>The image could not be saved</source>
+        <translation>이미지를 저장하지 못했습니다</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/action_translation_sources.cpp"/>
+        <source>image png export ray picture snapshot</source>
+        <translation>이미지 image png export ray picture snapshot</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/action_translation_sources.cpp"/>
+        <source>Open a structure before exporting an image</source>
+        <translation>이미지를 내보내려면 먼저 구조를 여세요</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/Main.qml"/>
+        <source>Image: PNG path and width (0 = 640).</source>
+        <translation>이미지: PNG 경로와 너비(0이면 640).</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/Main.qml"/>
+        <source>Save image</source>
+        <translation>이미지 저장</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/action_translation_sources.cpp"/>
+        <source>Color Ramp</source>
+        <translation>색 램프</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/action_translation_sources.cpp"/>
+        <source>Create a map-value or proximity color ramp usable as a color</source>
+        <translation>색으로 쓸 수 있는 map 값 또는 근접도 색 램프를 만듭니다</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/action_translation_sources.cpp"/>
+        <source>The color ramp could not be created</source>
+        <translation>색 램프를 만들지 못했습니다</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/action_translation_sources.cpp"/>
+        <source>ramp color potential map proximity gradient</source>
+        <translation>램프 ramp color potential map proximity gradient</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/Main.qml"/>
+        <source>Ramp: name, source map or object, levels, colors or spectrum.</source>
+        <translation>램프: 이름, 원천 map 또는 object, 수준, 색 또는 spectrum.</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/Main.qml"/>
+        <source>Create ramp</source>
+        <translation>램프 생성</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/action_translation_sources.cpp"/>
+        <source>Cartoon Type</source>
+        <translation>카툰 형태</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/action_translation_sources.cpp"/>
+        <source>Assign loop, tube, rectangle, oval, arrow or automatic cartoon profiles</source>
+        <translation>loop, tube, rectangle, oval, arrow 또는 automatic 카툰 형태를 지정합니다</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/action_translation_sources.cpp"/>
+        <source>The cartoon type could not be assigned</source>
+        <translation>카툰 형태를 지정하지 못했습니다</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/action_translation_sources.cpp"/>
+        <source>cartoon type loop tube rectangle oval arrow skip</source>
+        <translation>카툰 cartoon type loop tube rectangle oval arrow skip</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/action_translation_sources.cpp"/>
+        <source>Open a structure before assigning cartoon types</source>
+        <translation>카툰 형태를 지정하려면 먼저 구조를 여세요</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/action_translation_sources.cpp"/>
+        <source>Map Contour</source>
+        <translation>맵 등치면</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/action_translation_sources.cpp"/>
+        <source>Create a named isomesh, isosurface or isodot contour of a map</source>
+        <translation>맵의 이름 있는 isomesh, isosurface 또는 isodot 등치면을 만듭니다</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/action_translation_sources.cpp"/>
+        <source>The map contour could not be created</source>
+        <translation>맵 등치면을 만들지 못했습니다</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/action_translation_sources.cpp"/>
+        <source>contour isomesh isosurface isodot isolevel map carve</source>
+        <translation>등치면 contour isomesh isosurface isodot isolevel map carve</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/action_translation_sources.cpp"/>
+        <source>Open a scalar volume before creating a contour</source>
+        <translation>등치면을 만들려면 먼저 scalar volume을 여세요</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/Main.qml"/>
+        <source>Cartoon type and contour: type/selection, contour name/mode/level.</source>
+        <translation>카툰 형태와 등치면: 형태/선택식, 등치면 이름/모드/수준.</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/Main.qml"/>
+        <source>Apply type</source>
+        <translation>형태 적용</translation>
+    </message>
+    <message>
+        <location filename="../apps/desktop/Main.qml"/>
+        <source>Contour</source>
+        <translation>등치면 적용</translation>
+    </message>
+    <message>
         <location filename="../apps/desktop/Main.qml" line="3528"/>
         <source>The editor calls the same typed setting operation as CLI and Python. State is current; atom and bond IDs are 1-based.</source>
         <translation>이 편집기는 CLI 및 Python과 같은 typed setting operation을 호출합니다. 상태는 현재 상태이며 원자와 결합 ID는 1부터 시작합니다.</translation>

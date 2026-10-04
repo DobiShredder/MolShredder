@@ -78,6 +78,8 @@ std::string_view to_string(TrajectoryFormat format) noexcept {
     return "lammps";
   case TrajectoryFormat::binpos:
     return "binpos";
+  case TrajectoryFormat::molfile:
+    return "molfile";
   }
   return "auto";
 }
@@ -91,12 +93,33 @@ open_trajectory(const std::filesystem::path &path, TrajectoryFormat format,
                                                {},
                                                amber_box_angle_degrees,
                                                std::nullopt,
-                                               std::nullopt});
+                                               std::nullopt,
+                                               nullptr});
 }
 
 operation::Result<OpenedTrajectory>
 open_trajectory(const std::filesystem::path &path, TrajectoryFormat format,
                 const TrajectoryOpenContext &context) {
+  if (format == TrajectoryFormat::molfile) {
+    if (context.external_source == nullptr) {
+      return operation::Result<OpenedTrajectory>::failure(operation::Error{
+          operation::ErrorCode::invalid_argument,
+          "a molfile trajectory needs a registered provider source",
+          "load it through --provider molfile:<plugin> with --plugin-path"});
+    }
+    if (context.expected_atom_count.has_value() &&
+        context.external_source->atom_count() != *context.expected_atom_count) {
+      return operation::Result<OpenedTrajectory>::failure(operation::Error{
+          operation::ErrorCode::invalid_argument,
+          "molfile trajectory atom count " +
+              std::to_string(context.external_source->atom_count()) +
+              " does not match topology atom count " +
+              std::to_string(*context.expected_atom_count),
+          "attach the trajectory to a topology with the same atom order"});
+    }
+    return operation::Result<OpenedTrajectory>::success(
+        {TrajectoryFormat::molfile, context.external_source});
+  }
   const auto resolved =
       format == TrajectoryFormat::auto_detect ? detect(path) : format;
   if (resolved == TrajectoryFormat::auto_detect) {

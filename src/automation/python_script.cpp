@@ -1,4 +1,6 @@
 #include "molshredder/automation/python_script.hpp"
+#include "molshredder/automation/pml_commands.hpp"
+#include "molshredder/plugin/host.hpp"
 
 #include <algorithm>
 #include <array>
@@ -645,6 +647,14 @@ std::optional<operation::Error> register_python_script_command(
         }
         return PythonScriptService{registry, workspace}.run(request, context);
       });
+      error.has_value()) {
+    return error;
+  }
+  if (const auto error = register_pml_commands(registry, workspace);
+      error.has_value()) {
+    return error;
+  }
+  if (const auto error = plugin::register_plugin_commands(registry, workspace);
       error.has_value()) {
     return error;
   }

@@ -72,7 +72,44 @@ int main() {
       std::pair{753U, "valence_zero_mode"},
       std::pair{51U, "auto_show_lines"},
       std::pair{72U, "auto_show_nonbonded"},
-      std::pair{420U, "auto_show_spheres"}};
+      std::pair{420U, "auto_show_spheres"},
+      std::pair{66U, "label_color"},
+      std::pair{453U, "label_size"},
+      std::pair{328U, "label_font_id"},
+      std::pair{471U, "label_position"},
+      std::pair{718U, "label_placement_offset"},
+      std::pair{529U, "label_digits"},
+      std::pair{530U, "label_distance_digits"},
+      std::pair{531U, "label_angle_digits"},
+      std::pair{532U, "label_dihedral_digits"},
+      std::pair{574U, "dash_color"},
+      std::pair{58U, "dash_length"},
+      std::pair{59U, "dash_gap"},
+      std::pair{107U, "dash_width"},
+      std::pair{7U, "ambient"},
+      std::pair{8U, "direct"},
+      std::pair{9U, "reflect"},
+      std::pair{10U, "light"},
+      std::pair{455U, "light_count"},
+      std::pair{156U, "two_sided_lighting"},
+      std::pair{12U, "antialias"},
+      std::pair{84U, "depth_cue"},
+      std::pair{213U, "transparency_mode"},
+      std::pair{435U, "opaque_background"},
+      std::pair{137U, "ray_opaque_background"},
+      std::pair{151U, "ray_default_renderer"},
+      std::pair{138U, "transparency"},
+      std::pair{144U, "surface_color"},
+      std::pair{787U, "isosurface_algorithm"},
+      std::pair{238U, "auto_color"},
+      std::pair{91U, "cartoon_sampling"},
+      std::pair{96U, "cartoon_rect_length"},
+      std::pair{97U, "cartoon_rect_width"},
+      std::pair{750U, "cartoon_gap_cutoff"},
+      std::pair{19U, "ribbon_sampling"},
+      std::pair{106U, "ribbon_width"},
+      std::pair{405U, "angle_size"},
+      std::pair{407U, "dihedral_size"}};
   bool catalog_exact = definitions.size() == expected_catalog.size();
   for (std::size_t index = 0; index < expected_catalog.size(); ++index) {
     catalog_exact &= definitions[index].stable_id == expected_catalog[index].first &&
@@ -83,7 +120,35 @@ int main() {
           store.definition("line_width")->stable_id == 44U &&
           store.definition("sphere_mode")->stable_id == 421U &&
           store.definition("valence_zero_mode")->maximum == 2.0,
-      "catalog must expose all 43 pinned setting definitions and stable IDs");
+      "catalog must expose all 80 pinned setting definitions and stable IDs");
+  {
+    auto labels = RenderSettingStore::create().value();
+    const RenderSettingScope label_atom{RenderSettingScopeLevel::atom, 3U, 0U,
+                                        4U};
+    const auto position = labels.resolve("label_position", {3U, 0U, 4U, 0U});
+    passed &= expect(
+        position.has_value() &&
+            std::get<RenderSettingVector3>(position.value().value) ==
+                RenderSettingVector3{0.0, 0.0, 1.75} &&
+            !labels.set("label_position", label_atom,
+                        RenderSettingVector3{1.0, 2.0, 3.0})
+                 .has_value() &&
+            labels.set("label_position", label_atom,
+                       RenderSettingVector3{1.0, std::nan(""), 3.0})
+                .has_value() &&
+            labels.set("label_position", label_atom, 1.0).has_value() &&
+            !labels.set("label_size", label_atom, -0.5).has_value() &&
+            !labels.set("dash_gap", {}, -1.0).has_value() &&
+            labels.set("dash_gap", label_atom, 0.2).has_value(),
+        "vector settings and unbounded PyMOL label/dash values must validate");
+    const auto text = serialize_render_settings(labels.snapshot());
+    const auto parsed = text.has_value() ? parse_render_settings(text.value())
+                                         : molshredder::operation::Result<
+                                               RenderSettingSnapshot>::failure({});
+    passed &= expect(parsed.has_value() && parsed.value() == labels.snapshot() &&
+                         text.value().find("v 1 2 3") != std::string::npos,
+                     "vector settings must round-trip through snapshots");
+  }
 
   const RenderSettingScope global{};
   const RenderSettingScope object{RenderSettingScopeLevel::object, 7U};
@@ -159,7 +224,7 @@ int main() {
           parsed.value() == snapshot &&
           restored.value().snapshot() == snapshot &&
           serialized.value().starts_with(
-              "molshredder-render-settings 2\ncatalog \"pymol-oss-3.1.0-p0-v1\"\ncount 3\n"),
+              "molshredder-render-settings 2\ncatalog \"pymol-oss-3.1.0-p0-v6\"\ncount 3\n"),
       "setting snapshot must serialize, parse and restore exactly");
   passed &= expect(
       !parse_render_settings(serialized.value() + "extra\n").has_value() &&

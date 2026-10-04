@@ -1,5 +1,7 @@
 #include "molshredder/render/representation.hpp"
 
+#include "pymol_backbone.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -76,48 +78,33 @@ operation::Result<ColorRgba> setting_color(
   if (!value.has_value())
     return operation::Result<ColorRgba>::failure(value.error());
   auto color = atomic_color;
+  color.alpha = alpha;
   const auto token = std::string_view{value.value()};
-  if (token == "-1" || token == "atomic" || token == "atom") {
-    color.alpha = alpha;
+  if (token == "-1")
     return operation::Result<ColorRgba>::success(color);
-  }
-  constexpr std::array named{
-      std::pair<std::string_view, ColorRgba>{"black", {0.F, 0.F, 0.F, 1.F}},
-      std::pair<std::string_view, ColorRgba>{"blue", {0.2F, 0.35F, 1.F, 1.F}},
-      std::pair<std::string_view, ColorRgba>{"carbon", {0.35F, 0.35F, 0.35F, 1.F}},
-      std::pair<std::string_view, ColorRgba>{"cyan", {0.F, 1.F, 1.F, 1.F}},
-      std::pair<std::string_view, ColorRgba>{"green", {0.2F, 0.8F, 0.35F, 1.F}},
-      std::pair<std::string_view, ColorRgba>{"hydrogen", {0.95F, 0.95F, 0.95F, 1.F}},
-      std::pair<std::string_view, ColorRgba>{"magenta", {0.9F, 0.25F, 0.8F, 1.F}},
-      std::pair<std::string_view, ColorRgba>{"nitrogen", {0.2F, 0.35F, 0.95F, 1.F}},
-      std::pair<std::string_view, ColorRgba>{"orange", {1.F, 0.5F, 0.15F, 1.F}},
-      std::pair<std::string_view, ColorRgba>{"oxygen", {0.95F, 0.15F, 0.15F, 1.F}},
-      std::pair<std::string_view, ColorRgba>{"red", {0.95F, 0.2F, 0.2F, 1.F}},
-      std::pair<std::string_view, ColorRgba>{"sulfur", {0.95F, 0.8F, 0.15F, 1.F}},
-      std::pair<std::string_view, ColorRgba>{"white", {1.F, 1.F, 1.F, 1.F}},
-      std::pair<std::string_view, ColorRgba>{"yellow", {1.F, 0.85F, 0.2F, 1.F}}};
-  const auto found = std::find_if(named.begin(), named.end(),
-                                  [token](const auto& item) {
-                                    return item.first == token;
-                                  });
-  if (found != named.end()) {
-    color = found->second;
-    color.alpha = alpha;
+  static const ColorTable builtin_colors;
+  const auto& table =
+      request.colors != nullptr ? *request.colors : builtin_colors;
+  const auto index = table.resolve(token);
+  if (!index.has_value())
+    return operation::Result<ColorRgba>::failure(
+        invalid("unsupported render setting color token: " + value.value(),
+                "use atomic, object, a color name or index, 0xRRGGBB or "
+                "#RRGGBB"));
+  auto resolved = index.value();
+  if (resolved == kColorObject)
+    resolved = request.object_color;
+  if (resolved == kColorDefault || resolved == kColorAtomic)
     return operation::Result<ColorRgba>::success(color);
+  if (const auto rgba = table.rgba(resolved, alpha); rgba.has_value())
+    return operation::Result<ColorRgba>::success(*rgba);
+  if (resolved == kColorFront || resolved == kColorBack) {
+    const auto rgb =
+        resolved == kColorFront ? table.front_rgb() : table.background_rgb();
+    return operation::Result<ColorRgba>::success(
+        ColorRgba{rgb.red, rgb.green, rgb.blue, alpha});
   }
-  if (token.size() == 7U && token.front() == '#') {
-    unsigned int rgb{};
-    std::istringstream input{std::string{token.substr(1U)}};
-    if ((input >> std::hex >> rgb) && input.eof()) {
-      color = {static_cast<float>((rgb >> 16U) & 0xffU) / 255.F,
-               static_cast<float>((rgb >> 8U) & 0xffU) / 255.F,
-               static_cast<float>(rgb & 0xffU) / 255.F, alpha};
-      return operation::Result<ColorRgba>::success(color);
-    }
-  }
-  return operation::Result<ColorRgba>::failure(
-      invalid("unsupported render setting color token: " + value.value(),
-              "use atomic, a built-in basic color, or #RRGGBB"));
+  return operation::Result<ColorRgba>::success(color);
 }
 
 double coordinate_scale(const RepresentationRequest& request) noexcept {
@@ -149,24 +136,30 @@ std::pair<model::Vec3d, bool> valence_perpendicular(
   if (mode == 1) {
     const auto& target = request.topology->bonds()[bond_index];
     const std::array endpoints{target.first.value, target.second.value};
-    for (const auto endpoint : endpoints) {
-      for (std::size_t index = 0; index < request.topology->bonds().size();
-           ++index) {
-        if (index == bond_index)
-          continue;
-        const auto& candidate = request.topology->bonds()[index];
-        std::optional<std::size_t> neighbor;
-        if (candidate.first.value == endpoint)
-          neighbor = candidate.second.value;
-        else if (candidate.second.value == endpoint)
-          neighbor = candidate.first.value;
-        if (!neighbor.has_value() ||
-            !request.frame->atom_present(*neighbor))
-          continue;
-        auto projected = positions[*neighbor] - positions[endpoint];
-        projected = projected - direction * scene::dot(projected, direction);
-        if (scene::length(projected) > 1.0e-12)
-          return {scene::normalized(projected), false};
+    // Heavy-atom neighbors define the valence plane before hydrogens, so
+    // ring double bonds draw their inner line toward the ring like PyMOL.
+    for (const auto heavy_only : {true, false}) {
+      for (const auto endpoint : endpoints) {
+        for (std::size_t index = 0; index < request.topology->bonds().size();
+             ++index) {
+          if (index == bond_index)
+            continue;
+          const auto& candidate = request.topology->bonds()[index];
+          std::optional<std::size_t> neighbor;
+          if (candidate.first.value == endpoint)
+            neighbor = candidate.second.value;
+          else if (candidate.second.value == endpoint)
+            neighbor = candidate.first.value;
+          if (!neighbor.has_value() ||
+              !request.frame->atom_present(*neighbor) ||
+              (heavy_only &&
+               request.topology->atoms()[*neighbor].atomic_number <= 1U))
+            continue;
+          auto projected = positions[*neighbor] - positions[endpoint];
+          projected = projected - direction * scene::dot(projected, direction);
+          if (scene::length(projected) > 1.0e-12)
+            return {scene::normalized(projected), false};
+        }
       }
     }
     return {stable_perpendicular(direction), true};
@@ -209,262 +202,147 @@ bool is_helix(analysis::SecondaryStructureState state) noexcept {
          state == analysis::SecondaryStructureState::pi_helix;
 }
 
-struct BackbonePoint {
-  model::ResidueIndex residue;
-  model::AtomIndex ca;
-  model::Vec3d position;
-  std::optional<model::Vec3d> guide;
-  ColorRgba color;
-  analysis::SecondaryStructureState state{
-      analysis::SecondaryStructureState::coil};
-};
-
-struct RibbonRing {
-  model::Vec3d center;
-  model::Vec3d tangent;
-  model::Vec3d normal;
-  model::Vec3d binormal;
-  double half_width{};
-  double half_thickness{};
-  ColorRgba color;
-  model::ResidueIndex residue;
-};
-
-model::Vec3d catmull_rom(model::Vec3d p0, model::Vec3d p1,
-                         model::Vec3d p2, model::Vec3d p3, double t) {
-  using scene::operator+;
-  using scene::operator-;
-  using scene::operator*;
-  const auto t2 = t * t;
-  const auto t3 = t2 * t;
-  return (p1 * 2.0 + (p2 - p0) * t +
-          (p0 * 2.0 + p1 * -5.0 + p2 * 4.0 + p3 * -1.0) * t2 +
-          (p0 * -1.0 + p1 * 3.0 + p2 * -3.0 + p3) * t3) * 0.5;
-}
-
-model::Vec3d catmull_tangent(model::Vec3d p0, model::Vec3d p1,
-                             model::Vec3d p2, model::Vec3d p3, double t) {
-  using scene::operator+;
-  using scene::operator-;
-  using scene::operator*;
-  const auto t2 = t * t;
-  return scene::normalized(
-      ((p2 - p0) +
-       (p0 * 2.0 + p1 * -5.0 + p2 * 4.0 + p3 * -1.0) * (2.0 * t) +
-       (p0 * -1.0 + p1 * 3.0 + p2 * -3.0 + p3) * (3.0 * t2)) *
-      0.5);
-}
-
-double profile_width(const RepresentationStyle& style,
-                     RepresentationKind kind,
-                     analysis::SecondaryStructureState state) noexcept {
-  if (kind == RepresentationKind::ribbon) return style.ribbon_width;
-  if (is_helix(state)) return style.cartoon_helix_width;
-  if (is_sheet(state)) return style.cartoon_sheet_width;
-  return style.cartoon_coil_width;
+// PyMOL cartoon_*_quality / cartoon_sampling: -1 adapts to the atom count.
+int adaptive_quality(std::int64_t value, std::size_t atoms,
+                     std::array<int, 4> levels, int minimum) {
+  if (value == -1) {
+    return atoms < 100000U ? levels[0]
+           : atoms < 500000U ? levels[1]
+           : atoms < 999999U ? levels[2]
+                             : levels[3];
+  }
+  return std::max(static_cast<int>(value), minimum);
 }
 
 operation::Result<RenderPacket> build_backbone_representation(
     const RepresentationRequest& request, const std::vector<model::Vec3d>& positions,
     RenderPacket packet) {
-  using scene::operator-;
-  using scene::operator+;
-  using scene::operator*;
   const auto residue_count = request.topology->residue_count();
-  std::vector<analysis::SecondaryStructureState> calculated_states;
-  auto states = request.secondary_structure;
-  if (!states.empty() && states.size() != residue_count) {
-    return operation::Result<RenderPacket>::failure(
-        invalid("secondary-structure state count must match residue count"));
-  }
-  if (states.empty()) {
-    const auto assigned = analysis::assign_secondary_structure(
-        *request.topology, *request.frame);
-    if (!assigned.has_value()) {
-      return operation::Result<RenderPacket>::failure(assigned.error());
+  const auto atom_count = request.topology->atom_count();
+  // Secondary structure: PDB HELIX/SHEET codes (the `ss` atom property, as
+  // PyMOL reads them) when present, otherwise caller-supplied or assigned
+  // states.
+  std::vector<char> residue_ss(residue_count, 'L');
+  const auto* ss_property = request.topology->properties().find("ss");
+  const auto* ss_codes =
+      ss_property == nullptr
+          ? nullptr
+          : std::get_if<std::vector<std::string>>(&ss_property->values);
+  if (ss_codes != nullptr) {
+    for (std::size_t atom = 0; atom < atom_count && atom < ss_codes->size(); ++atom) {
+      const auto& record = request.topology->atoms()[atom];
+      if (record.name == "CA" && !(*ss_codes)[atom].empty())
+        residue_ss[record.residue.value] = (*ss_codes)[atom].front();
     }
-    calculated_states.reserve(residue_count);
-    for (const auto& residue : assigned.value().residues) {
-      calculated_states.push_back(residue.state);
-    }
-    states = calculated_states;
-    packet.provenance.emplace("secondary_structure_method",
-                              assigned.value().method);
-    packet.provenance.emplace("exact_stride_parity", "false");
+    packet.provenance.emplace("secondary_structure_method", "pdb-helix-sheet");
   } else {
-    packet.provenance.emplace("secondary_structure_method",
-                              "caller-supplied");
-  }
-
-  std::vector<std::optional<model::AtomIndex>> ca(residue_count);
-  std::vector<std::optional<model::AtomIndex>> oxygen(residue_count);
-  std::vector<std::uint8_t> residue_selected(residue_count, 0U);
-  for (std::size_t atom_index = 0; atom_index < request.topology->atom_count();
-       ++atom_index) {
-    const auto& atom = request.topology->atoms()[atom_index];
-    const auto residue = atom.residue.value;
-    if (request.frame->atom_present(atom_index) &&
-        atom_selected(request, atom_index)) {
-      residue_selected[residue] = 1U;
-    }
-    if (!request.frame->atom_present(atom_index)) continue;
-    if (atom.name == "CA" && !ca[residue].has_value()) {
-      ca[residue] = model::AtomIndex{atom_index};
-    } else if ((atom.name == "O" || atom.name == "OXT") &&
-               !oxygen[residue].has_value()) {
-      oxygen[residue] = model::AtomIndex{atom_index};
-    }
-  }
-
-  const auto unit_scale = request.frame->metadata().coordinate_unit ==
-                                  operation::LengthUnit::nanometer
-                              ? 0.1
-                              : 1.0;
-  const auto break_distance =
-      request.style.cartoon_chain_break_distance * unit_scale;
-  std::vector<std::vector<BackbonePoint>> chains;
-  for (std::size_t residue = 0; residue < residue_count; ++residue) {
-    if (!ca[residue].has_value() || residue_selected[residue] == 0U) {
-      if (!chains.empty() && !chains.back().empty()) chains.emplace_back();
-      continue;
-    }
-    const auto ca_index = *ca[residue];
-    const auto position = positions[ca_index.value];
-    bool starts_chain = chains.empty() || chains.back().empty();
-    if (!starts_chain) {
-      const auto previous_residue = chains.back().back().residue.value;
-      const auto& previous_record = request.topology->residues()[previous_residue];
-      const auto& record = request.topology->residues()[residue];
-      const auto separation =
-          scene::length(position - chains.back().back().position);
-      starts_chain = previous_record.chain_id != record.chain_id ||
-                     previous_record.segment_id != record.segment_id ||
-                     separation <= 1.0e-12 || separation > break_distance;
-    }
-    if (starts_chain) chains.emplace_back();
-    std::optional<model::Vec3d> guide;
-    if (oxygen[residue].has_value()) {
-      guide = positions[oxygen[residue]->value] - position;
-    }
-    chains.back().push_back(BackbonePoint{
-        model::ResidueIndex{residue}, ca_index, position, guide,
-        request.atom_visuals[ca_index.value].color, states[residue]});
-  }
-
-  for (const auto& chain : chains) {
-    if (chain.size() < 2U) continue;
-    std::vector<RibbonRing> rings;
-    rings.reserve((chain.size() - 1U) *
-                      request.style.backbone_samples_per_residue +
-                  1U);
-    model::Vec3d previous_normal{};
-    bool has_previous_normal = false;
-    for (std::size_t span = 0; span + 1U < chain.size(); ++span) {
-      const auto& p0 = chain[span == 0U ? 0U : span - 1U];
-      const auto& p1 = chain[span];
-      const auto& p2 = chain[span + 1U];
-      const auto& p3 = chain[span + 2U < chain.size() ? span + 2U
-                                                      : chain.size() - 1U];
-      const auto sample_count = request.style.backbone_samples_per_residue;
-      for (std::size_t sample = 0; sample < sample_count; ++sample) {
-        const auto t = static_cast<double>(sample) /
-                       static_cast<double>(sample_count);
-        auto tangent = catmull_tangent(p0.position, p1.position,
-                                       p2.position, p3.position, t);
-        if (scene::length(tangent) <= 1.0e-12) {
-          tangent = scene::normalized(p2.position - p1.position);
-        }
-        auto normal = model::Vec3d{};
-        const auto guide = t < 0.5 ? p1.guide : p2.guide;
-        if (guide.has_value()) {
-          normal = *guide - tangent * scene::dot(*guide, tangent);
-        }
-        if (scene::length(normal) <= 1.0e-12 && has_previous_normal) {
-          normal = previous_normal -
-                   tangent * scene::dot(previous_normal, tangent);
-        }
-        if (scene::length(normal) <= 1.0e-12) {
-          const model::Vec3d axis = std::abs(tangent.z) < 0.9
-                                        ? model::Vec3d{0.0, 0.0, 1.0}
-                                        : model::Vec3d{0.0, 1.0, 0.0};
-          normal = scene::cross(tangent, axis);
-        }
-        normal = scene::normalized(normal);
-        if (has_previous_normal && scene::dot(normal, previous_normal) < 0.0) {
-          normal = normal * -1.0;
-        }
-        auto width = profile_width(request.style, request.style.kind, p1.state);
-        if (request.style.kind == RepresentationKind::cartoon &&
-            is_sheet(p1.state) && !is_sheet(p2.state)) {
-          const auto arrow = t < 0.65 ? 1.0 + t * (0.7 / 0.65)
-                                      : 1.7 - (t - 0.65) * (1.55 / 0.35);
-          width *= arrow;
-        }
-        const auto binormal = scene::normalized(scene::cross(tangent, normal));
-        rings.push_back(RibbonRing{
-            catmull_rom(p0.position, p1.position, p2.position, p3.position, t),
-            tangent, normal, binormal, width * unit_scale * 0.5,
-            request.style.cartoon_thickness * unit_scale * 0.5,
-            p1.color, p1.residue});
-        previous_normal = normal;
-        has_previous_normal = true;
-      }
-    }
-    const auto& last = chain.back();
-    const auto tangent = rings.back().tangent;
-    auto normal = previous_normal - tangent * scene::dot(previous_normal, tangent);
-    if (scene::length(normal) <= 1.0e-12) normal = rings.back().normal;
-    normal = scene::normalized(normal);
-    rings.push_back(RibbonRing{
-        last.position, tangent, normal,
-        scene::normalized(scene::cross(tangent, normal)),
-        profile_width(request.style, request.style.kind, last.state) *
-            unit_scale * 0.5,
-        request.style.cartoon_thickness * unit_scale * 0.5, last.color,
-        last.residue});
-
-    std::vector<std::uint64_t> residue_pick(residue_count, 0U);
-    const auto maximum_index =
-        static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max());
-    if (rings.size() > maximum_index / 4U ||
-        packet.mesh_vertices.size() > maximum_index - rings.size() * 4U) {
+    std::vector<analysis::SecondaryStructureState> calculated_states;
+    auto states = request.secondary_structure;
+    if (!states.empty() && states.size() != residue_count) {
       return operation::Result<RenderPacket>::failure(
-          invalid("backbone mesh exceeds 32-bit index capacity"));
+          invalid("secondary-structure state count must match residue count"));
     }
-    for (const auto& ring : rings) {
-      if (residue_pick[ring.residue.value] == 0U) {
-        residue_pick[ring.residue.value] = next_pick_id(
-            packet, PickTarget{PickKind::residue, request.scene_node_id,
-                               std::nullopt, std::nullopt, ring.residue});
+    if (states.empty()) {
+      const auto assigned = analysis::assign_secondary_structure(
+          *request.topology, *request.frame);
+      if (!assigned.has_value()) {
+        return operation::Result<RenderPacket>::failure(assigned.error());
       }
-      const std::array<model::Vec3d, 4> offsets{
-          ring.normal * ring.half_width + ring.binormal * ring.half_thickness,
-          ring.normal * -ring.half_width + ring.binormal * ring.half_thickness,
-          ring.normal * -ring.half_width + ring.binormal * -ring.half_thickness,
-          ring.normal * ring.half_width + ring.binormal * -ring.half_thickness};
-      for (const auto& offset : offsets) {
-        packet.mesh_vertices.push_back(
-            MeshVertex{ring.center + offset, scene::normalized(offset), ring.color});
-        include(packet.bounds, ring.center + offset);
-      }
+      for (const auto& residue : assigned.value().residues)
+        calculated_states.push_back(residue.state);
+      states = calculated_states;
+      packet.provenance.emplace("secondary_structure_method",
+                                assigned.value().method);
+      packet.provenance.emplace("exact_stride_parity", "false");
+    } else {
+      packet.provenance.emplace("secondary_structure_method", "caller-supplied");
     }
-    const auto base = packet.mesh_vertices.size() - rings.size() * 4U;
-    for (std::size_t ring = 0; ring + 1U < rings.size(); ++ring) {
-      const auto first = base + ring * 4U;
-      const auto second = first + 4U;
-      const auto pick_id = residue_pick[rings[ring].residue.value];
-      for (std::size_t side = 0; side < 4U; ++side) {
-        const auto next = (side + 1U) % 4U;
-        packet.mesh_triangles.push_back(MeshTriangle{
-            static_cast<std::uint32_t>(first + side),
-            static_cast<std::uint32_t>(second + side),
-            static_cast<std::uint32_t>(second + next), pick_id});
-        packet.mesh_triangles.push_back(MeshTriangle{
-            static_cast<std::uint32_t>(first + side),
-            static_cast<std::uint32_t>(second + next),
-            static_cast<std::uint32_t>(first + next), pick_id});
-      }
+    for (std::size_t residue = 0; residue < residue_count; ++residue)
+      residue_ss[residue] = is_helix(states[residue])   ? 'H'
+                            : is_sheet(states[residue]) ? 'S'
+                                                        : 'L';
+  }
+
+  std::vector<std::int32_t> atom_type;
+  if (request.style.kind == RepresentationKind::cartoon &&
+      request.cartoon_types != nullptr) {
+    atom_type.assign(atom_count, 0);
+    for (const auto& [atom_id, code] : *request.cartoon_types) {
+      const auto index = request.topology->atom_index(model::AtomId{atom_id});
+      if (index.has_value() && index->value < atom_type.size())
+        atom_type[index->value] = code;
     }
+  }
+  std::vector<std::uint8_t> present(atom_count, 0U);
+  std::vector<std::uint8_t> visible(atom_count, 0U);
+  for (std::size_t atom = 0; atom < atom_count; ++atom) {
+    present[atom] = request.frame->atom_present(atom) ? 1U : 0U;
+    visible[atom] = present[atom] != 0U && atom_selected(request, atom) ? 1U : 0U;
+  }
+  std::vector<std::uint64_t> residue_pick(residue_count, 0U);
+  detail::PymolBackboneInput input{
+      request.topology,
+      positions,
+      present,
+      visible,
+      request.atom_visuals,
+      residue_ss,
+      atom_type,
+      coordinate_scale(request),
+      [&](model::ResidueIndex residue) {
+        auto& pick = residue_pick[residue.value];
+        if (pick == 0U)
+          pick = next_pick_id(packet, PickTarget{PickKind::residue,
+                                                 request.scene_node_id, std::nullopt,
+                                                 std::nullopt, residue});
+        return pick;
+      }};
+  const auto context = setting_context(request);
+  if (request.style.kind == RepresentationKind::ribbon) {
+    const auto sampling = setting_value(request, "ribbon_sampling", context, std::int64_t{1});
+    const auto width = setting_value(request, "ribbon_width", context, 3.0);
+    if (!sampling.has_value() || !width.has_value())
+      return operation::Result<RenderPacket>::failure(
+          !sampling.has_value() ? sampling.error() : width.error());
+    detail::PymolRibbonParameters parameters;
+    parameters.sampling = std::max(1, static_cast<int>(sampling.value()));
+    parameters.width_pixels = width.value();
+    detail::append_pymol_ribbon(input, parameters, packet);
+    packet.provenance.emplace("backbone_method", "pymol-3.1.0-ribbon");
+    return operation::Result<RenderPacket>::success(std::move(packet));
+  }
+  const auto sampling = setting_value(request, "cartoon_sampling", context, std::int64_t{-1});
+  const auto rect_length = setting_value(request, "cartoon_rect_length", context, 1.4);
+  const auto rect_width = setting_value(request, "cartoon_rect_width", context, 0.4);
+  const auto gap_cutoff = setting_value(request, "cartoon_gap_cutoff", context, std::int64_t{10});
+  if (!sampling.has_value() || !rect_length.has_value() || !rect_width.has_value() ||
+      !gap_cutoff.has_value()) {
+    const auto* error = !sampling.has_value()      ? &sampling.error()
+                        : !rect_length.has_value() ? &rect_length.error()
+                        : !rect_width.has_value()  ? &rect_width.error()
+                                                   : &gap_cutoff.error();
+    return operation::Result<RenderPacket>::failure(*error);
+  }
+  detail::PymolCartoonParameters parameters;
+  parameters.sampling = adaptive_quality(sampling.value(), atom_count, {7, 5, 3, 2}, 1);
+  parameters.loop_quality = adaptive_quality(-1, atom_count, {6, 6, 5, 4}, 3);
+  parameters.oval_quality = adaptive_quality(-1, atom_count, {10, 8, 7, 6}, 3);
+  parameters.tube_quality = adaptive_quality(-1, atom_count, {9, 7, 6, 5}, 3);
+  parameters.rect_length = rect_length.value();
+  parameters.rect_width = rect_width.value();
+  parameters.gap_cutoff = static_cast<int>(gap_cutoff.value());
+  const auto fallbacks = detail::append_pymol_cartoon(input, parameters, packet);
+  packet.provenance.emplace("backbone_method", "pymol-3.1.0-cartoon");
+  if (!fallbacks.empty()) {
+    std::string text;
+    for (const auto code : fallbacks)
+      text += (text.empty() ? "" : ",") + std::to_string(code);
+    packet.provenance.emplace("cartoon_type_fallback", text);
+  }
+  if (packet.mesh_vertices.size() >
+      static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())) {
+    return operation::Result<RenderPacket>::failure(
+        invalid("backbone mesh exceeds 32-bit index capacity"));
   }
   return operation::Result<RenderPacket>::success(std::move(packet));
 }
@@ -613,6 +491,53 @@ operation::Result<RenderPacket> build_representation(
   }
 
   const auto unit_scale = coordinate_scale(request);
+  if (request.style.kind == RepresentationKind::labels) {
+    packet.provenance.emplace("render_setting_catalog",
+                              std::string{kRenderSettingCatalogRevision});
+    if (request.atom_labels == nullptr)
+      return operation::Result<RenderPacket>::success(std::move(packet));
+    for (const auto& [atom_id, text] : *request.atom_labels) {
+      const auto atom = request.topology->atom_index(model::AtomId{atom_id});
+      if (!atom.has_value() || atom->value >= atom_count || text.empty())
+        continue;
+      const auto index = atom->value;
+      if (!request.frame->atom_present(index) || !atom_selected(request, index))
+        continue;
+      const auto context = setting_context(request, atom_id);
+      const auto color = setting_color(request, "label_color", context,
+                                       request.atom_visuals[index].color, 1.0F);
+      const auto size = setting_value(request, "label_size", context, 14.0);
+      const auto font =
+          setting_value(request, "label_font_id", context, std::int64_t{5});
+      const auto position = setting_value(
+          request, "label_position", context,
+          RenderSettingVector3{0.0, 0.0, 1.75});
+      const auto placement = setting_value(
+          request, "label_placement_offset", context,
+          RenderSettingVector3{0.0, 0.0, 0.0});
+      if (!color.has_value())
+        return operation::Result<RenderPacket>::failure(color.error());
+      if (!size.has_value())
+        return operation::Result<RenderPacket>::failure(size.error());
+      if (!font.has_value())
+        return operation::Result<RenderPacket>::failure(font.error());
+      if (!position.has_value())
+        return operation::Result<RenderPacket>::failure(position.error());
+      if (!placement.has_value())
+        return operation::Result<RenderPacket>::failure(placement.error());
+      const auto& offset = position.value();
+      const auto& extra = placement.value();
+      packet.labels.push_back(TextLabelInstance{
+          positions[index], text, color.value(), 0U, size.value(),
+          font.value(),
+          model::Vec3d{(offset[0] + extra[0]) * unit_scale,
+                       (offset[1] + extra[1]) * unit_scale,
+                       (offset[2] + extra[2]) * unit_scale},
+          request.object_id, atom_id});
+      include(packet.bounds, positions[index]);
+    }
+    return operation::Result<RenderPacket>::success(std::move(packet));
+  }
   if (request.style.kind == RepresentationKind::spheres) {
     const auto object_context = setting_context(request);
     const auto sphere_mode = setting_value(
@@ -741,6 +666,7 @@ operation::Result<RenderPacket> build_representation(
         continue;
     }
     auto order = valence_order(bond.order);
+    const auto aromatic = bond.order == model::BondOrder::aromatic;
     const auto zero_order = order == 0U;
     if (zero_order && zero_mode.value() == 0)
       continue;
@@ -760,6 +686,8 @@ operation::Result<RenderPacket> build_representation(
     double first_radius{};
     double second_radius{};
     double spacing{};
+    double stick_valence_scale{1.0};
+    double valence_fraction{};
     float first_width{};
     float second_width{};
     ColorRgba first_color = request.atom_visuals[first].color;
@@ -797,6 +725,7 @@ operation::Result<RenderPacket> build_representation(
       first_radius = first_resolved_radius.value() * unit_scale;
       second_radius = second_resolved_radius.value() * unit_scale;
       spacing = valence_size.value() * unit_scale;
+      valence_fraction = valence_size.value();
       const auto first_resolved = setting_color(
           request, "line_color", first_context, first_color, 1.0F);
       const auto second_resolved = setting_color(
@@ -844,16 +773,19 @@ operation::Result<RenderPacket> build_representation(
       }
       first_radius = first_resolved_radius.value() * unit_scale;
       second_radius = second_resolved_radius.value() * unit_scale;
-      if (request.topology->atoms()[first].atomic_number == 1U)
+      // PyMOL scales the whole bond when either end is a hydrogen.
+      if (request.topology->atoms()[first].atomic_number == 1U ||
+          request.topology->atoms()[second].atomic_number == 1U) {
         first_radius *= h_scale.value();
-      if (request.topology->atoms()[second].atomic_number == 1U)
         second_radius *= h_scale.value();
+      }
       if (zero_order) {
         first_radius *= zero_scale.value();
         second_radius *= zero_scale.value();
       }
       spacing = std::max(first_radius, second_radius) *
                 valence_scale.value() * 2.0;
+      stick_valence_scale = valence_scale.value();
       const auto first_alpha =
           static_cast<float>(1.0 - first_transparency.value());
       const auto second_alpha =
@@ -884,27 +816,127 @@ operation::Result<RenderPacket> build_representation(
     };
     const auto emit_half = [&](model::Vec3d start, model::Vec3d end,
                                ColorRgba color, double radius, float width) {
-      if (zero_order && zero_mode.value() == 1) {
-        constexpr std::size_t dash_count = 4U;
-        const auto delta = (end - start) * (1.0 / static_cast<double>(dash_count * 2U));
-        for (std::size_t dash = 0; dash < dash_count; ++dash) {
-          const auto offset = delta * static_cast<double>(dash * 2U);
-          emit(start + offset, start + offset + delta, color, radius, width);
-        }
-      } else {
-        emit(start, end, color, radius, width);
-      }
+      emit(start, end, color, radius, width);
     };
+    // Dashed zero-order bonds follow PyMOL: an even number (>= 2) of equal
+    // dashes along the whole bond. Sticks use dashes of 3 and nominal gaps of
+    // 6 zero-order radii with gaps also at both ends; lines use 0.15 A dashes
+    // and gaps with dashes touching both atoms. Dashes before the midpoint
+    // take the first atom's color, later ones the second's; a dash crossing
+    // the midpoint is split.
+    if (zero_order && zero_mode.value() == 1) {
+      const auto sticks = request.style.kind == RepresentationKind::sticks;
+      const auto zero_radius = std::max(first_radius, second_radius);
+      const auto dash = sticks ? 3.0 * zero_radius : 0.15 * unit_scale;
+      const auto nominal_gap = sticks ? 6.0 * zero_radius : 0.15 * unit_scale;
+      auto dashes = static_cast<std::size_t>(bond_length / (dash + nominal_gap));
+      if (dashes < 2U)
+        dashes = 2U;
+      else if (dashes % 2U != 0U)
+        --dashes;
+      const auto remaining = bond_length - static_cast<double>(dashes) * dash;
+      const auto gap = sticks ? remaining / static_cast<double>(dashes + 1U)
+                              : remaining / static_cast<double>(dashes - 1U);
+      const auto unit = bond_vector * (1.0 / bond_length);
+      const auto half = bond_length * 0.5;
+      for (std::size_t index = 0; index < dashes; ++index) {
+        const auto begin = (sticks ? gap : 0.0) +
+                           static_cast<double>(index) * (dash + gap);
+        const auto finish = begin + dash;
+        const auto at = [&](double distance) {
+          return positions[first] + unit * distance;
+        };
+        if (finish <= half) {
+          if (first_visible)
+            emit(at(begin), at(finish), first_color, first_radius, first_width);
+        } else if (begin >= half) {
+          if (second_visible)
+            emit(at(begin), at(finish), second_color, second_radius, second_width);
+        } else {
+          if (first_visible)
+            emit(at(begin), at(half), first_color, first_radius, first_width);
+          if (second_visible)
+            emit(at(half), at(finish), second_color, second_radius, second_width);
+        }
+      }
+      continue;
+    }
+    // Line valence follows PyMOL: with valence_mode 1 a non-terminal multiple
+    // bond keeps the full line and adds one inner line toward the plane atom,
+    // shortened by valence_size at both ends and offset by 2 (double) or 4
+    // (triple) valence sizes; aromatic bonds add inner dashes at 14-40% and
+    // 60-86%. Otherwise lines sit at +-valence_size (triple: also center).
+    if (request.style.kind == RepresentationKind::lines && order > 1U &&
+        valence.value()) {
+      const auto has_heavy_neighbor = [&](std::size_t atom, std::size_t other) {
+        for (const auto &candidate : request.topology->bonds()) {
+          const auto neighbor = candidate.first.value == atom ? candidate.second.value
+                                : candidate.second.value == atom
+                                    ? candidate.first.value
+                                    : atom;
+          if (neighbor != atom && neighbor != other &&
+              request.topology->atoms()[neighbor].atomic_number > 1U)
+            return true;
+        }
+        return false;
+      };
+      const auto terminal = !has_heavy_neighbor(first, second) ||
+                            !has_heavy_neighbor(second, first);
+      const auto fancy = valence_mode.value() == 1 && !terminal;
+      const auto emit_split = [&](model::Vec3d start, model::Vec3d end) {
+        const auto middle = (start + end) * 0.5;
+        if (first_visible)
+          emit(start, middle, first_color, first_radius, first_width);
+        if (second_visible)
+          emit(middle, end, second_color, second_radius, second_width);
+      };
+      const auto along = positions[second] - positions[first];
+      if (aromatic) {
+        emit_split(positions[first], positions[second]);
+        const auto inward = perpendicular * (2.0 * spacing);
+        if (first_visible)
+          emit(positions[first] + along * 0.14 + inward,
+               positions[first] + along * 0.4 + inward, first_color,
+               first_radius, first_width);
+        if (second_visible)
+          emit(positions[first] + along * 0.6 + inward,
+               positions[first] + along * 0.86 + inward, second_color,
+               second_radius, second_width);
+      } else if (fancy) {
+        emit_split(positions[first], positions[second]);
+        const auto inward =
+            perpendicular * (2.0 * spacing * (order == 3U ? 2.0 : 1.0));
+        emit_split(positions[first] + along * valence_fraction + inward,
+                   positions[first] + along * (1.0 - valence_fraction) + inward);
+      } else {
+        const auto side = perpendicular * (spacing * (order == 3U ? 2.0 : 1.0));
+        if (order == 3U)
+          emit_split(positions[first], positions[second]);
+        emit_split(positions[first] - side, positions[second] - side);
+        emit_split(positions[first] + side, positions[second] + side);
+      }
+      continue;
+    }
+    // Stick valence follows PyMOL: a double bond is two tubes of radius
+    // R*scale/2.5 offset by +-1.5 radii, a triple bond three tubes of radius
+    // R*scale/3.5 spaced 2.5 radii apart (R = bond stick radius).
+    double stroke_scale = 1.0;
+    if (request.style.kind == RepresentationKind::sticks && order > 1U) {
+      const auto divisor = order == 2U ? 2.5 : 3.5;
+      const auto gap = order == 2U ? 3.0 : 2.5;
+      stroke_scale = stick_valence_scale / divisor;
+      spacing = std::max(first_radius, second_radius) * stroke_scale * gap;
+    }
     for (std::size_t stroke = 0; stroke < order; ++stroke) {
       const auto centered = static_cast<double>(stroke) -
                             static_cast<double>(order - 1U) * 0.5;
       const auto offset = perpendicular * (centered * spacing);
       if (first_visible)
         emit_half(positions[first] + offset, midpoint + offset, first_color,
-                  first_radius, first_width);
+                  first_radius * stroke_scale, first_width);
       if (second_visible)
         emit_half(midpoint + offset, positions[second] + offset, second_color,
-                  second_radius, second_width);
+                  second_radius * stroke_scale, second_width);
     }
     if (request.style.kind == RepresentationKind::sticks) {
       const auto ratio =

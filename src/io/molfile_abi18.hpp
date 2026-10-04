@@ -70,8 +70,29 @@ struct Timestep {
 using ReadBonds = int (*)(void*, int*, int**, int**, float**, int**, int*,
                           char***);
 
-// This is the ABI-stable prefix through close_file_read. Later ABI 18 fields
-// are intentionally not declared until their channel adapters are implemented.
+// Prefix of molfile_volumetric_t. Fields after zsize (has_scalar, has_gradient,
+// has_variance, has_color) are not declared because their order across ABI
+// revisions is not verified, so only one dataset is indexed (an array of
+// datasets would need the full struct size).
+struct VolumetricMetadata {
+  char dataname[256];
+  float origin[3];
+  float xaxis[3];
+  float yaxis[3];
+  float zaxis[3];
+  int xsize;
+  int ysize;
+  int zsize;
+};
+
+using ReadVolumetricMetadata = int (*)(void*, int*, VolumetricMetadata**);
+using ReadVolumetricData = int (*)(void*, int, float*, float*);
+using OpaqueCallback = void (*)();
+
+// This is the ABI-stable prefix through read_volumetric_data. The four writer
+// callbacks between them are opaque placeholders because only their pointer
+// size matters here. Later ABI 18 fields are intentionally not declared until
+// their channel adapters are implemented.
 struct MolfilePlugin {
   int abi_version;
   const char* type;
@@ -87,6 +108,12 @@ struct MolfilePlugin {
   ReadBonds read_bonds;
   int (*read_next_timestep)(void*, int, Timestep*);
   void (*close_file_read)(void*);
+  OpaqueCallback open_file_write;
+  OpaqueCallback write_structure;
+  OpaqueCallback write_timestep;
+  OpaqueCallback close_file_write;
+  ReadVolumetricMetadata read_volumetric_metadata;
+  ReadVolumetricData read_volumetric_data;
 };
 
 using RegisterCallback = int (*)(void*, PluginHeader*);
@@ -100,5 +127,10 @@ static_assert(std::is_standard_layout_v<Atom>);
 static_assert(offsetof(MolfilePlugin, filename_extension) ==
               sizeof(PluginHeader));
 static_assert(sizeof(Atom) == 84U);
+static_assert(offsetof(VolumetricMetadata, origin) == 256U);
+static_assert(offsetof(VolumetricMetadata, xsize) == 304U);
+static_assert(offsetof(MolfilePlugin, read_volumetric_metadata) ==
+              offsetof(MolfilePlugin, close_file_read) +
+                  5U * sizeof(OpaqueCallback));
 
 }  // namespace molshredder::io::abi18

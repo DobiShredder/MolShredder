@@ -13,18 +13,20 @@ scene node ID, world-space primitive, bounds와 deterministic pick-ID mapping을
 - `spheres`: present하고 selected인 atom당 sphere 하나를 생성한다.
 - `lines`: visible bond를 midpoint에서 둘로 나눠 각 atom 색상의 screen-space line 두 개로 만든다.
 - `sticks`: 같은 방식으로 atom 색상의 finite cylinder 두 개를 만든다.
-- `ribbon`: selected residue의 Cα Catmull-Rom backbone을 일정 폭의 indexed solid mesh로 만든다.
-- `cartoon`: 독립 STRIDE-method v0 state에 따라 helix/sheet/coil 폭과 sheet arrow profile을 적용한다.
+- `ribbon`: PyMOL처럼 Cα-Cα Hermite 선분(`ribbon_sampling` 개, 반쪽씩 원자 색)을 `ribbon_width` pixel 폭 line으로 만든다.
+- `cartoon`: PyMOL 구성을 따른다(`src/render/pymol_backbone.cpp`). CA guide, 잔기 `(N−C)×(N−O)` 방향 벡터, 둥근 helix 보정,
+  방향 정제, sheet 평탄화, Hermite sampling 뒤 loop 0.2 Å 육각형, helix 0.25×1.35 Å 타원, sheet 0.4×1.4 Å 사각형과 화살촉,
+  tube 0.5 Å 9각형 단면으로 extrusion한다. 이웃 type이 다르면 그 구간은 loop(skip·dash 우선)다.
 - Bond는 양 끝 atom이 모두 present하고 selected일 때만 생성한다.
 - 두 half primitive는 하나의 bond pick ID를 공유한다. Sphere pick은 stable `AtomIndex`, backbone
   triangle pick은 stable `ResidueIndex`를 가리킨다.
 - Coordinate buffer가 float32여도 packet world coordinate는 float64로 승격한다.
 
-Backbone frame은 carbonyl O 방향을 tangent에 직교 투영하고, O가 없으면 이전 frame을 parallel
-transport한다. 인접 frame의 normal 부호를 맞춰 ribbon flip을 막는다. Chain/segment 변경, selection
-공백, missing Cα 및 기본 4.5 Å보다 큰 Cα 간격에서는 mesh를 절단한다. 폭과 절단 거리는 Å style로
-정의하고 nm coordinate frame에서는 0.1배로 변환한다. Packet provenance는 자동 assignment method와
-exact-parity 상태를 기록한다.
+Secondary structure는 PDB HELIX/SHEET(`ss` property)가 있으면 그것을, 없으면 STRIDE-method v0 할당을 쓴다(PyMOL은 dss).
+연속 잔기는 C-N peptide 결합(1.9 Å 이하)으로 잇고, 끊긴 잔기는 같은 chain에서 `cartoon_gap_cutoff` 안이면 dash loop(숨긴
+잔기면 skip), 아니면 별도 segment다. 길이는 Å로 정의하고 nm frame에서는 0.1배로 바꾼다. PyMOL 3.1.0 VRML export와 양방향
+점-삼각형 거리 0.001 Å 미만으로 일치한다(`tests/render/backbone_parity_test.py`). Packet provenance는 `backbone_method`와
+secondary structure 출처를 기록한다.
 
 Packet은 GPU buffer가 아니다. Backend adapter가 instance data를 upload하고 topology/frame version으로
 resource reuse 여부를 판단한다. 현재는 multiple-bond offset, bond cap/join style, periodic copies,

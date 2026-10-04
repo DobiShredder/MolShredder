@@ -49,6 +49,14 @@ atom/bond target을 입력하고 Set, Get, Unset, Reset을 수행할 수 있다.
 Desktop 전용 state를 직접 바꾸지 않고 CLI/Python과 같은 canonical operation을 호출한다.
 Atom/bond target은 topology의 64-bit stable ID이며 실패한 적용은 현재 scene packet을 유지한다.
 
+**Color Atoms**(`represent.color`)는 같은 overlay의 color 행으로 이동한다. 색 token과 selection을 입력해 적용하면
+CLI/Python과 같은 `color` operation이 실행되고, 결과 칸에 `color get` 응답(index, 이름, RGB)이 표시된다.
+**Color by Spectrum**(`represent.spectrum`)과 **Background Color**(`scene.background`)도 같은 overlay의 행에서
+`spectrum`과 `background set`을 호출한다. Viewport는 workspace 배경색으로 화면을 지운다(미설정 시 기존 기본값).
+**Label Atoms**(`represent.label`)는 같은 overlay에서 `label`을 호출한다. Atom label은 `label_color`·`label_size`와
+camera 공간 offset(`label_position`+`label_placement_offset`)으로 그려지고, label을 끌면 이동량이 atom 단위
+`label_placement_offset`으로 저장된다. Measurement overlay는 dash setting과 digits setting을 따른다.
+
 ## Analyze panel
 
 Toolbar의 **Analyze**는 centroid/COM, atom distance, contacts와 trajectory RMSD 계산 및 persistent

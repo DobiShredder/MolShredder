@@ -103,6 +103,35 @@ struct ParsedModel {
   std::vector<ParsedAtom> atoms;
 };
 
+// HELIX/SHEET residue range; kind is the PyMOL ss code ("H" or "S").
+struct ParsedSecondaryRange {
+  std::string kind;
+  std::string chain_id;
+  std::int64_t first{};
+  std::int64_t last{};
+};
+
+std::optional<ParsedSecondaryRange> parse_secondary_range(
+    std::string_view line, bool helix) {
+  // HELIX: chain 20, start 22-25, end 34-37; SHEET: chain 22, start 23-26,
+  // end 34-37 (1-based PDB columns).
+  const auto chain = trim(field(line, helix ? 19 : 21, 1));
+  const auto first = trim(field(line, helix ? 21 : 22, 4));
+  const auto last = trim(field(line, 33, 4));
+  std::int64_t first_value{};
+  std::int64_t last_value{};
+  const auto parse = [](std::string_view text, std::int64_t& value) {
+    const auto* begin = text.data();
+    const auto* end = text.data() + text.size();
+    const auto parsed = std::from_chars(begin, end, value);
+    return !text.empty() && parsed.ec == std::errc{} && parsed.ptr == end;
+  };
+  if (!parse(first, first_value) || !parse(last, last_value))
+    return std::nullopt;
+  return ParsedSecondaryRange{helix ? "H" : "S", std::string{chain},
+                              first_value, last_value};
+}
+
 struct ParsedConnection {
   std::int64_t source{};
   std::int64_t target{};
@@ -298,6 +327,7 @@ Result<StructureDocument> read_pdb(std::string_view content,
   std::string space_group;
   std::string z_value;
   std::vector<ParsedConnection> connections;
+  std::vector<ParsedSecondaryRange> secondary_ranges;
   std::string molecule_remarks;
 
   const auto retain_molecule_remark = [&molecule_remarks](std::string_view line) {
@@ -375,6 +405,12 @@ Result<StructureDocument> read_pdb(std::string_view content,
         title.push_back(' ');
       }
       title += trim(field(line, 10, 70));
+    } else if (record == "HELIX" || record == "SHEET") {
+      // Malformed ranges are ignored like other optional header records;
+      // the raw record stays in molecule_remarks as before.
+      if (auto range = parse_secondary_range(line, record == "HELIX"))
+        secondary_ranges.push_back(std::move(*range));
+      retain_molecule_remark(line);
     } else if (record == "CONECT") {
       retain_molecule_remark(line);
       const auto source_serial = parse_number<std::int64_t>(
@@ -428,6 +464,7 @@ Result<StructureDocument> read_pdb(std::string_view content,
   std::map<AtomIdentity, AtomIndex> identity_to_index;
   std::map<std::int64_t, AtomIndex> serial_to_index;
   BooleanColumn hetero_values;
+  std::vector<std::string> secondary_values;
 
   const auto& first_model = models.front();
   for (const auto& atom : first_model.atoms) {
@@ -465,6 +502,14 @@ Result<StructureDocument> read_pdb(std::string_view content,
     identity_to_index.emplace(atom.identity, added.value());
     serial_to_index.emplace(atom.identity.serial, added.value());
     hetero_values.values.push_back(atom.hetero ? 1U : 0U);
+    std::string secondary;
+    for (const auto& range : secondary_ranges) {
+      if (range.chain_id == atom.identity.chain_id &&
+          atom.identity.residue_number >= range.first &&
+          atom.identity.residue_number <= range.last)
+        secondary = range.kind;
+    }
+    secondary_values.push_back(std::move(secondary));
   }
 
   std::set<std::pair<std::size_t, std::size_t>> unique_bonds;
@@ -497,6 +542,14 @@ Result<StructureDocument> read_pdb(std::string_view content,
           PropertyMetadata{std::nullopt, "PDB ATOM/HETATM", {}});
       error.has_value()) {
     return Result<StructureDocument>::failure(*error);
+  }
+  if (!secondary_ranges.empty()) {
+    if (const auto error = builder.add_property(
+            "ss", std::move(secondary_values),
+            PropertyMetadata{std::nullopt, "PDB HELIX/SHEET", {}});
+        error.has_value()) {
+      return Result<StructureDocument>::failure(*error);
+    }
   }
   builder.set_source_metadata("format", "pdb");
   builder.set_source_metadata("format_version", "3.3");

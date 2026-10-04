@@ -519,11 +519,15 @@ operation::Result<std::optional<double>> numeric_property(
                                 static_cast<double>(values[atom_index].z)};
           },
           context.frame->positions().values());
-      if (node.field == NumericField::coordinate_x)
-        return operation::Result<std::optional<double>>::success(coordinate.x);
-      if (node.field == NumericField::coordinate_y)
-        return operation::Result<std::optional<double>>::success(coordinate.y);
-      return operation::Result<std::optional<double>>::success(coordinate.z);
+      const auto component = node.field == NumericField::coordinate_x
+                                 ? coordinate.x
+                             : node.field == NumericField::coordinate_y
+                                 ? coordinate.y
+                                 : coordinate.z;
+      return operation::Result<std::optional<double>>::success(
+          context.float32_field_values
+              ? static_cast<double>(static_cast<float>(component))
+              : component);
     }
 
     std::string resolved_property = node.property;
@@ -596,6 +600,9 @@ operation::Result<std::optional<double>> numeric_property(
       return operation::Result<std::optional<double>>::failure(invalid(
           "atom property '" + node.property + "' contains a non-finite value"));
     }
+    if (context.float32_field_values)
+      return operation::Result<std::optional<double>>::success(
+          static_cast<double>(static_cast<float>(value.value())));
     return operation::Result<std::optional<double>>::success(value);
   }
   auto left = numeric_property(*node.left, topology, atom_index, context);
@@ -1441,6 +1448,11 @@ operation::Result<Mask> evaluate_node(const std::shared_ptr<const Node>& node,
 
 }  // namespace
 
+operation::Result<std::vector<double>> atom_vdw_radii(
+    const model::Topology& topology) {
+  return vdw_radii(topology);
+}
+
 operation::Result<Mask> evaluate(const Expression& expression,
                                  const model::Topology& topology,
                                  const NamedResolver& named_resolver,
@@ -1458,6 +1470,26 @@ bool mask_is_valid(std::span<const std::uint8_t> mask,
   return mask.size() == atom_count &&
          std::all_of(mask.begin(), mask.end(),
                      [](std::uint8_t value) { return value <= 1U; });
+}
+
+operation::Result<std::vector<std::optional<double>>> evaluate_numeric(
+    const NumericNode& expression, const model::Topology& topology,
+    const EvaluationContext& context) {
+  std::vector<std::optional<double>> values;
+  values.reserve(topology.atom_count());
+  for (std::size_t index = 0; index < topology.atom_count(); ++index) {
+    auto value = numeric_property(expression, topology, index, context);
+    if (!value.has_value())
+      return operation::Result<std::vector<std::optional<double>>>::failure(
+          value.error());
+    values.push_back(value.value());
+  }
+  return operation::Result<std::vector<std::optional<double>>>::success(
+      std::move(values));
+}
+
+std::string atom_element_symbol(std::uint8_t atomic_number) {
+  return element_symbol(atomic_number);
 }
 
 }  // namespace molshredder::selection

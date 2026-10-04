@@ -202,9 +202,13 @@ int main() {
       4U, analysis::SecondaryStructureState::alpha_helix);
   cartoon_request.secondary_structure = helix_states;
   const auto cartoon = render::build_representation(cartoon_request);
-  passed &= expect(cartoon.has_value() &&
-                       cartoon.value().mesh_vertices.size() == 28U &&
-                       cartoon.value().mesh_triangles.size() == 48U &&
+  bool finite_normals = cartoon.has_value() && !cartoon.value().mesh_vertices.empty();
+  if (cartoon.has_value())
+    for (const auto& vertex : cartoon.value().mesh_vertices)
+      finite_normals = finite_normals && std::isfinite(vertex.normal.x) &&
+                       std::isfinite(vertex.normal.y) && std::isfinite(vertex.normal.z);
+  passed &= expect(cartoon.has_value() && finite_normals &&
+                       !cartoon.value().mesh_triangles.empty() &&
                        cartoon.value().pick_targets.size() == 4U &&
                        cartoon.value().pick_targets.at(1U).kind ==
                            render::PickKind::residue &&
@@ -213,16 +217,10 @@ int main() {
                        cartoon.value().provenance.at(
                            "secondary_structure_method") ==
                            "caller-supplied" &&
+                       cartoon.value().provenance.at("backbone_method") ==
+                           "pymol-3.1.0-cartoon" &&
                        !cartoon.value().bounds.empty,
-                   "cartoon must emit smooth residue-pickable backbone mesh");
-  if (cartoon.has_value()) {
-    for (std::size_t ring = 1U; ring < 7U; ++ring) {
-      passed &= expect(
-          scene::dot(cartoon.value().mesh_vertices[(ring - 1U) * 4U].normal,
-                     cartoon.value().mesh_vertices[ring * 4U].normal) > 0.0,
-          "transported ribbon frame must not flip between adjacent rings");
-    }
-  }
+                   "cartoon must emit a residue-pickable PyMOL-style backbone mesh");
   cartoon_request.secondary_structure = {};
   const auto assigned_cartoon = render::build_representation(cartoon_request);
   passed &= expect(
@@ -240,9 +238,19 @@ int main() {
   split_request.style.backbone_samples_per_residue = 2U;
   split_request.secondary_structure = helix_states;
   const auto split_ribbon = render::build_representation(split_request);
-  passed &= expect(split_ribbon.has_value() &&
-                       split_ribbon.value().mesh_vertices.size() == 24U &&
-                       split_ribbon.value().mesh_triangles.size() == 32U,
+  // One CA-CA ribbon span per chain; nothing crosses the 3.7-7.4 A chain gap.
+  bool bridges = false;
+  if (split_ribbon.has_value())
+    for (const auto& line : split_ribbon.value().lines)
+      bridges = bridges || (std::min(line.start.x, line.end.x) < 3.7 - 1.0e-6 &&
+                            std::max(line.start.x, line.end.x) > 3.7 + 1.0e-6 &&
+                            std::max(line.start.x, line.end.x) > 7.4 - 1.0e-6) ||
+                (std::min(line.start.x, line.end.x) < 7.4 - 1.0e-6 &&
+                 std::max(line.start.x, line.end.x) > 3.7 + 1.0e-6 &&
+                 std::min(line.start.x, line.end.x) < 3.7 + 1.0e-6 &&
+                 std::max(line.start.x, line.end.x) > 7.4 - 1.0e-6);
+  passed &= expect(split_ribbon.has_value() && split_ribbon.value().lines.size() == 2U &&
+                       split_ribbon.value().mesh_vertices.empty() && !bridges,
                    "ribbon must not bridge distinct chains");
 
   const auto backbone_nm = make_backbone_fixture(false, true);

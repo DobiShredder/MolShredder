@@ -1,5 +1,7 @@
 #include "molshredder/render/setting_store.hpp"
 
+#include "molshredder/render/color_table.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -62,6 +64,8 @@ bool matches_type(RenderSettingValueType type, const RenderSettingValue &value) 
     return std::holds_alternative<double>(value);
   case RenderSettingValueType::color:
     return std::holds_alternative<std::string>(value);
+  case RenderSettingValueType::vector3:
+    return std::holds_alternative<RenderSettingVector3>(value);
   }
   return false;
 }
@@ -74,17 +78,26 @@ validate_value(const RenderSettingDefinition &definition,
   if (const auto *color = std::get_if<std::string>(&value)) {
     if (color->empty())
       return invalid("render setting color must not be empty");
-    constexpr std::array<std::string_view, 17U> names{
-        "-1", "atom", "atomic", "black", "blue", "carbon", "cyan",
-        "green", "hydrogen", "magenta", "nitrogen", "orange", "oxygen",
-        "red", "sulfur", "white", "yellow"};
-    const auto hex = color->size() == 7U && color->front() == '#' &&
-                     std::all_of(color->begin() + 1, color->end(), [](char item) {
-                       return std::isxdigit(
-                                  static_cast<unsigned char>(item)) != 0;
-                     });
-    if (!hex && std::find(names.begin(), names.end(), *color) == names.end())
+    // Built-in tokens are checked here; identifier-shaped names may refer to
+    // workspace-defined colors and are validated against the live ColorTable
+    // by the owner before they reach the store.
+    static const ColorTable builtin_colors;
+    const auto identifier =
+        std::isalpha(static_cast<unsigned char>(color->front())) != 0 ||
+        color->front() == '_';
+    if (!builtin_colors.resolve(*color).has_value() &&
+        !(identifier &&
+          std::all_of(color->begin(), color->end(), [](char item) {
+            return std::isalnum(static_cast<unsigned char>(item)) != 0 ||
+                   item == '_' || item == '.' || item == '+' || item == '-';
+          })))
       return invalid("unsupported render setting color token: " + *color);
+    return std::nullopt;
+  }
+  if (const auto *vector = std::get_if<RenderSettingVector3>(&value)) {
+    if (!std::all_of(vector->begin(), vector->end(),
+                     [](double item) { return std::isfinite(item); }))
+      return invalid("render setting vector components must be finite");
     return std::nullopt;
   }
   double numeric{};
@@ -150,6 +163,8 @@ char value_tag(RenderSettingValueType type) {
     return 'f';
   case RenderSettingValueType::color:
     return 'c';
+  case RenderSettingValueType::vector3:
+    return 'v';
   }
   return '?';
 }
@@ -218,13 +233,77 @@ const std::vector<RenderSettingDefinition> &p0_render_setting_definitions() {
       definition(51, "auto_show_lines", boolean, true, global),
       definition(72, "auto_show_nonbonded", boolean, true, global),
       definition(420, "auto_show_spheres", boolean, false, global),
+      // SEQ-311 S3: atom labels and measurement dashes. PyMOL 3.1.0 accepts
+      // any finite value for these settings, so no ranges are imposed.
+      definition(66, "label_color", color, std::string{"front"}, atom),
+      definition(453, "label_size", number, 14.0, atom, std::nullopt,
+                 std::nullopt, false, "pixel"),
+      definition(328, "label_font_id", integer, std::int64_t{5}, atom),
+      definition(471, "label_position", vector3,
+                 RenderSettingVector3{0.0, 0.0, 1.75}, atom, std::nullopt,
+                 std::nullopt, false, "angstrom"),
+      definition(718, "label_placement_offset", vector3,
+                 RenderSettingVector3{0.0, 0.0, 0.0}, atom, std::nullopt,
+                 std::nullopt, false, "angstrom"),
+      definition(529, "label_digits", integer, std::int64_t{1}, object_state),
+      definition(530, "label_distance_digits", integer, std::int64_t{-1},
+                 object_state),
+      definition(531, "label_angle_digits", integer, std::int64_t{-1},
+                 object_state),
+      definition(532, "label_dihedral_digits", integer, std::int64_t{-1},
+                 object_state),
+      definition(574, "dash_color", color, std::string{"-1"}, object_state),
+      definition(58, "dash_length", number, 0.15, object_state, std::nullopt,
+                 std::nullopt, false, "angstrom"),
+      definition(59, "dash_gap", number, 0.45, object_state, std::nullopt,
+                 std::nullopt, false, "angstrom"),
+      definition(107, "dash_width", number, 2.5, object_state, std::nullopt,
+                 std::nullopt, false, "pixel"),
+      // SEQ-311 S4: lighting/material/effects and image export state.
+      definition(7, "ambient", number, 0.14, global),
+      definition(8, "direct", number, 0.45, global),
+      definition(9, "reflect", number, 0.45, global),
+      definition(10, "light", vector3, RenderSettingVector3{-0.4, -0.4, -1.0},
+                 global),
+      definition(455, "light_count", integer, std::int64_t{2}, global, 1.0,
+                 10.0),
+      definition(156, "two_sided_lighting", integer, std::int64_t{-1},
+                 object_state),
+      definition(12, "antialias", integer, std::int64_t{1}, global),
+      definition(84, "depth_cue", boolean, true, global),
+      definition(213, "transparency_mode", integer, std::int64_t{2},
+                 object_state),
+      definition(435, "opaque_background", boolean, false, global),
+      definition(137, "ray_opaque_background", integer, std::int64_t{-1},
+                 global),
+      definition(151, "ray_default_renderer", integer, std::int64_t{0}, global),
+      // SEQ-311 S5: surface transparency/color and contour algorithm.
+      definition(138, "transparency", number, 0.0, atom),
+      definition(144, "surface_color", color, std::string{"-1"}, atom),
+      definition(787, "isosurface_algorithm", integer, std::int64_t{0}, global,
+                 0.0, 2.0),
+      // SEQ-311 S9 (Q-022 b): PyMOL load coloring; off by default in
+      // MolShredder (PyMOL default on).
+      definition(238, "auto_color", boolean, false, global),
+      // SEQ-311 S11: PyMOL cartoon/ribbon geometry controls.
+      definition(91, "cartoon_sampling", integer, std::int64_t{-1}, object_state,
+                 -1.0),
+      definition(96, "cartoon_rect_length", number, 1.4, object_state, 0.0),
+      definition(97, "cartoon_rect_width", number, 0.4, object_state, 0.0),
+      definition(750, "cartoon_gap_cutoff", integer, std::int64_t{10}, object_state,
+                 0.0),
+      definition(19, "ribbon_sampling", integer, std::int64_t{1}, object_state),
+      definition(106, "ribbon_width", number, 3.0, object_state, 0.0),
+      // Measurement arc size (PyMOL angle_size / dihedral_size).
+      definition(405, "angle_size", number, 0.6666, object_state, 0.0),
+      definition(407, "dihedral_size", number, 0.6666, object_state, 0.0),
   };
   return definitions;
 }
 
 operation::Result<RenderSettingStore> RenderSettingStore::create() {
   const auto &definitions = p0_render_setting_definitions();
-  if (definitions.size() != 43U)
+  if (definitions.size() != 80U)
     return operation::Result<RenderSettingStore>::failure(
         invalid("P0 render setting catalog size mismatch"));
   for (std::size_t index = 0; index < definitions.size(); ++index) {
@@ -384,6 +463,8 @@ serialize_render_settings(const RenderSettingSnapshot &snapshot) {
             output << (value ? "true" : "false");
           else if constexpr (std::is_same_v<Value, std::string>)
             output << std::quoted(value);
+          else if constexpr (std::is_same_v<Value, RenderSettingVector3>)
+            output << value[0] << ' ' << value[1] << ' ' << value[2];
           else
             output << value;
         },
@@ -445,6 +526,12 @@ parse_render_settings(std::string_view text) {
         return operation::Result<RenderSettingSnapshot>::failure(
             invalid("invalid numeric render setting value"));
       value = number;
+    } else if (tag == 'v') {
+      RenderSettingVector3 vector{};
+      if (!(input >> vector[0] >> vector[1] >> vector[2]))
+        return operation::Result<RenderSettingSnapshot>::failure(
+            invalid("invalid vector render setting value"));
+      value = vector;
     } else if (tag == 'c') {
       std::string color;
       if (!(input >> std::quoted(color)))

@@ -38,6 +38,8 @@ struct Header {
   std::int32_t space_group{};
   std::int32_t extended_bytes{};
   std::int32_t skew_flag{};
+  std::array<float, 9U> skew_matrix{};
+  std::array<float, 3U> skew_translation{};
   std::int32_t version{};
   std::int32_t imod_stamp{};
   std::int32_t imod_flags{};
@@ -133,6 +135,10 @@ Header header(std::string_view content, ByteOrder order) noexcept {
   result.space_group = signed32(content, 88U, order);
   result.extended_bytes = signed32(content, 92U, order);
   result.skew_flag = signed32(content, 96U, order);
+  for (std::size_t index = 0; index < 9U; ++index)
+    result.skew_matrix[index] = float32(content, 100U + index * 4U, order);
+  for (std::size_t index = 0; index < 3U; ++index)
+    result.skew_translation[index] = float32(content, 136U + index * 4U, order);
   result.version = signed32(content, 108U, order);
   result.imod_stamp = signed32(content, 152U, order);
   result.imod_flags = signed32(content, 156U, order);
@@ -360,7 +366,17 @@ operation::Result<VolumeDocument> read_mrc(std::string_view content,
     return operation::Result<VolumeDocument>::failure(invalid(
         "MRC header dimensions, axis mapping, labels or mode are invalid"));
   }
-  if (parsed.skew_flag == 1) {
+  // Only an identity skew matrix is accepted; its translation is the map
+  // origin offset (as written by PyMOL). Rotated frames remain unsupported.
+  const auto identity_skew = [&parsed] {
+    for (std::size_t row = 0; row < 3U; ++row)
+      for (std::size_t column = 0; column < 3U; ++column)
+        if (std::abs(parsed.skew_matrix[row * 3U + column] -
+                     (row == column ? 1.0F : 0.0F)) > 1.0e-6F)
+          return false;
+    return true;
+  };
+  if (parsed.skew_flag == 1 && !identity_skew()) {
     return operation::Result<VolumeDocument>::failure(
         unsupported("CCP4 skew transformation records are not yet supported"));
   }
@@ -462,6 +478,10 @@ operation::Result<VolumeDocument> read_mrc(std::string_view content,
                                  parsed.origin[1] != 0.0F ||
                                  parsed.origin[2] != 0.0F;
   auto origin = has_header_origin ? header_origin : start_origin;
+  if (parsed.skew_flag == 1)
+    origin = add(origin, model::Vec3d{parsed.skew_translation[0],
+                                      parsed.skew_translation[1],
+                                      parsed.skew_translation[2]});
   const auto unit_factor =
       options.coordinate_unit == operation::LengthUnit::nanometer ? 0.1 : 1.0;
   origin = scaled(origin, unit_factor);
@@ -490,6 +510,9 @@ operation::Result<VolumeDocument> read_mrc(std::string_view content,
   metadata.fields.emplace("mrc_byte_order",
                           order == ByteOrder::little ? "little" : "big");
   metadata.fields.emplace("mrc_axis_mapping", vector_text(parsed.axes));
+  if (parsed.skew_flag == 1)
+    metadata.fields.emplace("mrc_skew_translation",
+                            vector_text(parsed.skew_translation));
   metadata.fields.emplace("mrc_grid_start", vector_text(logical_starts));
   metadata.fields.emplace("mrc_cell_lengths_angstrom",
                           vector_text(parsed.cell_lengths));

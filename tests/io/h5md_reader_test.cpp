@@ -125,7 +125,7 @@ int main(int argc, char **argv) {
   const auto generic = io::open_trajectory(
       argv[1], io::TrajectoryFormat::auto_detect,
       io::TrajectoryOpenContext{3U, source_ids, std::nullopt, std::nullopt,
-                                std::nullopt});
+                                std::nullopt, nullptr});
   passed &= expect(generic.has_value() &&
                        generic.value().format == io::TrajectoryFormat::h5md,
                    ".h5md must auto-detect through generic trajectory I/O");

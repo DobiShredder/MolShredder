@@ -168,6 +168,8 @@ QString representation_name(render::RepresentationKind kind) {
     return QStringLiteral("ribbon");
   case render::RepresentationKind::cartoon:
     return QStringLiteral("cartoon");
+  case render::RepresentationKind::labels:
+    return QStringLiteral("labels");
   }
   return QStringLiteral("lines");
 }
@@ -561,6 +563,7 @@ public:
           static_cast<std::int32_t>(std::lround(origin.y() * scale))};
     }
     angle_ = viewport->angle();
+    background_ = viewport->backgroundRgb();
     if (camera_revision_ != viewport->cameraRevision()) {
       camera_revision_ = viewport->cameraRevision();
       if (const auto *camera = viewport->camera(); camera != nullptr) {
@@ -812,7 +815,8 @@ public:
       update_volume_uniform(*updates, volume_uniform_buffer_.get(),
                             base_camera.value(), model, size);
     }
-    const auto background = QColor::fromRgbF(0.018F, 0.025F, 0.04F);
+    const auto background =
+        QColor::fromRgbF(background_.red, background_.green, background_.blue);
     if (composite_requested && !composite_active) {
       command_buffer->beginPass(renderTarget(), background, {1.0F, 0U},
                                 updates);
@@ -2151,6 +2155,7 @@ private:
   std::array<float, 4U> volume_pick_color_{};
   scene::CameraParameters camera_parameters_;
   scene::StereoParameters stereo_parameters_;
+  render::ColorRgb background_{render::kDefaultBackgroundRgb};
   std::array<std::int32_t, 2> stereo_output_origin_{};
   bool stereo_composite_failure_logged_{};
   model::Vec3d center_{};
@@ -2841,6 +2846,13 @@ QQuickRhiItemRenderer *MolecularViewport::createRenderer() {
   return new MolecularViewportRenderer;
 }
 
+void MolecularViewport::setWorkspaceScope(bool workspace_scope) {
+  if (workspace_scope_ == workspace_scope)
+    return;
+  workspace_scope_ = workspace_scope;
+  emit workspaceScopeChanged();
+}
+
 void MolecularViewport::setAngle(float angle) {
   if (qFuzzyCompare(angle_, angle))
     return;
@@ -2922,23 +2934,52 @@ QVariantList MolecularViewport::analysisLabelItems() const {
                      static_cast<float>(parameters.near_clip),
                      static_cast<float>(parameters.far_clip));
   }
-  const auto transform = projection * qt_matrix(camera_->view_matrix());
+  const auto view = qt_matrix(camera_->view_matrix());
   for (const auto &label : packet_.labels) {
-    const QVector4D clip = transform * QVector4D{
-        static_cast<float>(label.anchor.x), static_cast<float>(label.anchor.y),
-        static_cast<float>(label.anchor.z), 1.0F};
+    // Atom labels carry a camera-space offset (label_position +
+    // label_placement_offset); positive z moves toward the viewer.
+    auto eye = view * QVector4D{static_cast<float>(label.anchor.x),
+                                static_cast<float>(label.anchor.y),
+                                static_cast<float>(label.anchor.z), 1.0F};
+    eye += QVector4D{static_cast<float>(label.camera_offset.x),
+                     static_cast<float>(label.camera_offset.y),
+                     static_cast<float>(label.camera_offset.z), 0.0F};
+    const QVector4D clip = projection * eye;
     if (!(clip.w() > 0.0F)) continue;
     const auto x = clip.x() / clip.w();
     const auto y = clip.y() / clip.w();
     const auto z = clip.z() / clip.w();
     if (z < -1.0F || z > 1.0F) continue;
+    // Negative sizes are world units (PyMOL); convert at the label depth.
+    const auto world_pixels = [&](double world) {
+      const auto span =
+          parameters.projection == scene::ProjectionMode::perspective
+              ? 2.0 * std::tan(parameters.vertical_field_of_view_radians * 0.5) *
+                    std::max(1.0e-6, -static_cast<double>(eye.z()))
+              : parameters.orthographic_height;
+      return world * height() / span;
+    };
+    const auto pixel_size = label.size > 0.0   ? label.size
+                            : label.size < 0.0 ? world_pixels(-label.size)
+                                               : 13.0;
     QVariantMap item;
     item.insert(QStringLiteral("x"),
                 (static_cast<double>(x) + 1.0) * width() * 0.5);
     item.insert(QStringLiteral("y"),
                 (1.0 - static_cast<double>(y)) * height() * 0.5);
     item.insert(QStringLiteral("text"), QString::fromStdString(label.text));
-    item.insert(QStringLiteral("color"), QStringLiteral("#fff0ad"));
+    item.insert(QStringLiteral("color"),
+                label.atom_id == 0U
+                    ? QStringLiteral("#fff0ad")
+                    : QColor::fromRgbF(label.color.red, label.color.green,
+                                       label.color.blue, label.color.alpha)
+                          .name(QColor::HexArgb));
+    item.insert(QStringLiteral("size"), std::clamp(pixel_size, 4.0, 256.0));
+    item.insert(QStringLiteral("fontId"),
+                static_cast<qlonglong>(label.font_id));
+    item.insert(QStringLiteral("objectId"),
+                static_cast<qulonglong>(label.object_id));
+    item.insert(QStringLiteral("atomId"), static_cast<qulonglong>(label.atom_id));
     items.push_back(std::move(item));
   }
   return items;
@@ -3998,6 +4039,7 @@ bool MolecularViewport::applyRepresentationVisibility(
   action.command_name = normalized.toStdString();
   action.parameters.emplace("representation", representation_.toStdString());
   action.parameters.emplace("selection", selection.toStdString());
+  action.parameters.emplace("scope", workspace_scope_ ? "workspace" : "active");
   operation::TaskContext context;
   const auto changed = actions_.trigger(action, context);
   if (!changed.succeeded()) {
@@ -4082,6 +4124,268 @@ QString MolecularViewport::renderSettingJson(const QString &name,
        normalized_scope == QStringLiteral("bond")) &&
       !target.trimmed().isEmpty())
     action.parameters.emplace("target", target.trimmed().toStdString());
+  operation::TaskContext context;
+  const auto outcome = actions_.trigger(action, context);
+  const auto rendered = command::render(
+      outcome.envelope, operation::OutputFormat::json);
+  return rendered.has_value() ? QString::fromStdString(rendered.value())
+                              : QString{};
+}
+
+bool MolecularViewport::applyColor(const QString &color,
+                                   const QString &selection) {
+  const auto normalized_color = color.trimmed();
+  const auto normalized_selection =
+      selection.trimmed().isEmpty() ? QStringLiteral("all") : selection.trimmed();
+  if (normalized_color.isEmpty()) {
+    setStatus(QStringLiteral("Invalid color editor input"), atom_count_,
+              primitive_count_);
+    return false;
+  }
+  gui::Action action;
+  action.command_name = "color";
+  action.parameters.emplace("color", normalized_color.toStdString());
+  action.parameters.emplace("selection", normalized_selection.toStdString());
+  action.parameters.emplace("scope", workspace_scope_ ? "workspace" : "active");
+  operation::TaskContext context;
+  const auto changed = actions_.trigger(action, context);
+  if (!changed.succeeded()) {
+    setStatus(QStringLiteral("Color failed: ") + outcome_error(changed),
+              atom_count_, primitive_count_);
+    return false;
+  }
+  if (workspace_->active_object() != nullptr && !rebuildScenePacket())
+    return false;
+  setStatus(QStringLiteral("Color ") + normalized_color +
+                QStringLiteral(" · ") + normalized_selection,
+            atom_count_, primitive_count_);
+  return true;
+}
+
+bool MolecularViewport::applySpectrum(const QString &expression,
+                                      const QString &palette,
+                                      const QString &selection,
+                                      bool by_residue) {
+  gui::Action action;
+  action.command_name = "spectrum";
+  action.parameters.emplace(
+      "expression", expression.trimmed().isEmpty()
+                        ? std::string{"count"}
+                        : expression.trimmed().toStdString());
+  action.parameters.emplace("palette", palette.trimmed().isEmpty()
+                                           ? std::string{"rainbow"}
+                                           : palette.trimmed().toStdString());
+  action.parameters.emplace("selection", selection.trimmed().isEmpty()
+                                             ? std::string{"all"}
+                                             : selection.trimmed().toStdString());
+  action.parameters.emplace("byres", by_residue ? "true" : "false");
+  operation::TaskContext context;
+  const auto changed = actions_.trigger(action, context);
+  if (!changed.succeeded()) {
+    setStatus(QStringLiteral("Spectrum failed: ") + outcome_error(changed),
+              atom_count_, primitive_count_);
+    return false;
+  }
+  if (workspace_->active_object() != nullptr && !rebuildScenePacket())
+    return false;
+  setStatus(QStringLiteral("Spectrum ") + expression.trimmed() +
+                QStringLiteral(" · ") + palette.trimmed(),
+            atom_count_, primitive_count_);
+  return true;
+}
+
+bool MolecularViewport::applyBackground(const QString &color) {
+  gui::Action action;
+  action.command_name = "background set";
+  action.parameters.emplace("color", color.trimmed().isEmpty()
+                                         ? std::string{"default"}
+                                         : color.trimmed().toStdString());
+  operation::TaskContext context;
+  const auto changed = actions_.trigger(action, context);
+  if (!changed.succeeded()) {
+    setStatus(QStringLiteral("Background failed: ") + outcome_error(changed),
+              atom_count_, primitive_count_);
+    return false;
+  }
+  if (workspace_->active_object() != nullptr && !rebuildScenePacket())
+    return false;
+  update();
+  setStatus(QStringLiteral("Background ") + color.trimmed(), atom_count_,
+            primitive_count_);
+  return true;
+}
+
+application::AnalysisOverlayStyle
+MolecularViewport::analysisOverlayStyle() const {
+  // Shared with image export: dash, arc size and color settings.
+  return workspace_->analysis_overlay_style();
+}
+
+QString MolecularViewport::exportImage(const QString &path, int width,
+                                       int height, bool ray) {
+  gui::Action action;
+  action.command_name = "image save";
+  action.parameters = {{"path", path.trimmed().toStdString()},
+                       {"width", std::to_string(std::max(0, width))},
+                       {"height", std::to_string(std::max(0, height))},
+                       {"ray", ray ? "true" : "false"}};
+  operation::TaskContext context;
+  const auto outcome = actions_.trigger(action, context);
+  setStatus(outcome.succeeded()
+                ? QStringLiteral("Image saved: ") + path.trimmed()
+                : QStringLiteral("Image export failed: ") + outcome_error(outcome),
+            atom_count_, primitive_count_);
+  const auto rendered =
+      command::render(outcome.envelope, operation::OutputFormat::json);
+  return rendered.has_value() ? QString::fromStdString(rendered.value())
+                              : QString{};
+}
+
+bool MolecularViewport::applyCartoonType(const QString &type,
+                                         const QString &selection) {
+  gui::Action action;
+  action.command_name = "cartoon";
+  action.parameters = {{"type", type.trimmed().toStdString()},
+                       {"selection", selection.trimmed().isEmpty()
+                                         ? std::string{"all"}
+                                         : selection.trimmed().toStdString()}};
+  operation::TaskContext context;
+  const auto changed = actions_.trigger(action, context);
+  if (!changed.succeeded()) {
+    setStatus(QStringLiteral("Cartoon type failed: ") + outcome_error(changed),
+              atom_count_, primitive_count_);
+    return false;
+  }
+  if (workspace_->active_object() != nullptr && !rebuildScenePacket())
+    return false;
+  setStatus(QStringLiteral("Cartoon type ") + type.trimmed(), atom_count_,
+            primitive_count_);
+  return true;
+}
+
+QString MolecularViewport::applyContour(const QString &name, const QString &mode,
+                                        double level) {
+  gui::Action action;
+  action.command_name = "volume contour";
+  action.parameters = {{"name", name.trimmed().toStdString()},
+                       {"mode", mode.trimmed().isEmpty()
+                                    ? std::string{"mesh"}
+                                    : mode.trimmed().toStdString()},
+                       {"level", std::to_string(level)}};
+  operation::TaskContext context;
+  const auto outcome = actions_.trigger(action, context);
+  if (outcome.succeeded())
+    static_cast<void>(rebuildScenePacket());
+  setStatus(outcome.succeeded()
+                ? QStringLiteral("Contour ") + name.trimmed()
+                : QStringLiteral("Contour failed: ") + outcome_error(outcome),
+            atom_count_, primitive_count_);
+  const auto rendered =
+      command::render(outcome.envelope, operation::OutputFormat::json);
+  return rendered.has_value() ? QString::fromStdString(rendered.value())
+                              : QString{};
+}
+
+QString MolecularViewport::applyRamp(const QString &name, const QString &source,
+                                     const QString &range,
+                                     const QString &colors) {
+  gui::Action action;
+  action.command_name = "ramp new";
+  action.parameters = {{"name", name.trimmed().toStdString()},
+                       {"source", source.trimmed().toStdString()},
+                       {"range", range.trimmed().toStdString()},
+                       {"color", colors.trimmed().toStdString()}};
+  operation::TaskContext context;
+  const auto outcome = actions_.trigger(action, context);
+  if (outcome.succeeded() && workspace_->active_object() != nullptr)
+    static_cast<void>(rebuildScenePacket());
+  setStatus(outcome.succeeded()
+                ? QStringLiteral("Ramp ") + name.trimmed()
+                : QStringLiteral("Ramp failed: ") + outcome_error(outcome),
+            atom_count_, primitive_count_);
+  const auto rendered =
+      command::render(outcome.envelope, operation::OutputFormat::json);
+  return rendered.has_value() ? QString::fromStdString(rendered.value())
+                              : QString{};
+}
+
+bool MolecularViewport::applyLabel(const QString &selection,
+                                   const QString &expression) {
+  gui::Action action;
+  action.command_name = "label";
+  action.parameters.emplace("selection", selection.trimmed().isEmpty()
+                                             ? std::string{"all"}
+                                             : selection.trimmed().toStdString());
+  action.parameters.emplace("expression", expression.trimmed().toStdString());
+  operation::TaskContext context;
+  const auto changed = actions_.trigger(action, context);
+  if (!changed.succeeded()) {
+    setStatus(QStringLiteral("Label failed: ") + outcome_error(changed),
+              atom_count_, primitive_count_);
+    return false;
+  }
+  if (workspace_->active_object() != nullptr && !rebuildScenePacket())
+    return false;
+  setStatus(QStringLiteral("Labels ") + expression.trimmed(), atom_count_,
+            primitive_count_);
+  return true;
+}
+
+bool MolecularViewport::moveLabel(qulonglong object_id, qulonglong atom_id,
+                                  double delta_x, double delta_y) {
+  if (!camera_.has_value() || height() <= 0.0 || atom_id == 0U)
+    return false;
+  const auto found = std::find_if(
+      packet_.labels.begin(), packet_.labels.end(), [&](const auto &label) {
+        return label.object_id == object_id && label.atom_id == atom_id;
+      });
+  if (found == packet_.labels.end())
+    return false;
+  const auto &parameters = camera_->parameters();
+  const auto eye = qt_matrix(camera_->view_matrix()) *
+                   QVector4D{static_cast<float>(found->anchor.x),
+                             static_cast<float>(found->anchor.y),
+                             static_cast<float>(found->anchor.z), 1.0F};
+  const auto depth =
+      std::max(1.0e-6, -static_cast<double>(eye.z()) - found->camera_offset.z);
+  const auto units_per_pixel =
+      (parameters.projection == scene::ProjectionMode::perspective
+           ? 2.0 * std::tan(parameters.vertical_field_of_view_radians * 0.5) *
+                 depth
+           : parameters.orthographic_height) /
+      height();
+  const auto angstrom_scale = analysisOverlayStyle().units_per_angstrom;
+  const render::RenderSettingContext context{object_id, 0U, atom_id, 0U};
+  const auto current =
+      workspace_->resolve_render_setting("label_placement_offset", context);
+  if (!current.has_value())
+    return false;
+  auto offset = std::get<render::RenderSettingVector3>(current.value().value);
+  offset[0] += delta_x * units_per_pixel / angstrom_scale;
+  offset[1] -= delta_y * units_per_pixel / angstrom_scale;
+  gui::Action action;
+  action.command_name = "setting set";
+  action.parameters = {{"name", "label_placement_offset"},
+                       {"object", std::to_string(object_id)},
+                       {"scope", "atom"},
+                       {"target", std::to_string(atom_id)},
+                       {"value", std::to_string(offset[0]) + "," +
+                                     std::to_string(offset[1]) + "," +
+                                     std::to_string(offset[2])}};
+  operation::TaskContext task;
+  const auto changed = actions_.trigger(action, task);
+  if (!changed.succeeded()) {
+    setStatus(QStringLiteral("Label move failed: ") + outcome_error(changed),
+              atom_count_, primitive_count_);
+    return false;
+  }
+  return rebuildScenePacket();
+}
+
+QString MolecularViewport::colorJson(const QString &color) const {
+  gui::Action action;
+  action.command_name = "color get";
+  action.parameters.emplace("color", color.trimmed().toStdString());
   operation::TaskContext context;
   const auto outcome = actions_.trigger(action, context);
   const auto rendered = command::render(
@@ -5568,6 +5872,8 @@ bool MolecularViewport::rebuildScenePacket() {
     for (const auto &representation : volume.representations) {
       append_packet(combined, representation);
     }
+    for (const auto &contour : volume.contours)
+      append_packet(combined, contour.packet);
     if (active_volume != nullptr && volume.id == active_volume->id &&
         volume.direct_volume != nullptr) {
       direct_volume_pick_id_ = combined.pick_targets.empty()
@@ -5592,7 +5898,8 @@ bool MolecularViewport::rebuildScenePacket() {
     }
   }
   append_packet(combined,
-                build_analysis_overlay_packet(workspace_->analysis_results()));
+                build_analysis_overlay_packet(workspace_->analysis_results(),
+                                              analysisOverlayStyle()));
   const auto primitive_count =
       combined.lines.size() + combined.cylinders.size() +
       combined.spheres.size() + combined.mesh_triangles.size() +

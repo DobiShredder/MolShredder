@@ -26,7 +26,9 @@ enum class TrajectoryFormat {
   amber_netcdf,
   h5md,
   lammps_dump,
-  binpos
+  binpos,
+  // Frames come from a caller-supplied source such as a molfile provider.
+  molfile
 };
 enum class ByteOrder { little_endian, big_endian };
 enum class DcdDialect { charmm, xplor };
@@ -443,6 +445,8 @@ struct TrajectoryOpenContext {
   std::optional<double> amber_box_angle_degrees;
   std::optional<operation::LengthUnit> coordinate_unit;
   std::optional<std::string> h5md_particle_group;
+  // Required for TrajectoryFormat::molfile; ignored by native formats.
+  std::shared_ptr<const model::CoordinateSource> external_source;
 };
 
 struct OpenedTrajectory {

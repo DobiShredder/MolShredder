@@ -386,11 +386,13 @@ target_sources(
     src/application/task_service.cpp
     src/application/representation_visibility.cpp
     src/application/workspace.cpp
+    src/application/label_expression.cpp
     src/command/foundation_grammar.cpp
     src/command/registry.cpp
     src/command/result.cpp
     src/command/serialization.cpp
     src/core/version.cpp
+    src/core/sha256.cpp
     src/io/mmcif_reader.cpp
     src/io/mmcif_writer.cpp
     src/io/bcif_reader.cpp
@@ -400,6 +402,18 @@ target_sources(
     src/io/lammps_dump_reader.cpp
     src/io/molfile_provider.cpp
     src/io/molfile_reader.cpp
+    src/command/json.cpp
+    src/plugin/manifest.cpp
+    src/plugin/trust_store.cpp
+    src/plugin/process.cpp
+    src/plugin/worker_runtime.cpp
+    src/plugin/inprocess_runtime.cpp
+    src/plugin/plugin_host.cpp
+    src/plugin/plugin_commands.cpp
+    src/automation/pml_parser.cpp
+    src/automation/pml_translator.cpp
+    src/automation/tcl_parser.cpp
+    src/automation/vmd_tcl_translator.cpp
     src/io/mol2_reader.cpp
     src/io/psf_reader.cpp
     src/io/prmtop_reader.cpp
@@ -434,6 +448,10 @@ target_sources(
     src/render/molecular_surface.cpp
     src/render/transfer_function.cpp
     src/render/representation.cpp
+    src/render/pymol_backbone.cpp
+    src/render/color_table.cpp
+    src/render/spectrum.cpp
+    src/render/image_png.cpp
     src/render/setting_store.cpp
     src/render/volume_isosurface.cpp
     src/render/volume_slice.cpp
@@ -468,6 +486,7 @@ target_sources(
       include/molshredder/application/session.hpp
       include/molshredder/application/task_service.hpp
       include/molshredder/application/workspace.hpp
+      include/molshredder/application/label_expression.hpp
       include/molshredder/command/foundation_grammar.hpp
       include/molshredder/operation/common_types.hpp
       include/molshredder/operation/error.hpp
@@ -481,6 +500,15 @@ target_sources(
       include/molshredder/io/structure_reader.hpp
       include/molshredder/io/structure_writer.hpp
       include/molshredder/io/molfile_provider.hpp
+      include/molshredder/command/json.hpp
+      include/molshredder/plugin/manifest.hpp
+      include/molshredder/plugin/trust_store.hpp
+      include/molshredder/plugin/runtime.hpp
+      include/molshredder/plugin/host.hpp
+      include/molshredder/automation/pml.hpp
+      include/molshredder/automation/pml_translator.hpp
+      include/molshredder/automation/tcl.hpp
+      include/molshredder/automation/vmd_tcl.hpp
       include/molshredder/io/format_capabilities.hpp
       include/molshredder/io/trajectory_reader.hpp
       include/molshredder/io/trajectory_writer.hpp
@@ -498,6 +526,9 @@ target_sources(
       include/molshredder/render/molecular_surface.hpp
       include/molshredder/render/reference_renderer.hpp
       include/molshredder/render/representation.hpp
+      include/molshredder/render/color_table.hpp
+      include/molshredder/render/spectrum.hpp
+      include/molshredder/render/image_png.hpp
       include/molshredder/render/setting_store.hpp
       include/molshredder/render/transfer_function.hpp
       include/molshredder/render/volume_isosurface.hpp
@@ -549,17 +580,25 @@ set_target_properties(
 
 molshredder_enable_warnings(molshredder_core)
 
+add_executable(molshredder-plugin-check apps/plugin_check/main.cpp)
+target_compile_features(molshredder-plugin-check PRIVATE cxx_std_20)
+target_link_libraries(molshredder-plugin-check PRIVATE MolShredder::Core)
+set_target_properties(molshredder-plugin-check PROPERTIES CXX_EXTENSIONS OFF INSTALL_RPATH_USE_LINK_PATH TRUE)
+molshredder_enable_warnings(molshredder-plugin-check)
+
 add_library(molshredder_automation STATIC)
 add_library(MolShredder::Automation ALIAS molshredder_automation)
 target_sources(
   molshredder_automation
   PRIVATE
     src/automation/python_script.cpp
+    src/automation/pml_commands.cpp
     src/python/bindings.cpp
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS include
     FILES include/molshredder/automation/python_script.hpp
+          include/molshredder/automation/pml_commands.hpp
 )
 target_include_directories(
   molshredder_automation
@@ -1560,9 +1599,19 @@ install(
   RUNTIME DESTINATION "${CMAKE_INSTALL_LIBDIR}/molshredder/python"
 )
 
+# Plugin SDK: compatibility kit, C ABI header, Python helper, samples and guide.
+install(TARGETS molshredder-plugin-check RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+install(
+  FILES include/molshredder/plugin/molshredder_plugin.h
+  DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/molshredder/plugin"
+)
+install(DIRECTORY sdk/ DESTINATION "${CMAKE_INSTALL_DATADIR}/molshredder/sdk")
+install(FILES docs/PLUGIN_SDK.md DESTINATION "${CMAKE_INSTALL_DATADIR}/molshredder/sdk")
+
 install(
   FILES
     docs/schemas/capability-support-v1.schema.json
+    docs/schemas/capability-support-v2.schema.json
     docs/schemas/result-envelope-v1.schema.json
     docs/schemas/result-envelope-v2.schema.json
     docs/schemas/support-configuration-v1.schema.json
@@ -1584,6 +1633,86 @@ if(BUILD_TESTING)
   molshredder_enable_warnings(molshredder_core_tests)
 
   add_test(NAME core.version COMMAND molshredder_core_tests)
+
+  add_executable(molshredder_plugin_manifest_tests tests/plugin/plugin_manifest_test.cpp)
+  target_compile_features(molshredder_plugin_manifest_tests PRIVATE cxx_std_20)
+  target_link_libraries(molshredder_plugin_manifest_tests PRIVATE MolShredder::Core)
+  molshredder_enable_warnings(molshredder_plugin_manifest_tests)
+  add_test(NAME plugin.manifest COMMAND molshredder_plugin_manifest_tests)
+
+  add_executable(molshredder_plugin_trust_tests tests/plugin/plugin_trust_test.cpp)
+  target_compile_features(molshredder_plugin_trust_tests PRIVATE cxx_std_20)
+  target_link_libraries(molshredder_plugin_trust_tests PRIVATE MolShredder::Core)
+  molshredder_enable_warnings(molshredder_plugin_trust_tests)
+  add_test(NAME plugin.trust_store COMMAND molshredder_plugin_trust_tests "${CMAKE_CURRENT_BINARY_DIR}")
+
+  add_executable(molshredder_plugin_test_worker tests/plugin/test_worker.cpp)
+  target_compile_features(molshredder_plugin_test_worker PRIVATE cxx_std_20)
+  target_link_libraries(molshredder_plugin_test_worker PRIVATE MolShredder::Core)
+  molshredder_enable_warnings(molshredder_plugin_test_worker)
+  add_executable(molshredder_plugin_host_tests tests/plugin/plugin_host_test.cpp)
+  target_compile_features(molshredder_plugin_host_tests PRIVATE cxx_std_20)
+  target_link_libraries(molshredder_plugin_host_tests PRIVATE MolShredder::Core)
+  molshredder_enable_warnings(molshredder_plugin_host_tests)
+  add_test(
+    NAME plugin.host
+    COMMAND molshredder_plugin_host_tests
+      $<TARGET_FILE:molshredder_plugin_test_worker> "${CMAKE_CURRENT_BINARY_DIR}"
+  )
+
+  set(MOLSHREDDER_SAMPLE_PLUGIN_VARIANTS
+      good abi_major abi_minor small_struct bad_describe no_entry fail_entry bad_result)
+  set(MOLSHREDDER_SAMPLE_PLUGIN_LIST "")
+  foreach(variant IN LISTS MOLSHREDDER_SAMPLE_PLUGIN_VARIANTS)
+    add_library(molshredder_sample_plugin_${variant} MODULE sdk/samples/inprocess_c/plugin.c)
+    target_include_directories(molshredder_sample_plugin_${variant} PRIVATE include)
+    set_target_properties(molshredder_sample_plugin_${variant} PROPERTIES PREFIX "" C_VISIBILITY_PRESET hidden)
+    molshredder_enable_warnings(molshredder_sample_plugin_${variant})
+    string(APPEND MOLSHREDDER_SAMPLE_PLUGIN_LIST
+           "${variant}=$<TARGET_FILE:molshredder_sample_plugin_${variant}>\n")
+  endforeach()
+  target_compile_definitions(molshredder_sample_plugin_abi_major PRIVATE SAMPLE_ABI_MAJOR=2u)
+  target_compile_definitions(molshredder_sample_plugin_abi_minor PRIVATE SAMPLE_ABI_MINOR=5u)
+  target_compile_definitions(molshredder_sample_plugin_small_struct PRIVATE SAMPLE_SMALL_STRUCT=1)
+  target_compile_definitions(molshredder_sample_plugin_bad_describe PRIVATE SAMPLE_BAD_DESCRIBE=1)
+  target_compile_definitions(molshredder_sample_plugin_no_entry PRIVATE SAMPLE_NO_ENTRY=1)
+  target_compile_definitions(molshredder_sample_plugin_fail_entry PRIVATE SAMPLE_FAIL_ENTRY=1)
+  target_compile_definitions(molshredder_sample_plugin_bad_result PRIVATE SAMPLE_BAD_RESULT=1)
+  file(
+    GENERATE
+    OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/sample_plugins.txt"
+    CONTENT "${MOLSHREDDER_SAMPLE_PLUGIN_LIST}"
+  )
+  add_executable(molshredder_plugin_inprocess_tests tests/plugin/plugin_inprocess_test.cpp)
+  target_compile_features(molshredder_plugin_inprocess_tests PRIVATE cxx_std_20)
+  target_link_libraries(molshredder_plugin_inprocess_tests PRIVATE MolShredder::Core)
+  molshredder_enable_warnings(molshredder_plugin_inprocess_tests)
+  foreach(variant IN LISTS MOLSHREDDER_SAMPLE_PLUGIN_VARIANTS)
+    add_dependencies(molshredder_plugin_inprocess_tests molshredder_sample_plugin_${variant})
+  endforeach()
+  add_test(
+    NAME plugin.inprocess
+    COMMAND molshredder_plugin_inprocess_tests
+      "${CMAKE_CURRENT_BINARY_DIR}/sample_plugins.txt" "${CMAKE_CURRENT_BINARY_DIR}"
+  )
+
+  add_test(
+    NAME plugin.compat_kit
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/plugin/plugin_compat_test.py"
+      "$<TARGET_FILE:molshredder-plugin-check>"
+      "$<TARGET_FILE:molshredder_plugin_test_worker>"
+      "${CMAKE_CURRENT_BINARY_DIR}/sample_plugins.txt"
+      "${CMAKE_CURRENT_SOURCE_DIR}/sdk"
+      "${CMAKE_CURRENT_BINARY_DIR}"
+  )
+
+  add_executable(molshredder_sha256_tests tests/core/sha256_test.cpp)
+  target_compile_features(molshredder_sha256_tests PRIVATE cxx_std_20)
+  target_link_libraries(molshredder_sha256_tests PRIVATE MolShredder::Core)
+  molshredder_enable_warnings(molshredder_sha256_tests)
+  add_test(NAME core.sha256 COMMAND molshredder_sha256_tests)
 
   add_executable(molshredder_operation_tests tests/operation/operation_test.cpp)
   target_compile_features(molshredder_operation_tests PRIVATE cxx_std_20)
@@ -1800,6 +1929,70 @@ if(BUILD_TESTING)
       $<TARGET_FILE:molshredder_molfile_test_duplicate>
       $<TARGET_FILE:molshredder_molfile_test_missing_entry>
       $<TARGET_FILE:molshredder_molfile_test_wrong_type>
+      "${CMAKE_CURRENT_BINARY_DIR}"
+  )
+
+  foreach(
+    MOLSHREDDER_MOLFILE_CHANNEL
+    IN ITEMS
+      psf:1 pdb:2 xyz:3 hoomd:0 dcd:4 crd:5 dx:6 ccp4:6
+      pqr:0 mmcif:2 pdbx:2 mol2:2 parm7:1 gro:2 g96:2 vtf:2 vsf:1
+      trr:4 xtc:4 crdbox:5 lammpstrj:4 netcdf:4 binpos:5 rst7:4 vcf:4
+  )
+    string(REPLACE ":" ";" MOLSHREDDER_MOLFILE_CHANNEL_PARTS
+           "${MOLSHREDDER_MOLFILE_CHANNEL}")
+    list(GET MOLSHREDDER_MOLFILE_CHANNEL_PARTS 0 MOLSHREDDER_CHANNEL_NAME)
+    list(GET MOLSHREDDER_MOLFILE_CHANNEL_PARTS 1 MOLSHREDDER_CHANNEL_PROFILE)
+    add_library(
+      molshredder_molfile_channel_${MOLSHREDDER_CHANNEL_NAME}
+      SHARED tests/support/molfile_test_plugin.cpp
+    )
+    string(APPEND MOLSHREDDER_MOLFILE_CHANNEL_LIST
+           "${MOLSHREDDER_CHANNEL_NAME}=$<TARGET_FILE:molshredder_molfile_channel_${MOLSHREDDER_CHANNEL_NAME}>\n")
+    target_compile_features(
+      molshredder_molfile_channel_${MOLSHREDDER_CHANNEL_NAME} PRIVATE cxx_std_20
+    )
+    target_include_directories(
+      molshredder_molfile_channel_${MOLSHREDDER_CHANNEL_NAME}
+      PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/io"
+    )
+    target_compile_definitions(
+      molshredder_molfile_channel_${MOLSHREDDER_CHANNEL_NAME}
+      PRIVATE
+        MOLSHREDDER_TEST_NAME="${MOLSHREDDER_CHANNEL_NAME}"
+        MOLSHREDDER_TEST_PROFILE=${MOLSHREDDER_CHANNEL_PROFILE}
+    )
+    set_target_properties(
+      molshredder_molfile_channel_${MOLSHREDDER_CHANNEL_NAME}
+      PROPERTIES CXX_EXTENSIONS OFF
+    )
+    molshredder_enable_warnings(
+      molshredder_molfile_channel_${MOLSHREDDER_CHANNEL_NAME}
+    )
+  endforeach()
+
+  file(
+    GENERATE
+    OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/molfile_channel_plugins.txt"
+    CONTENT "${MOLSHREDDER_MOLFILE_CHANNEL_LIST}"
+  )
+
+  add_executable(
+    molshredder_molfile_channel_tests
+    tests/io/molfile_channel_test.cpp
+  )
+  target_compile_features(
+    molshredder_molfile_channel_tests PRIVATE cxx_std_20
+  )
+  target_link_libraries(
+    molshredder_molfile_channel_tests PRIVATE MolShredder::Core
+  )
+  molshredder_enable_warnings(molshredder_molfile_channel_tests)
+  add_test(
+    NAME io.molfile_channels
+    COMMAND
+      molshredder_molfile_channel_tests
+      "${CMAKE_CURRENT_BINARY_DIR}/molfile_channel_plugins.txt"
       "${CMAKE_CURRENT_BINARY_DIR}"
   )
 
@@ -2090,6 +2283,36 @@ if(BUILD_TESTING)
   target_link_libraries(molshredder_p0_geometry_tests PRIVATE MolShredder::Core)
   molshredder_enable_warnings(molshredder_p0_geometry_tests)
   add_test(NAME render.p0_geometry COMMAND molshredder_p0_geometry_tests)
+
+  add_executable(
+    molshredder_render_color_table_tests
+    tests/render/color_table_test.cpp
+  )
+  target_compile_features(
+    molshredder_render_color_table_tests PRIVATE cxx_std_20
+  )
+  target_link_libraries(
+    molshredder_render_color_table_tests PRIVATE MolShredder::Core
+  )
+  molshredder_enable_warnings(molshredder_render_color_table_tests)
+  add_test(
+    NAME render.color_table
+    COMMAND molshredder_render_color_table_tests
+  )
+
+  add_executable(
+    molshredder_render_spectrum_tests
+    tests/render/spectrum_test.cpp
+  )
+  target_compile_features(molshredder_render_spectrum_tests PRIVATE cxx_std_20)
+  target_link_libraries(
+    molshredder_render_spectrum_tests PRIVATE MolShredder::Core
+  )
+  molshredder_enable_warnings(molshredder_render_spectrum_tests)
+  add_test(
+    NAME render.spectrum
+    COMMAND molshredder_render_spectrum_tests
+  )
 
   add_executable(
     molshredder_render_setting_store_tests
@@ -2507,6 +2730,132 @@ if(BUILD_TESTING)
   )
 
   add_executable(
+    molshredder_color_workspace_tests
+    tests/application/color_workspace_test.cpp
+  )
+  target_compile_features(molshredder_color_workspace_tests PRIVATE cxx_std_20)
+  target_link_libraries(
+    molshredder_color_workspace_tests PRIVATE MolShredder::Core
+  )
+  molshredder_enable_warnings(molshredder_color_workspace_tests)
+  add_test(
+    NAME application.color_workspace
+    COMMAND
+      molshredder_color_workspace_tests
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/application/fixtures/hydrogen_bond.pdb"
+  )
+
+  add_executable(
+    molshredder_spectrum_workspace_tests
+    tests/application/spectrum_workspace_test.cpp
+  )
+  target_compile_features(molshredder_spectrum_workspace_tests PRIVATE cxx_std_20)
+  target_link_libraries(
+    molshredder_spectrum_workspace_tests PRIVATE MolShredder::Core
+  )
+  molshredder_enable_warnings(molshredder_spectrum_workspace_tests)
+  add_test(
+    NAME application.spectrum_workspace
+    COMMAND molshredder_spectrum_workspace_tests
+  )
+
+  add_executable(
+    molshredder_label_workspace_tests
+    tests/application/label_workspace_test.cpp
+  )
+  target_compile_features(molshredder_label_workspace_tests PRIVATE cxx_std_20)
+  target_link_libraries(
+    molshredder_label_workspace_tests PRIVATE MolShredder::Core
+  )
+  molshredder_enable_warnings(molshredder_label_workspace_tests)
+  add_test(
+    NAME application.label_workspace
+    COMMAND molshredder_label_workspace_tests
+  )
+
+  add_executable(
+    molshredder_cartoon_type_workspace_tests
+    tests/application/cartoon_type_workspace_test.cpp
+  )
+  target_compile_features(
+    molshredder_cartoon_type_workspace_tests PRIVATE cxx_std_20
+  )
+  target_link_libraries(
+    molshredder_cartoon_type_workspace_tests PRIVATE MolShredder::Core
+  )
+  molshredder_enable_warnings(molshredder_cartoon_type_workspace_tests)
+  add_test(
+    NAME application.cartoon_type_workspace
+    COMMAND
+      molshredder_cartoon_type_workspace_tests
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb"
+  )
+
+  add_executable(
+    molshredder_pymol_camera_visibility_tests
+    tests/application/pymol_camera_visibility_test.cpp
+  )
+  target_compile_features(
+    molshredder_pymol_camera_visibility_tests PRIVATE cxx_std_20
+  )
+  target_link_libraries(
+    molshredder_pymol_camera_visibility_tests PRIVATE MolShredder::Core
+  )
+  molshredder_enable_warnings(molshredder_pymol_camera_visibility_tests)
+  add_test(
+    NAME application.pymol_camera_visibility
+    COMMAND
+      molshredder_pymol_camera_visibility_tests
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb"
+  )
+
+  add_executable(
+    molshredder_spectrum_property_tests
+    tests/application/spectrum_property_test.cpp
+  )
+  target_compile_features(molshredder_spectrum_property_tests PRIVATE cxx_std_20)
+  target_link_libraries(
+    molshredder_spectrum_property_tests PRIVATE MolShredder::Core
+  )
+  molshredder_enable_warnings(molshredder_spectrum_property_tests)
+  add_test(
+    NAME application.spectrum_property
+    COMMAND
+      molshredder_spectrum_property_tests
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb"
+  )
+
+  add_executable(
+    molshredder_color_scope_tests
+    tests/application/color_scope_test.cpp
+  )
+  target_compile_features(molshredder_color_scope_tests PRIVATE cxx_std_20)
+  target_link_libraries(molshredder_color_scope_tests PRIVATE MolShredder::Core)
+  molshredder_enable_warnings(molshredder_color_scope_tests)
+  add_test(
+    NAME application.color_scope
+    COMMAND
+      molshredder_color_scope_tests
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb"
+  )
+
+  add_executable(
+    molshredder_ramp_workspace_tests
+    tests/application/ramp_workspace_test.cpp
+  )
+  target_compile_features(molshredder_ramp_workspace_tests PRIVATE cxx_std_20)
+  target_link_libraries(
+    molshredder_ramp_workspace_tests PRIVATE MolShredder::Core
+  )
+  molshredder_enable_warnings(molshredder_ramp_workspace_tests)
+  add_test(
+    NAME application.ramp_workspace
+    COMMAND
+      molshredder_ramp_workspace_tests
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/render/fixtures/contour"
+  )
+
+  add_executable(
     molshredder_session_tests
     tests/application/session_test.cpp
   )
@@ -2535,6 +2884,50 @@ if(BUILD_TESTING)
   add_test(
     NAME gui.action_catalog
     COMMAND molshredder_gui_action_catalog_tests
+  )
+
+  add_executable(molshredder_pml_probe tests/automation/pml_probe.cpp)
+  target_compile_features(molshredder_pml_probe PRIVATE cxx_std_20)
+  target_link_libraries(molshredder_pml_probe PRIVATE MolShredder::Core)
+  molshredder_enable_warnings(molshredder_pml_probe)
+  add_test(
+    NAME automation.pml_parse_conformance
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/automation/pml_parse_conformance_test.py"
+      "$<TARGET_FILE:molshredder_pml_probe>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/automation/fixtures"
+  )
+
+  add_executable(molshredder_tcl_probe tests/automation/tcl_probe.cpp)
+  target_compile_features(molshredder_tcl_probe PRIVATE cxx_std_20)
+  target_link_libraries(molshredder_tcl_probe PRIVATE MolShredder::Core)
+  molshredder_enable_warnings(molshredder_tcl_probe)
+  add_test(
+    NAME automation.tcl_parse_conformance
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/automation/tcl_parse_conformance_test.py"
+      "$<TARGET_FILE:molshredder_tcl_probe>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/automation/fixtures"
+  )
+
+  add_test(
+    NAME automation.vmd_tcl_translation
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/automation/vmd_tcl_translation_test.py"
+      "$<TARGET_FILE:molshredder_tcl_probe>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/automation/fixtures"
+  )
+
+  add_test(
+    NAME automation.pml_translation
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/automation/pml_translation_test.py"
+      "$<TARGET_FILE:molshredder_pml_probe>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/automation/fixtures"
   )
 
   add_executable(
@@ -2715,6 +3108,74 @@ if(BUILD_TESTING)
   )
 
   add_test(
+    NAME frontend.color_parity
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/color_parity_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "$<TARGET_FILE:molshredder>"
+      "$<TARGET_FILE:molshredder_gui_probe>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/trajectory.g96"
+  )
+
+  add_test(
+    NAME frontend.spectrum_parity
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/spectrum_parity_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "$<TARGET_FILE:molshredder>"
+      "$<TARGET_FILE:molshredder_gui_probe>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/trajectory.g96"
+  )
+
+  add_test(
+    NAME frontend.label_parity
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/label_parity_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "$<TARGET_FILE:molshredder>"
+      "$<TARGET_FILE:molshredder_gui_probe>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/trajectory.g96"
+  )
+
+  add_test(
+    NAME frontend.image_parity
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/image_parity_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "$<TARGET_FILE:molshredder>"
+      "$<TARGET_FILE:molshredder_gui_probe>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/trajectory.g96"
+  )
+
+  add_test(
+    NAME frontend.contour_parity
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/contour_parity_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "$<TARGET_FILE:molshredder>"
+      "$<TARGET_FILE:molshredder_gui_probe>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/render/fixtures/contour/contour.pdb"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/render/fixtures/contour/contour.ccp4"
+  )
+
+  add_test(
+    NAME frontend.ramp_parity
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/ramp_parity_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "$<TARGET_FILE:molshredder>"
+      "$<TARGET_FILE:molshredder_gui_probe>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/render/fixtures/contour/contour.pdb"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/render/fixtures/contour/contour.ccp4"
+  )
+
+  add_test(
     NAME frontend.python_script_parity
     COMMAND
       Python3::Interpreter
@@ -2766,6 +3227,52 @@ if(BUILD_TESTING)
     COMMAND
       Python3::Interpreter
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/console_script_test.py"
+  )
+
+  add_executable(
+    molshredder_geometry_probe
+    tests/render/geometry_probe.cpp
+  )
+  target_compile_features(molshredder_geometry_probe PRIVATE cxx_std_20)
+  target_link_libraries(molshredder_geometry_probe PRIVATE MolShredder::Core)
+  molshredder_enable_warnings(molshredder_geometry_probe)
+  add_test(
+    NAME render.geometry_parity
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/render/geometry_parity_test.py"
+      "$<TARGET_FILE:molshredder_geometry_probe>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/render/fixtures/geometry/benzene.mol"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/render/fixtures/geometry/pymol310_primitives.json"
+  )
+  add_test(
+    NAME render.backbone_parity
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/render/backbone_parity_test.py"
+      "$<TARGET_FILE:molshredder_geometry_probe>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/render/fixtures/geometry/pymol310_backbone.json.gz"
+  )
+  add_test(
+    NAME render.measure_parity
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/render/measure_parity_test.py"
+      "$<TARGET_FILE:molshredder_geometry_probe>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/render/fixtures/geometry/pymol310_measure.json"
+  )
+  add_test(
+    NAME render.contour_parity
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/render/contour_parity_test.py"
+      "$<TARGET_FILE:molshredder_geometry_probe>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/render/fixtures/contour/contour.pdb"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/render/fixtures/contour/contour.ccp4"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/render/fixtures/geometry/pymol310_contour.json"
   )
 
   add_executable(
@@ -2859,6 +3366,42 @@ if(BUILD_TESTING)
       "$<TARGET_FILE:molshredder_python>"
       "$<TARGET_FILE:molshredder>"
       "$<TARGET_FILE:molshredder_molfile_test_valid>"
+      "$<TARGET_FILE:molshredder_molfile_channel_psf>"
+      "${CMAKE_CURRENT_BINARY_DIR}"
+  )
+
+  add_test(
+    NAME frontend.pml_parity
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/pml_frontend_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "$<TARGET_FILE:molshredder>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb"
+      "${CMAKE_CURRENT_BINARY_DIR}"
+  )
+
+  add_test(
+    NAME frontend.tcl_parity
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/tcl_frontend_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "$<TARGET_FILE:molshredder>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb"
+      "${CMAKE_CURRENT_BINARY_DIR}"
+  )
+
+  add_test(
+    NAME frontend.plugin_parity
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/plugin_frontend_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "$<TARGET_FILE:molshredder>"
+      "$<TARGET_FILE:molshredder_plugin_test_worker>"
+      "$<TARGET_FILE:molshredder_sample_plugin_good>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb"
       "${CMAKE_CURRENT_BINARY_DIR}"
   )
 

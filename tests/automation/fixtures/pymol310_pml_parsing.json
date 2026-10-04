@@ -1,0 +1,1725 @@
+{
+  "cases": [
+    {
+      "calls": [
+        {
+          "args": [
+            "a",
+            "b",
+            "c"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "plain",
+      "input": "probe a, b, c",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "a",
+            "b",
+            "c"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "nospace",
+      "input": "probe a,b,c",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "a"
+          ],
+          "command": "probe",
+          "kwargs": {
+            "b": "c"
+          }
+        }
+      ],
+      "exception": null,
+      "id": "keyword",
+      "input": "probe a, b=c",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [],
+          "command": "probe",
+          "kwargs": {
+            "a": "1",
+            "b": "2"
+          }
+        }
+      ],
+      "exception": null,
+      "id": "keyword_spaces",
+      "input": "probe a=1, b = 2",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "a"
+          ],
+          "command": "probe",
+          "kwargs": {
+            "k": "v"
+          }
+        }
+      ],
+      "exception": null,
+      "id": "keyword_first",
+      "input": "probe k=v, a",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "\"x, y\"",
+            "z"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "quotes_double",
+      "input": "probe \"x, y\", z",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "'x, y'",
+            "z"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "quotes_single",
+      "input": "probe 'x, y', z",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "(name CA, CB)",
+            "x"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "paren_commas",
+      "input": "probe (name CA, CB), x",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "((a, b), c)",
+            "d"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "nested_paren",
+      "input": "probe ((a, b), c), d",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "a b"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "space_only",
+      "input": "probe a b",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "a",
+            "b"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "trim",
+      "input": "probe   a ,   b  ",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "a",
+            "b"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "trailing_comma",
+      "input": "probe a, b,",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "no_args",
+      "input": "probe",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            null,
+            "a"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "leading_comma",
+      "input": "probe ,a",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "a",
+            null,
+            "b"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "double_comma",
+      "input": "probe a,,b",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "y"
+          ],
+          "command": "probe",
+          "kwargs": {
+            "x": "(a,b)"
+          }
+        }
+      ],
+      "exception": null,
+      "id": "keyword_paren",
+      "input": "probe x=(a,b), y",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "b>10",
+            "resi 1-5 and name CA"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "selection_gt",
+      "input": "probe b>10, resi 1-5 and name CA",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "a",
+            "b>=10"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "equal_in_selection",
+      "input": "probe a, b>=10",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "a",
+            "b # trailing"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "hash_trailing",
+      "input": "probe a, b # trailing",
+      "via": "do"
+    },
+    {
+      "calls": [],
+      "exception": null,
+      "id": "hash_line",
+      "input": "# probe a, b",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "a"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        },
+        {
+          "args": [
+            "b"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "semicolon",
+      "input": "probe a; probe b",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "\"a;b\""
+          ],
+          "command": "probe",
+          "kwargs": {}
+        },
+        {
+          "args": [
+            "c"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "semicolon_in_quotes",
+      "input": "probe \"a;b\"; probe c",
+      "via": "do"
+    },
+    {
+      "calls": [],
+      "exception": null,
+      "id": "slash_python",
+      "input": "/probe_python = 1",
+      "via": "do"
+    },
+    {
+      "calls": [],
+      "exception": null,
+      "id": "uppercase_command",
+      "input": "PROBE a",
+      "via": "do"
+    },
+    {
+      "calls": [],
+      "exception": null,
+      "id": "abbrev_ambiguous_prefix",
+      "input": "prob a",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "a"
+          ],
+          "command": "uniqcmd_zzz",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "abbrev_unique_prefix",
+      "input": "uniqcmd a",
+      "via": "do"
+    },
+    {
+      "calls": [],
+      "exception": null,
+      "id": "abbrev_short_unique_prefix",
+      "input": "uniq a",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "a"
+          ],
+          "command": "probex",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "abbrev_exact_other",
+      "input": "probex a",
+      "via": "do"
+    },
+    {
+      "calls": [],
+      "exception": null,
+      "id": "unknown_command",
+      "input": "nosuchcommand a, b",
+      "via": "do"
+    },
+    {
+      "calls": [],
+      "exception": null,
+      "id": "tab_whitespace",
+      "input": "probe\ta,\tb",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [],
+          "command": "probe",
+          "kwargs": {
+            "k": "\"a, b\""
+          }
+        }
+      ],
+      "exception": null,
+      "id": "quoted_keyword_value",
+      "input": "probe k=\"a, b\"",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "a\\",
+            "b"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "backslash_comma",
+      "input": "probe a\\, b",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "=x"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "equals_only",
+      "input": "probe =x",
+      "via": "do"
+    },
+    {
+      "calls": [],
+      "exception": null,
+      "id": "empty_line",
+      "input": "",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "(a;b)"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        },
+        {
+          "args": [
+            "c"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "paren_semicolon",
+      "input": "probe (a;b); probe c",
+      "via": "do"
+    },
+    {
+      "calls": [],
+      "exception": null,
+      "id": "apostrophe",
+      "input": "probe a's, b; probe c",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "a",
+            "\"b"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "unbalanced_double_quote",
+      "input": "probe a, \"b",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "a",
+            "'b"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "unbalanced_single_quote",
+      "input": "probe a, 'b",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "(a",
+            "b"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "unbalanced_open_paren",
+      "input": "probe (a, b",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "a)",
+            "b"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "unbalanced_close_paren",
+      "input": "probe a), b",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "a\\ b"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "backslash_middle",
+      "input": "probe a\\ b",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "a"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "semicolon_comment",
+      "input": "probe a; # c",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "a"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        },
+        {
+          "args": [
+            "b"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "double_semicolon",
+      "input": "probe a;;probe b",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "a"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "trailing_semicolon",
+      "input": "probe a; ",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "a"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "leading_semicolon",
+      "input": "; probe a",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "\"a 'b' c\"",
+            "d"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "nested_quotes",
+      "input": "probe \"a 'b' c\", d",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "\"a \\\" b\"",
+            "c"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "escaped_quote",
+      "input": "probe \"a \\\" b\", c",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "{a",
+            "b}",
+            "c"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "braces",
+      "input": "probe {a, b}, c",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "[a, b]",
+            "c"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "brackets",
+      "input": "probe [a, b], c",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "a-b=1"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "keyword_dashed",
+      "input": "probe a-b=1",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "a.b=1"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "keyword_dotted",
+      "input": "probe a.b=1",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "\"k\"=1"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "keyword_quoted_name",
+      "input": "probe \"k\"=1",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "(a)=b"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "equal_after_paren",
+      "input": "probe (a)=b",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [],
+          "command": "probe",
+          "kwargs": {
+            "a": "=b"
+          }
+        }
+      ],
+      "exception": null,
+      "id": "equal_double",
+      "input": "probe a==b",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [],
+          "command": "probe",
+          "kwargs": {
+            "a": "\"b=c\""
+          }
+        }
+      ],
+      "exception": null,
+      "id": "equal_in_quotes_value",
+      "input": "probe a=\"b=c\"",
+      "via": "do"
+    },
+    {
+      "calls": [],
+      "exception": null,
+      "id": "empty_value",
+      "input": "probe a=",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [],
+          "command": "probe",
+          "kwargs": {
+            "a": "1",
+            "b": "2"
+          }
+        }
+      ],
+      "exception": null,
+      "id": "space_before_comma_kw",
+      "input": "probe a=1 , b=2",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "name CA+CB",
+            "chain A"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "plus_selection",
+      "input": "probe name CA+CB, chain A",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "\"a # b\"",
+            "c"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "string_with_hash",
+      "input": "probe \"a # b\", c",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "--flag",
+            "x"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "long_flag",
+      "input": "probe --flag, x",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "-1",
+            "2.5e3"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "negative_number",
+      "input": "probe -1, 2.5e3",
+      "via": "do"
+    },
+    {
+      "calls": [],
+      "exception": null,
+      "id": "only_spaces",
+      "input": "   ",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "command_with_trailing_space",
+      "input": "probe  ",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            null
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "comma_only",
+      "input": "probe ,",
+      "via": "do"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "a",
+            "b",
+            "c"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        },
+        {
+          "args": [
+            "d"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "file_continuation",
+      "input": "probe a, \\\n b, c\nprobe d\n",
+      "via": "load"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "a",
+            "b",
+            "c"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        },
+        {
+          "args": [
+            "d"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "file_continuation@at",
+      "input": "probe a, \\\n b, c\nprobe d\n",
+      "via": "at"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "a"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        },
+        {
+          "args": [
+            "b"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "file_comment_blank",
+      "input": "# c\n\nprobe a\n   # indented comment\nprobe b\n",
+      "via": "load"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "a"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        },
+        {
+          "args": [
+            "b"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "file_comment_blank@at",
+      "input": "# c\n\nprobe a\n   # indented comment\nprobe b\n",
+      "via": "at"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "a"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        },
+        {
+          "args": [
+            "b"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        },
+        {
+          "args": [
+            "c"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "file_semicolon",
+      "input": "probe a; probe b\nprobe c\n",
+      "via": "load"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "a"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        },
+        {
+          "args": [
+            "b"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        },
+        {
+          "args": [
+            "c"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "file_semicolon@at",
+      "input": "probe a; probe b\nprobe c\n",
+      "via": "at"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "before"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        },
+        {
+          "args": [
+            "from_python"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        },
+        {
+          "args": [
+            "after"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "file_python_block",
+      "input": "probe before\npython\nfrom pymol import cmd\ncmd.do('probe from_python')\npython end\nprobe after\n",
+      "via": "load"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "before"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        },
+        {
+          "args": [
+            "from_python"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        },
+        {
+          "args": [
+            "after"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "file_python_block@at",
+      "input": "probe before\npython\nfrom pymol import cmd\ncmd.do('probe from_python')\npython end\nprobe after\n",
+      "via": "at"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "before"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        },
+        {
+          "args": [
+            "after"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "file_skip_block",
+      "input": "probe before\nskip\nprobe hidden\nskip end\nprobe after\n",
+      "via": "load"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "before"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        },
+        {
+          "args": [
+            "after"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "file_skip_block@at",
+      "input": "probe before\nskip\nprobe hidden\nskip end\nprobe after\n",
+      "via": "at"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "before"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "file_abort",
+      "input": "probe before\nabort\nprobe after\n",
+      "via": "load"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "before"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "file_abort@at",
+      "input": "probe before\nabort\nprobe after\n",
+      "via": "at"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "before"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        },
+        {
+          "args": [
+            "not_a_command"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        },
+        {
+          "args": [
+            "after"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "file_embed",
+      "input": "probe before\nembed data1, txt\nline one\nprobe not_a_command\nembed end\nprobe after\n",
+      "via": "load"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "before"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        },
+        {
+          "args": [
+            "not_a_command"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        },
+        {
+          "args": [
+            "after"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "file_embed@at",
+      "input": "probe before\nembed data1, txt\nline one\nprobe not_a_command\nembed end\nprobe after\n",
+      "via": "at"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "before"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        },
+        {
+          "args": [
+            "after"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "file_error_continues",
+      "input": "probe before\nnosuchcommand 1\nprobe after\n",
+      "via": "load"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "before"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        },
+        {
+          "args": [
+            "after"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "file_error_continues@at",
+      "input": "probe before\nnosuchcommand 1\nprobe after\n",
+      "via": "at"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "a"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        },
+        {
+          "args": [
+            "b"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "file_crlf",
+      "input": "probe a\r\nprobe b\r\n",
+      "via": "load"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "a"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        },
+        {
+          "args": [
+            "b"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "file_crlf@at",
+      "input": "probe a\r\nprobe b\r\n",
+      "via": "at"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "a"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        },
+        {
+          "args": [
+            "b"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "file_no_trailing_newline",
+      "input": "probe a\nprobe b",
+      "via": "load"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "a"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        },
+        {
+          "args": [
+            "b"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "file_no_trailing_newline@at",
+      "input": "probe a\nprobe b",
+      "via": "at"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "before"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        },
+        {
+          "args": [
+            "after"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "file_slash_line",
+      "input": "probe before\n/probe_var = 3\nprobe after\n",
+      "via": "load"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "before"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        },
+        {
+          "args": [
+            "after"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "file_slash_line@at",
+      "input": "probe before\n/probe_var = 3\nprobe after\n",
+      "via": "at"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "é",
+            "ü"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "file_unicode",
+      "input": "probe é, ü\n",
+      "via": "load"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "é",
+            "ü"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "file_unicode@at",
+      "input": "probe é, ü\n",
+      "via": "at"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "a"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "file_tab_comment",
+      "input": "\t# tab comment\nprobe a\n",
+      "via": "load"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "a"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "file_tab_comment@at",
+      "input": "\t# tab comment\nprobe a\n",
+      "via": "at"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "a"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "file_leading_space_cmd",
+      "input": "   probe a\n",
+      "via": "load"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "a"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "file_leading_space_cmd@at",
+      "input": "   probe a\n",
+      "via": "at"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "nested"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "file_python_block_indent",
+      "input": "python\nfrom pymol import cmd\nif True:\n    cmd.do('probe nested')\npython end\n",
+      "via": "load"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "nested"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "file_python_block_indent@at",
+      "input": "python\nfrom pymol import cmd\nif True:\n    cmd.do('probe nested')\npython end\n",
+      "via": "at"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "before"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "file_python_unterminated",
+      "input": "probe before\npython\nfrom pymol import cmd\ncmd.do('probe from_unterminated')\n",
+      "via": "load"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "before"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "file_python_unterminated@at",
+      "input": "probe before\npython\nfrom pymol import cmd\ncmd.do('probe from_unterminated')\n",
+      "via": "at"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "before"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "file_skip_unterminated",
+      "input": "probe before\nskip\nprobe hidden\n",
+      "via": "load"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "before"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "file_skip_unterminated@at",
+      "input": "probe before\nskip\nprobe hidden\n",
+      "via": "at"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "before"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        },
+        {
+          "args": [
+            "after_embed"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "file_embed_no_end",
+      "input": "probe before\nembed k, txt\nline\nprobe after_embed\n",
+      "via": "load"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "before"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        },
+        {
+          "args": [
+            "after_embed"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "file_embed_no_end@at",
+      "input": "probe before\nembed k, txt\nline\nprobe after_embed\n",
+      "via": "at"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "before"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        },
+        {
+          "args": [
+            "after"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "file_python_error",
+      "input": "probe before\npython\nraise RuntimeError('boom')\npython end\nprobe after\n",
+      "via": "load"
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "before"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        },
+        {
+          "args": [
+            "after"
+          ],
+          "command": "probe",
+          "kwargs": {}
+        }
+      ],
+      "exception": null,
+      "id": "file_python_error@at",
+      "input": "probe before\npython\nraise RuntimeError('boom')\npython end\nprobe after\n",
+      "via": "at"
+    }
+  ],
+  "pymol_version": "3.1.0"
+}

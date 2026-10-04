@@ -7,6 +7,37 @@ the CC0 1.0 Universal Public Domain Dedication according to the wwPDB/RCSB PDB
 usage policy. The fixture README records its download URL, checksum and original
 structure citation.
 
+## Open-Source PyMOL 3.1.0 color table values
+
+`src/render/color_catalog.inc` contains color names, float32 RGB values, the
+element color index map and the automatic color cycle observed by running an
+unmodified Open-Source PyMOL 3.1.0 binary. `src/render/spectrum_palettes.inc`
+and the palette color lists in `src/render/spectrum.cpp` contain spectrum
+palette names and ramp ranges observed the same way and checked against the
+Open-Source PyMOL 3.1.0 documentation. No PyMOL source code is included.
+MolShredder is not a PyMOL product; PyMOL is a trademark of Schrodinger, LLC.
+
+Open-Source PyMOL is Copyright (C) Schrodinger, LLC.
+
+All Rights Reserved
+
+Permission to use, copy, modify, distribute, and distribute modified
+versions of this software and its built-in documentation for any
+purpose and without fee is hereby granted, provided that the above
+copyright notice appears in all copies and that both the copyright
+notice and this permission notice appear in supporting documentation,
+and that the name of Schrodinger, LLC not be used in advertising or
+publicity pertaining to distribution of the software without specific,
+written prior permission.
+
+SCHRODINGER, LLC DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE,
+INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN
+NO EVENT SHALL SCHRODINGER, LLC BE LIABLE FOR ANY SPECIAL, INDIRECT OR
+CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
+OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE
+OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE
+USE OR PERFORMANCE OF THIS SOFTWARE.
+
 ## VMD molfile plugin ABI declarations
 
 MolShredder's narrow ABI 18 adapter declares the binary interface prefix from

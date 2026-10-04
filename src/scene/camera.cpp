@@ -325,6 +325,28 @@ operation::Result<Camera> Camera::frame_sphere(model::Vec3d center,
   return create(updated);
 }
 
+operation::Result<Camera> Camera::frame_sphere_pymol(model::Vec3d center,
+                                                     double radius) const {
+  if (!is_finite(center) || !finite_positive(radius)) {
+    return operation::Result<Camera>::failure(invalid(
+        "camera framing requires a finite center and positive radius"));
+  }
+  auto updated = parameters_;
+  updated.target = center;
+  updated.model_origin = center;
+  const auto fov_width =
+      2.0 * std::tan(updated.vertical_field_of_view_radians * 0.5);
+  auto distance = 2.0 * radius / fov_width;
+  if (updated.aspect_ratio < 1.0)
+    distance /= updated.aspect_ratio;
+  updated.distance = distance;
+  if (updated.projection == ProjectionMode::orthographic)
+    updated.orthographic_height = distance * fov_width;
+  updated.near_clip = std::max(1.0e-4, distance - radius * 1.2);
+  updated.far_clip = std::max(updated.near_clip + 1.0e-4, distance + radius * 1.2);
+  return create(updated);
+}
+
 operation::Result<Camera> Camera::frame_box(model::Vec3d center,
                                             model::Vec3d half_extents,
                                             double padding,

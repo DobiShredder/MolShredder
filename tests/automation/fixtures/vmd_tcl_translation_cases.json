@@ -1,0 +1,1576 @@
+{
+ "cases": [
+  {
+   "id": "mol_new_typed",
+   "tcl": "mol new 1ubq.pdb type pdb waitfor all",
+   "invocations": [
+    {
+     "command": "load",
+     "arguments": {
+      "path": "1ubq.pdb",
+      "file-format": "pdb",
+      "name": "1ubq"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "mol_new_guess",
+   "tcl": "mol new complex.pdb",
+   "invocations": [
+    {
+     "command": "load",
+     "arguments": {
+      "path": "complex.pdb",
+      "file-format": "pdb",
+      "name": "complex"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "mol_new_psf",
+   "tcl": "mol new sys.psf type psf",
+   "invocations": [
+    {
+     "command": "load",
+     "arguments": {
+      "path": "sys.psf",
+      "file-format": "psf",
+      "name": "sys"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "mol_new_parm7",
+   "tcl": "mol new sys.prmtop type parm7",
+   "invocations": [
+    {
+     "command": "load",
+     "arguments": {
+      "path": "sys.prmtop",
+      "file-format": "prmtop",
+      "name": "sys"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "mol_new_volume",
+   "tcl": "mol new map.dx type dx waitfor all",
+   "invocations": [
+    {
+     "command": "volume load",
+     "arguments": {
+      "path": "map.dx",
+      "file-format": "dx",
+      "name": "map"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "mol_new_mrc_guess",
+   "tcl": "mol new density.mrc",
+   "invocations": [
+    {
+     "command": "volume load",
+     "arguments": {
+      "path": "density.mrc",
+      "file-format": "ccp4",
+      "name": "density"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "mol_new_traj_only",
+   "tcl": "mol new run.dcd type dcd",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_format"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "mol_new_unknown_type",
+   "tcl": "mol new a.txt type foo",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_format"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "mol_new_first",
+   "tcl": "mol new a.pdb first 3",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_argument"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "mol_new_step",
+   "tcl": "mol new a.pdb step 2",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_argument"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "mol_new_autobonds_off",
+   "tcl": "mol new a.pdb autobonds off",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_argument"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "mol_new_autobonds_on",
+   "tcl": "mol new a.pdb autobonds on",
+   "invocations": [
+    {
+     "command": "load",
+     "arguments": {
+      "path": "a.pdb",
+      "file-format": "pdb",
+      "name": "a"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "mol_new_unknown_option",
+   "tcl": "mol new a.pdb volsets {0}",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_argument"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "mol_new_missing_file",
+   "tcl": "mol new",
+   "invocations": [],
+   "diagnostics": [
+    "wrong_arguments"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "mol_new_dangling_option",
+   "tcl": "mol new a.pdb type",
+   "invocations": [],
+   "diagnostics": [
+    "wrong_arguments"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "mol_load_old_form",
+   "tcl": "mol load pdb 1abc.pdb",
+   "invocations": [
+    {
+     "command": "load",
+     "arguments": {
+      "path": "1abc.pdb",
+      "file-format": "pdb",
+      "name": "1abc"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "mol_load_short",
+   "tcl": "mol load pdb",
+   "invocations": [],
+   "diagnostics": [
+    "wrong_arguments"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "duplicate_name",
+   "tcl": "mol new a.pdb\nmol new b/a.pdb",
+   "invocations": [
+    {
+     "command": "load",
+     "arguments": {
+      "path": "a.pdb",
+      "file-format": "pdb",
+      "name": "a"
+     }
+    },
+    {
+     "command": "load",
+     "arguments": {
+      "path": "b/a.pdb",
+      "file-format": "pdb",
+      "name": "a_2"
+     }
+    }
+   ],
+   "diagnostics": [
+    "renamed_object"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "name_collides_with_context",
+   "tcl": "mol new a.pdb",
+   "invocations": [
+    {
+     "command": "load",
+     "arguments": {
+      "path": "a.pdb",
+      "file-format": "pdb",
+      "name": "a_2"
+     }
+    }
+   ],
+   "diagnostics": [
+    "renamed_object"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": [
+    "a"
+   ]
+  },
+  {
+   "id": "addfile",
+   "tcl": "mol new s.psf type psf\nmol addfile run.dcd type dcd waitfor all",
+   "invocations": [
+    {
+     "command": "load",
+     "arguments": {
+      "path": "s.psf",
+      "file-format": "psf",
+      "name": "s"
+     }
+    },
+    {
+     "command": "traj load",
+     "arguments": {
+      "path": "run.dcd",
+      "file-format": "dcd",
+      "mapping": "index"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "addfile_guess_xtc",
+   "tcl": "mol addfile run.xtc",
+   "invocations": [
+    {
+     "command": "traj load",
+     "arguments": {
+      "path": "run.xtc",
+      "file-format": "xtc",
+      "mapping": "index"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "addfile_other_molid",
+   "tcl": "mol new a.pdb\nmol new b.pdb\nmol addfile run.dcd molid 0",
+   "invocations": [
+    {
+     "command": "load",
+     "arguments": {
+      "path": "a.pdb",
+      "file-format": "pdb",
+      "name": "a"
+     }
+    },
+    {
+     "command": "load",
+     "arguments": {
+      "path": "b.pdb",
+      "file-format": "pdb",
+      "name": "b"
+     }
+    },
+    {
+     "command": "traj load",
+     "arguments": {
+      "path": "run.dcd",
+      "file-format": "dcd",
+      "mapping": "index"
+     }
+    }
+   ],
+   "diagnostics": [
+    "applied_to_active_object"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "addfile_not_trajectory",
+   "tcl": "mol addfile x.pdb",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_format"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "addfile_first",
+   "tcl": "mol addfile run.dcd first 10",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_argument"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "delete_by_id",
+   "tcl": "mol new a.pdb\nmol delete 0",
+   "invocations": [
+    {
+     "command": "load",
+     "arguments": {
+      "path": "a.pdb",
+      "file-format": "pdb",
+      "name": "a"
+     }
+    },
+    {
+     "command": "object delete",
+     "arguments": {
+      "object": "a"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "delete_top",
+   "tcl": "mol new a.pdb\nmol new b.pdb\nmol delete top",
+   "invocations": [
+    {
+     "command": "load",
+     "arguments": {
+      "path": "a.pdb",
+      "file-format": "pdb",
+      "name": "a"
+     }
+    },
+    {
+     "command": "load",
+     "arguments": {
+      "path": "b.pdb",
+      "file-format": "pdb",
+      "name": "b"
+     }
+    },
+    {
+     "command": "object delete",
+     "arguments": {
+      "object": "b"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "delete_all",
+   "tcl": "mol new a.pdb\nmol new b.pdb\nmol delete all",
+   "invocations": [
+    {
+     "command": "load",
+     "arguments": {
+      "path": "a.pdb",
+      "file-format": "pdb",
+      "name": "a"
+     }
+    },
+    {
+     "command": "load",
+     "arguments": {
+      "path": "b.pdb",
+      "file-format": "pdb",
+      "name": "b"
+     }
+    },
+    {
+     "command": "object delete",
+     "arguments": {
+      "object": "a"
+     }
+    },
+    {
+     "command": "object delete",
+     "arguments": {
+      "object": "b"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "delete_unknown",
+   "tcl": "mol delete 7",
+   "invocations": [],
+   "diagnostics": [
+    "unknown_molecule"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "delete_twice",
+   "tcl": "mol new a.pdb\nmol delete 0\nmol delete 0",
+   "invocations": [
+    {
+     "command": "load",
+     "arguments": {
+      "path": "a.pdb",
+      "file-format": "pdb",
+      "name": "a"
+     }
+    },
+    {
+     "command": "object delete",
+     "arguments": {
+      "object": "a"
+     }
+    }
+   ],
+   "diagnostics": [
+    "unknown_molecule"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "delete_via_variable",
+   "tcl": "set m [mol new a.pdb]\nmol delete $m",
+   "invocations": [
+    {
+     "command": "load",
+     "arguments": {
+      "path": "a.pdb",
+      "file-format": "pdb",
+      "name": "a"
+     }
+    },
+    {
+     "command": "object delete",
+     "arguments": {
+      "object": "a"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "rename",
+   "tcl": "mol new a.pdb\nmol rename 0 protein",
+   "invocations": [
+    {
+     "command": "load",
+     "arguments": {
+      "path": "a.pdb",
+      "file-format": "pdb",
+      "name": "a"
+     }
+    },
+    {
+     "command": "object rename",
+     "arguments": {
+      "object": "a",
+      "name": "protein"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "rename_in_use",
+   "tcl": "mol new a.pdb\nmol new b.pdb\nmol rename 0 b",
+   "invocations": [
+    {
+     "command": "load",
+     "arguments": {
+      "path": "a.pdb",
+      "file-format": "pdb",
+      "name": "a"
+     }
+    },
+    {
+     "command": "load",
+     "arguments": {
+      "path": "b.pdb",
+      "file-format": "pdb",
+      "name": "b"
+     }
+    }
+   ],
+   "diagnostics": [
+    "name_in_use"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "rename_then_delete",
+   "tcl": "mol new a.pdb\nmol rename 0 p\nmol delete 0",
+   "invocations": [
+    {
+     "command": "load",
+     "arguments": {
+      "path": "a.pdb",
+      "file-format": "pdb",
+      "name": "a"
+     }
+    },
+    {
+     "command": "object rename",
+     "arguments": {
+      "object": "a",
+      "name": "p"
+     }
+    },
+    {
+     "command": "object delete",
+     "arguments": {
+      "object": "p"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "mol_representation",
+   "tcl": "mol representation Lines",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_command"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "mol_color",
+   "tcl": "mol color Name",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_command"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "mol_selection",
+   "tcl": "mol selection protein",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_command"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "mol_material",
+   "tcl": "mol material Opaque",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_command"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "mol_addrep",
+   "tcl": "mol addrep top",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_command"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "mol_delrep",
+   "tcl": "mol delrep 0 top",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_command"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "mol_modstyle",
+   "tcl": "mol modstyle 0 top NewCartoon",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_command"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "mol_modcolor",
+   "tcl": "mol modcolor 0 top Chain",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_command"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "mol_modselect",
+   "tcl": "mol modselect 0 top all",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_command"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "mol_showrep",
+   "tcl": "mol showrep top 0 off",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_command"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "mol_on",
+   "tcl": "mol on 0",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_command"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "mol_top",
+   "tcl": "mol top 0",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_command"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "mol_unknown_sub",
+   "tcl": "mol frobnicate",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_command"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "display_projection",
+   "tcl": "display projection Orthographic",
+   "invocations": [
+    {
+     "command": "view projection",
+     "arguments": {
+      "mode": "orthographic"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "display_projection_persp",
+   "tcl": "display projection perspective",
+   "invocations": [
+    {
+     "command": "view projection",
+     "arguments": {
+      "mode": "perspective"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "display_projection_bad",
+   "tcl": "display projection stereo",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_argument"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "display_resetview",
+   "tcl": "display resetview",
+   "invocations": [
+    {
+     "command": "view reset",
+     "arguments": {}
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "display_update",
+   "tcl": "display update ui",
+   "invocations": [],
+   "diagnostics": [
+    "no_effect"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "display_depthcue",
+   "tcl": "display depthcue on",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_command"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "color_background_white",
+   "tcl": "color Display Background white",
+   "invocations": [
+    {
+     "command": "background set",
+     "arguments": {
+      "color": "white"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "color_background_other",
+   "tcl": "color Display Background blue",
+   "invocations": [
+    {
+     "command": "background set",
+     "arguments": {
+      "color": "blue"
+     }
+    }
+   ],
+   "diagnostics": [
+    "color_values_not_verified"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "color_change_rgb",
+   "tcl": "color change rgb red 0.9 0.1 0.1",
+   "invocations": [
+    {
+     "command": "color define",
+     "arguments": {
+      "name": "red",
+      "red": "0.9",
+      "green": "0.1",
+      "blue": "0.1"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "color_change_rgb_bad",
+   "tcl": "color change rgb red 0.9 x 0.1",
+   "invocations": [],
+   "diagnostics": [
+    "invalid_argument"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "color_other",
+   "tcl": "color Name C gray",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_command"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "animate_goto",
+   "tcl": "animate goto 12",
+   "invocations": [
+    {
+     "command": "traj frame",
+     "arguments": {
+      "frame": "12"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "animate_goto_start",
+   "tcl": "animate goto start",
+   "invocations": [
+    {
+     "command": "traj frame",
+     "arguments": {
+      "frame": "0"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "animate_goto_end",
+   "tcl": "animate goto end",
+   "invocations": [],
+   "diagnostics": [
+    "invalid_argument"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "animate_goto_negative",
+   "tcl": "animate goto -1",
+   "invocations": [],
+   "diagnostics": [
+    "invalid_argument"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "animate_pause",
+   "tcl": "animate pause",
+   "invocations": [
+    {
+     "command": "traj pause",
+     "arguments": {}
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "animate_forward",
+   "tcl": "animate forward",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_command"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "atomselect_measure",
+   "tcl": "mol new a.pdb\nset s [atomselect top \"protein\"]\nmeasure center $s",
+   "invocations": [
+    {
+     "command": "load",
+     "arguments": {
+      "path": "a.pdb",
+      "file-format": "pdb",
+      "name": "a"
+     }
+    },
+    {
+     "command": "analyze center",
+     "arguments": {
+      "selection": "protein",
+      "mode": "centroid"
+     }
+    }
+   ],
+   "diagnostics": [
+    "selection_syntax_passed_through",
+    "result_not_returned"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "measure_center_mass",
+   "tcl": "mol new a.pdb\nset s [atomselect 0 \"name CA\"]\nmeasure center $s weight mass",
+   "invocations": [
+    {
+     "command": "load",
+     "arguments": {
+      "path": "a.pdb",
+      "file-format": "pdb",
+      "name": "a"
+     }
+    },
+    {
+     "command": "analyze center",
+     "arguments": {
+      "selection": "name CA",
+      "mode": "com"
+     }
+    }
+   ],
+   "diagnostics": [
+    "selection_syntax_passed_through",
+    "result_not_returned"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "atomselect_other_mol",
+   "tcl": "mol new a.pdb\nmol new b.pdb\nset s [atomselect 0 all]",
+   "invocations": [
+    {
+     "command": "load",
+     "arguments": {
+      "path": "a.pdb",
+      "file-format": "pdb",
+      "name": "a"
+     }
+    },
+    {
+     "command": "load",
+     "arguments": {
+      "path": "b.pdb",
+      "file-format": "pdb",
+      "name": "b"
+     }
+    }
+   ],
+   "diagnostics": [
+    "applied_to_active_object",
+    "selection_syntax_passed_through"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "atomselect_unknown_mol",
+   "tcl": "set s [atomselect 3 all]",
+   "invocations": [],
+   "diagnostics": [
+    "unknown_molecule"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "atomselect_frame",
+   "tcl": "mol new a.pdb\nset s [atomselect top all frame 2]",
+   "invocations": [
+    {
+     "command": "load",
+     "arguments": {
+      "path": "a.pdb",
+      "file-format": "pdb",
+      "name": "a"
+     }
+    }
+   ],
+   "diagnostics": [
+    "unsupported_argument"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "measure_unknown_handle",
+   "tcl": "measure center nothing",
+   "invocations": [],
+   "diagnostics": [
+    "unknown_selection"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "measure_rgyr",
+   "tcl": "mol new a.pdb\nset s [atomselect top all]\nmeasure rgyr $s",
+   "invocations": [
+    {
+     "command": "load",
+     "arguments": {
+      "path": "a.pdb",
+      "file-format": "pdb",
+      "name": "a"
+     }
+    }
+   ],
+   "diagnostics": [
+    "selection_syntax_passed_through",
+    "unsupported_command"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "selection_method",
+   "tcl": "mol new a.pdb\nset s [atomselect top all]\n$s num",
+   "invocations": [
+    {
+     "command": "load",
+     "arguments": {
+      "path": "a.pdb",
+      "file-format": "pdb",
+      "name": "a"
+     }
+    }
+   ],
+   "diagnostics": [
+    "selection_syntax_passed_through",
+    "unsupported_command"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "selection_delete",
+   "tcl": "mol new a.pdb\nset s [atomselect top all]\n$s delete\nmeasure center $s",
+   "invocations": [
+    {
+     "command": "load",
+     "arguments": {
+      "path": "a.pdb",
+      "file-format": "pdb",
+      "name": "a"
+     }
+    }
+   ],
+   "diagnostics": [
+    "selection_syntax_passed_through",
+    "unknown_selection"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "exit",
+   "tcl": "display resetview\nexit\ndisplay resetview",
+   "invocations": [
+    {
+     "command": "view reset",
+     "arguments": {}
+    }
+   ],
+   "diagnostics": [
+    "script_stopped"
+   ],
+   "stop": true,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "quit",
+   "tcl": "quit",
+   "invocations": [],
+   "diagnostics": [
+    "script_stopped"
+   ],
+   "stop": true,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "puts",
+   "tcl": "puts hello",
+   "invocations": [],
+   "diagnostics": [
+    "no_effect"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "comment_and_blank",
+   "tcl": "# comment\n\ndisplay resetview ;# trailing\ndisplay update",
+   "invocations": [
+    {
+     "command": "view reset",
+     "arguments": {}
+    }
+   ],
+   "diagnostics": [
+    "no_effect"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "variables",
+   "tcl": "set f run.dcd\nset t dcd\nmol addfile $f type $t",
+   "invocations": [
+    {
+     "command": "traj load",
+     "arguments": {
+      "path": "run.dcd",
+      "file-format": "dcd",
+      "mapping": "index"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "braced_path",
+   "tcl": "mol new {my file.pdb} type pdb",
+   "invocations": [
+    {
+     "command": "load",
+     "arguments": {
+      "path": "my file.pdb",
+      "file-format": "pdb",
+      "name": "my file"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "quoted_path",
+   "tcl": "set d data\nmol new \"$d/a b.pdb\"",
+   "invocations": [
+    {
+     "command": "load",
+     "arguments": {
+      "path": "data/a b.pdb",
+      "file-format": "pdb",
+      "name": "a b"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "semicolons",
+   "tcl": "display resetview; display projection Orthographic",
+   "invocations": [
+    {
+     "command": "view reset",
+     "arguments": {}
+    },
+    {
+     "command": "view projection",
+     "arguments": {
+      "mode": "orthographic"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "continuation",
+   "tcl": "mol new a.pdb \\\n  type pdb \\\n  waitfor all",
+   "invocations": [
+    {
+     "command": "load",
+     "arguments": {
+      "path": "a.pdb",
+      "file-format": "pdb",
+      "name": "a"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "undefined_variable",
+   "tcl": "mol new $nosuch",
+   "invocations": [],
+   "diagnostics": [
+    "tcl_error"
+   ],
+   "stop": true,
+   "tcl_error": true,
+   "objects": []
+  },
+  {
+   "id": "tcl_error_stops_script",
+   "tcl": "display resetview\nmol new $nosuch\ndisplay resetview",
+   "invocations": [
+    {
+     "command": "view reset",
+     "arguments": {}
+    }
+   ],
+   "diagnostics": [
+    "tcl_error"
+   ],
+   "stop": true,
+   "tcl_error": true,
+   "objects": []
+  },
+  {
+   "id": "syntax_error_missing_brace",
+   "tcl": "display resetview\nmol new {a.pdb",
+   "invocations": [
+    {
+     "command": "view reset",
+     "arguments": {}
+    }
+   ],
+   "diagnostics": [
+    "tcl_syntax_error"
+   ],
+   "stop": true,
+   "tcl_error": true,
+   "objects": []
+  },
+  {
+   "id": "foreach",
+   "tcl": "foreach f {a b} { mol new $f.pdb }",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_control_flow"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "if",
+   "tcl": "if {1} { display resetview }",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_control_flow"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "proc",
+   "tcl": "proc show {} { display resetview }",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_control_flow"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "for",
+   "tcl": "for {set i 0} {$i < 3} {incr i} { }",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_control_flow"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "exec",
+   "tcl": "exec rm -rf x",
+   "invocations": [],
+   "diagnostics": [
+    "requires_code_execution"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "source",
+   "tcl": "source other.tcl",
+   "invocations": [],
+   "diagnostics": [
+    "requires_code_execution"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "open",
+   "tcl": "open /tmp/x w",
+   "invocations": [],
+   "diagnostics": [
+    "requires_code_execution"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "expr_unsupported",
+   "tcl": "set n [expr {1 + 2}]",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_command_substitution",
+    "tcl_error"
+   ],
+   "stop": true,
+   "tcl_error": true,
+   "objects": []
+  },
+  {
+   "id": "unknown_command",
+   "tcl": "frobnicate 1",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_command"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "rotate",
+   "tcl": "rotate x by 90",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_command"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "render",
+   "tcl": "render snapshot out.tga",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_command"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "scale",
+   "tcl": "scale by 1.2",
+   "invocations": [],
+   "diagnostics": [
+    "unsupported_command"
+   ],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  },
+  {
+   "id": "full_session",
+   "tcl": "mol new s.psf type psf waitfor all\nmol addfile r.dcd type dcd waitfor all\ndisplay projection Orthographic\ncolor Display Background white\nanimate goto 3\nmol delete all",
+   "invocations": [
+    {
+     "command": "load",
+     "arguments": {
+      "path": "s.psf",
+      "file-format": "psf",
+      "name": "s"
+     }
+    },
+    {
+     "command": "traj load",
+     "arguments": {
+      "path": "r.dcd",
+      "file-format": "dcd",
+      "mapping": "index"
+     }
+    },
+    {
+     "command": "view projection",
+     "arguments": {
+      "mode": "orthographic"
+     }
+    },
+    {
+     "command": "background set",
+     "arguments": {
+      "color": "white"
+     }
+    },
+    {
+     "command": "traj frame",
+     "arguments": {
+      "frame": "3"
+     }
+    },
+    {
+     "command": "object delete",
+     "arguments": {
+      "object": "s"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "tcl_error": false,
+   "objects": []
+  }
+ ]
+}

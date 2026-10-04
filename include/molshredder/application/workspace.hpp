@@ -35,6 +35,7 @@
 #include "molshredder/operation/error.hpp"
 #include "molshredder/operation/result.hpp"
 #include "molshredder/operation/task_context.hpp"
+#include "molshredder/render/color_table.hpp"
 #include "molshredder/render/packet.hpp"
 #include "molshredder/render/representation.hpp"
 #include "molshredder/render/setting_store.hpp"
@@ -83,6 +84,18 @@ struct WorkspaceObject {
   std::vector<RepresentationRecord> representations;
   std::optional<TrajectoryState> trajectory;
   std::optional<render::RenderPacket> molecular_surface;
+  // PyMOL-compatible object color index (assigned from the auto cycle at
+  // load) and sparse per-atom color indices keyed by persistent AtomId,
+  // sorted by id. Atoms without an entry keep the MolShredder default palette.
+  std::int32_t object_color{render::kColorDefault};
+  std::shared_ptr<const std::vector<std::pair<std::uint64_t, std::int32_t>>>
+      atom_colors;
+  // Non-empty atom label text keyed by persistent AtomId, sorted by id.
+  std::shared_ptr<const std::vector<std::pair<std::uint64_t, std::string>>>
+      atom_labels;
+  // Explicit PyMOL cartoon type codes keyed by AtomId (automatic omitted).
+  std::shared_ptr<const std::vector<std::pair<std::uint64_t, std::int32_t>>>
+      cartoon_types;
 };
 
 struct MolecularSurfaceResult {
@@ -101,6 +114,24 @@ struct MolecularSurfaceResult {
   render::Bounds3d bounds;
 };
 
+enum class ContourMode { surface, mesh, dot };
+
+// Named PyMOL-style map contour (isosurface/isomesh/isodot object).
+struct ContourRecord {
+  std::string name;
+  ContourMode mode{ContourMode::mesh};
+  float level{};
+  std::int32_t color{};
+  // Region restriction from a selection of the active molecular object:
+  // carve keeps geometry within the distance of any selected atom; buffer
+  // keeps geometry inside the selection bounding box padded by the distance.
+  std::vector<model::Vec3d> region_atoms;
+  double carve{};
+  double buffer{};
+  render::Bounds3d extent;
+  render::RenderPacket packet;
+};
+
 struct WorkspaceVolume {
   std::uint64_t id{};
   scene::NodeId scene_node;
@@ -113,6 +144,7 @@ struct WorkspaceVolume {
   std::optional<render::TransferFunction> transfer_function;
   std::string transfer_function_name;
   std::shared_ptr<const render::DirectVolumeData> direct_volume;
+  std::vector<ContourRecord> contours;
 };
 
 struct VolumeRampResult {
@@ -334,6 +366,7 @@ struct TrajectoryLoadPlan {
   std::shared_ptr<const scene::Scene> scene;
   render::RenderSettingStore render_settings;
   render::RenderSettingSnapshot render_setting_snapshot;
+  render::ColorTable color_table;
   std::filesystem::path path;
   io::TrajectoryFormat format{io::TrajectoryFormat::auto_detect};
   std::size_t cache_budget_bytes{};
@@ -344,6 +377,8 @@ struct TrajectoryLoadPlan {
       trajectory::AtomMappingPolicy::exact};
   std::vector<model::AtomId> source_to_target_atom_ids;
   std::optional<std::uint64_t> expected_topology_version;
+  // Set for io::TrajectoryFormat::molfile; owns the provider-backed frames.
+  std::shared_ptr<const model::CoordinateSource> external_source;
 };
 
 struct TrajectoryLoadCandidate {
@@ -377,6 +412,7 @@ struct TrajectoryFramePlan {
   render::RenderSettingStore render_settings;
   render::RenderSettingSnapshot render_setting_snapshot;
   std::size_t frame_index{};
+  render::ColorTable color_table;
 };
 
 struct TrajectoryFrameCandidate {
@@ -564,11 +600,137 @@ struct ChemicalPerceptionApplyResult {
   std::size_t added_bond_count{};
 };
 
+// Object range of selection-based display operations (Q-021 b): the active
+// object (default) or every molecular object, like PyMOL.
+enum class ObjectScope { active, workspace };
+
 struct ShowResult {
   std::uint64_t object_id{};
   std::size_t representation_index{};
   std::size_t primitive_count{};
   std::size_t selected_atom_count{};
+};
+
+struct ColorAssignResult {
+  std::uint64_t object_id{};
+  std::int32_t color_index{};
+  std::string color_name;
+  std::size_t affected_atom_count{};
+  std::size_t colored_atom_count{};
+  std::size_t representation_count{};
+};
+
+struct ColorDefineResult {
+  std::int32_t index{};
+  std::string name;
+  render::ColorRgb rgb;
+  bool created{};
+};
+
+struct ColorQueryResult {
+  std::int32_t index{};
+  std::string name;
+  std::optional<render::ColorRgb> rgb;
+};
+
+struct SpectrumRequest {
+  std::string expression{"count"};
+  std::string palette{"rainbow"};
+  std::string selection{"all"};
+  std::optional<double> minimum;
+  std::optional<double> maximum;
+  bool by_residue{};
+  std::string interpolation{"rgb"};
+};
+
+struct SpectrumResult {
+  std::uint64_t object_id{};
+  double minimum{};
+  double maximum{};
+  // "palette" (named ramp colors) or "color-list" (interpolated literals).
+  std::string mode;
+  std::string palette;
+  std::size_t affected_atom_count{};
+  std::size_t colored_atom_count{};
+  std::size_t representation_count{};
+};
+
+struct LabelResult {
+  std::uint64_t object_id{};
+  std::size_t affected_atom_count{};
+  std::size_t labeled_atom_count{};
+  std::size_t visible_label_count{};
+  // Text of the first affected atom, for frontends and parity checks.
+  std::string first_text;
+};
+
+struct ImageSaveRequest {
+  std::filesystem::path path;
+  // 0 uses 640 for width and width / camera aspect for height.
+  std::size_t width{};
+  std::size_t height{};
+  std::optional<double> dpi;
+  // true mirrors PyMOL ray (ray_opaque_background), false mirrors draw.
+  bool ray{true};
+};
+
+struct ImageSaveResult {
+  std::filesystem::path path;
+  std::size_t width{};
+  std::size_t height{};
+  std::size_t bytes{};
+  std::string renderer;
+  bool opaque_background{};
+  std::size_t primitive_count{};
+  std::vector<std::string> warnings;
+};
+
+struct CartoonTypeResult {
+  std::uint64_t object_id{};
+  std::string type;
+  std::int32_t code{};
+  std::size_t affected_atom_count{};
+  std::size_t representation_count{};
+};
+
+struct ContourRequest {
+  std::string name;
+  ContourMode mode{ContourMode::mesh};
+  double level{1.0};
+  std::string map{"current"};
+  std::string color{"default"};
+  std::string selection;
+  double carve{};
+  double buffer{};
+};
+
+struct ContourResult {
+  std::uint64_t volume_id{};
+  std::string name;
+  ContourMode mode{ContourMode::mesh};
+  double level{};
+  bool replaced{};
+  std::size_t primitive_count{};
+  render::Bounds3d extent;
+  // Explicit fallbacks, e.g. an isosurface_algorithm MolShredder does not
+  // implement (geometry always comes from marching tetrahedra).
+  std::vector<std::string> warnings;
+};
+
+struct RampResult {
+  std::string name;
+  std::int32_t color_index{};
+  std::string source_kind;
+  std::vector<double> levels;
+  std::size_t color_count{};
+  int spectrum{};
+  bool replaced{};
+};
+
+struct BackgroundResult {
+  std::optional<std::int32_t> color_index;
+  std::string color_name;
+  render::ColorRgb rgb;
 };
 
 struct RepresentationVisibilityResult {
@@ -580,6 +742,19 @@ struct RepresentationVisibilityResult {
   std::size_t visible_atom_count{};
   std::size_t representation_count{};
   std::vector<render::RepresentationKind> representation_kinds;
+};
+
+// Read-only copy of the selected atoms of the active object in its current
+// frame, for plugins and other consumers that must not touch live state.
+struct SelectionSnapshot {
+  std::uint64_t object_id{};
+  std::string object_name;
+  operation::LengthUnit coordinate_unit{operation::LengthUnit::angstrom};
+  std::size_t frame_index{};
+  std::vector<std::uint64_t> atom_ids;
+  std::vector<std::string> atom_names;
+  std::vector<std::uint8_t> atomic_numbers;
+  std::vector<model::Vec3d> positions;
 };
 
 struct CenterAnalysisResult {
@@ -898,6 +1073,11 @@ public:
   load_volume(const std::filesystem::path &path,
               std::optional<std::string> name, io::VolumeFormat format,
               operation::LengthUnit coordinate_unit);
+  // Commits a provider-produced single-volume document with the same name
+  // checks and scene registration as load_volume.
+  [[nodiscard]] operation::Result<VolumeLoadResult>
+  load_volume_document(io::VolumeDocument document,
+                       const std::filesystem::path &path);
   [[nodiscard]] std::vector<WorkspaceVolumeInfo> list_volumes() const;
   [[nodiscard]] operation::Result<VolumeIsosurfaceResult>
   show_volume_isosurface(double level, render::ColorRgba color,
@@ -989,7 +1169,8 @@ public:
   mutate_representation_visibility(
       std::span<const render::RepresentationKind> kinds,
       std::string selection_expression,
-      RepresentationVisibilityMutation mutation);
+      RepresentationVisibilityMutation mutation,
+      ObjectScope scope = ObjectScope::active);
   [[nodiscard]] operation::Result<RepresentationVisibilitySnapshot>
   representation_visibility_snapshot() const;
   [[nodiscard]] operation::Result<RepresentationVisibilitySessionSnapshot>
@@ -1018,6 +1199,10 @@ public:
   delete_analysis_result(std::uint64_t result_id);
   [[nodiscard]] operation::Result<PersistentAnalysisResult>
   set_analysis_overlay_visible(std::uint64_t result_id, bool visible);
+  // Measurement overlay style from render settings and the resulting packet
+  // of visible analysis results (PyMOL dash/arc layout).
+  [[nodiscard]] AnalysisOverlayStyle analysis_overlay_style() const;
+  [[nodiscard]] render::RenderPacket analysis_overlay_packet() const;
   [[nodiscard]] AnalysisResultStoreSnapshot analysis_result_snapshot() const;
   [[nodiscard]] std::optional<operation::Error>
   restore_analysis_results(const AnalysisResultStoreSnapshot &snapshot);
@@ -1210,7 +1395,9 @@ public:
       trajectory::AtomMappingPolicy mapping_policy =
           trajectory::AtomMappingPolicy::index_order,
       std::span<const model::AtomId> source_to_target_atom_ids = {},
-      std::optional<std::uint64_t> expected_topology_version = std::nullopt);
+      std::optional<std::uint64_t> expected_topology_version = std::nullopt,
+      std::shared_ptr<const model::CoordinateSource> external_source =
+          nullptr);
   [[nodiscard]] operation::Result<TrajectoryLoadPlan> plan_trajectory_load(
       const std::filesystem::path &path, io::TrajectoryFormat format,
       std::size_t cache_budget_bytes, std::size_t prefetch_frame_count,
@@ -1218,7 +1405,9 @@ public:
       std::optional<std::string> h5md_particle_group,
       trajectory::AtomMappingPolicy mapping_policy,
       std::span<const model::AtomId> source_to_target_atom_ids,
-      std::optional<std::uint64_t> expected_topology_version) const;
+      std::optional<std::uint64_t> expected_topology_version,
+      std::shared_ptr<const model::CoordinateSource> external_source =
+          nullptr) const;
   [[nodiscard]] static operation::Result<TrajectoryLoadCandidate>
   build_trajectory_load_candidate(TrajectoryLoadPlan plan,
                                   operation::TaskContext &context);
@@ -1327,6 +1516,26 @@ public:
   [[nodiscard]] operation::Result<bool>
   unset_render_setting(std::string_view name,
                        const render::RenderSettingScope &scope);
+  // Atom-scope set/unset for every atom of a selection in one commit, like
+  // PyMOL `set NAME, VALUE, SELECTION`. The scope supplies object and state;
+  // its atom id is replaced per selected atom. Returns the selected count.
+  [[nodiscard]] operation::Result<std::size_t> set_render_setting_selection(
+      std::string_view name, const render::RenderSettingScope &scope,
+      std::string_view selection_expression,
+      std::optional<render::RenderSettingValue> value);
+  // Persistent IDs of bonds whose two atoms are in an atom-ID list.
+  [[nodiscard]] operation::Result<std::vector<std::uint64_t>>
+  selected_bond_ids(std::uint64_t object_id,
+                    const std::vector<std::uint64_t> &atom_ids) const;
+  // Present atoms of the active object's selection in the current frame.
+  // Fails instead of truncating when more than `max_atoms` match.
+  [[nodiscard]] operation::Result<SelectionSnapshot>
+  selection_snapshot(std::string_view selection_expression,
+                     std::size_t max_atoms) const;
+  // Persistent atom IDs of a selection in one object, in atom order.
+  [[nodiscard]] operation::Result<std::vector<std::uint64_t>>
+  selected_atom_ids(std::uint64_t object_id,
+                    std::string_view selection_expression) const;
   [[nodiscard]] operation::Result<std::size_t>
   reset_render_setting_scope(const render::RenderSettingScope &scope);
   [[nodiscard]] operation::Result<render::ResolvedRenderSetting>
@@ -1336,6 +1545,67 @@ public:
   render_setting_snapshot() const;
   [[nodiscard]] std::optional<operation::Error>
   restore_render_settings(const render::RenderSettingSnapshot &snapshot);
+
+  // SEQ-311 color system. Assignments target the active object's selection;
+  // `auto` consumes the shared object/auto color cycle, `atomic` applies the
+  // reference element colors and `default` restores the MolShredder palette.
+  [[nodiscard]] const render::ColorTable &color_table() const noexcept {
+    return color_table_;
+  }
+  [[nodiscard]] operation::Result<ColorAssignResult>
+  assign_color(std::string_view color, std::string selection_expression,
+               ObjectScope scope = ObjectScope::active);
+  [[nodiscard]] operation::Result<ColorDefineResult>
+  define_color(std::string_view name, std::array<double, 3> components);
+  [[nodiscard]] operation::Result<ColorQueryResult>
+  query_color(std::string_view color) const;
+  [[nodiscard]] operation::Result<std::size_t> recolor();
+  // PyMOL-compatible spectrum: built-in palettes with simple atom fields use
+  // named ramp colors; other expressions or explicit color lists interpolate
+  // literal colors. Targets the active object's selection.
+  [[nodiscard]] operation::Result<SpectrumResult>
+  spectrum(const SpectrumRequest &request);
+  // `default` restores the MolShredder background; other tokens follow the
+  // `color` assignment lookup and must resolve to an RGB color.
+  [[nodiscard]] operation::Result<BackgroundResult>
+  set_background(std::string_view color);
+  [[nodiscard]] BackgroundResult background() const;
+  // Writes the visible scene with the deterministic reference ray caster as
+  // an RGBA PNG. PyMOL ray/draw backends are explicit fallbacks reported in
+  // warnings; text labels are not rasterized.
+  [[nodiscard]] operation::Result<ImageSaveResult>
+  save_image(const ImageSaveRequest &request) const;
+  // PyMOL `cartoon TYPE, SELECTION`: exact or unique-prefix type name.
+  [[nodiscard]] operation::Result<CartoonTypeResult>
+  set_cartoon_type(std::string_view type, std::string selection_expression);
+  // PyMOL ramp_new: source is a volume (map value) or molecular object
+  // (proximity); range is a level list; colors are names or one of the
+  // built-in spectra (traditional sludge ocean hot grayable rainbow afmhot
+  // grayscale). The ramp name then works as a `color` token.
+  [[nodiscard]] operation::Result<RampResult>
+  define_ramp(std::string name, std::string_view source,
+              std::string_view range, std::string_view colors);
+  // PyMOL ramp_update: replaces the range and/or colors of an existing ramp.
+  [[nodiscard]] operation::Result<RampResult>
+  update_ramp(std::string_view name, std::string_view range,
+              std::string_view colors);
+  // PyMOL isosurface/isomesh/isodot: creates or replaces a named contour of
+  // a volume map; a name used by another mode is an error.
+  [[nodiscard]] operation::Result<ContourResult>
+  create_contour(const ContourRequest &request, operation::TaskContext &context);
+  // PyMOL isolevel: updates (level) or queries (nullopt) a contour level.
+  [[nodiscard]] operation::Result<ContourResult>
+  contour_level(std::string_view name, std::optional<double> level,
+                operation::TaskContext &context);
+  [[nodiscard]] bool has_camera() const noexcept {
+    return camera_.has_value();
+  }
+  // PyMOL `label`: evaluates a label expression per selected atom, stores
+  // the text (empty clears) and shows the labels representation for the
+  // selection. `literal` stores the text verbatim (PyMOL label2).
+  [[nodiscard]] operation::Result<LabelResult>
+  label(std::string selection_expression, std::string_view expression,
+        bool literal = false);
 
   // Successful product-facing state mutations are recorded as normalized
   // canonical invocations. Query/export commands and failed mutations are not
@@ -1365,6 +1635,28 @@ private:
   void evict_edit_history_to_budget();
   [[nodiscard]] std::optional<operation::Error>
   commit_render_settings(render::RenderSettingStore candidate);
+  [[nodiscard]] std::optional<operation::Error>
+  commit_color_table(render::ColorTable candidate);
+  // Re-reads proximity ramp source atoms (state 1) after coordinate edits.
+  void refresh_proximity_ramps(std::uint64_t object_id);
+  // Merges sorted (AtomId, color) updates into the object's sparse atom
+  // colors (kColorDefault removes an entry), rebuilds and commits atomically.
+  [[nodiscard]] std::optional<operation::Error> commit_atom_colors(
+      WorkspaceObject &object,
+      std::vector<std::pair<std::uint64_t, std::int32_t>> updates);
+  // Builds the merged atom colors and rebuilt representations without
+  // committing them.
+  struct AtomColorCandidate {
+    std::shared_ptr<const std::vector<std::pair<std::uint64_t, std::int32_t>>>
+        colors;
+    std::vector<RepresentationRecord> representations;
+  };
+  [[nodiscard]] operation::Result<AtomColorCandidate> prepare_atom_colors(
+      const WorkspaceObject &object,
+      std::vector<std::pair<std::uint64_t, std::int32_t>> updates) const;
+  // Targets of a selection-based display operation for the scope.
+  [[nodiscard]] operation::Result<std::vector<WorkspaceObject *>>
+  scope_targets(ObjectScope scope);
   [[nodiscard]] WorkspaceObject *mutable_active_object() noexcept;
   [[nodiscard]] WorkspaceVolume *mutable_active_volume() noexcept;
   [[nodiscard]] operation::Result<std::size_t>
@@ -1392,6 +1684,8 @@ private:
   std::optional<std::string> current_scene_name_;
   std::optional<MovieTimelineState> movie_;
   render::RenderSettingStore render_settings_;
+  render::ColorTable color_table_;
+  std::size_t auto_color_cursor_{};
   std::uint64_t next_edit_transaction_id_{1U};
   std::size_t edit_history_memory_budget_bytes_{256U * 1024U * 1024U};
   std::size_t edit_history_memory_used_bytes_{};

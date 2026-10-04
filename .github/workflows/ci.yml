@@ -73,6 +73,13 @@ jobs:
           --output-on-failure --no-tests=error
           -R "^io\.molfile_provider$"
 
+      - name: Test required molfile structure channel gate
+        run: >-
+          conda run --no-capture-output -n molshredder
+          ctest --test-dir build/ci -C ${{ matrix.configuration }}
+          --output-on-failure --no-tests=error
+          -R "^io\.molfile_channels$"
+
       - name: Test M2 scientific workstation gate
         run: >-
           conda run --no-capture-output -n molshredder

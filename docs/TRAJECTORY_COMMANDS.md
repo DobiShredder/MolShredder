@@ -25,7 +25,8 @@ molshredder analyze trajectory rmsd|rmsf [--selection EXPR]
                                         [--missing error|skip]
                                         [--precision 0..15]
                                         [--unit angstrom|nanometer]
-molshredder traj load --path PATH --mapping exact|index|explicit [--file-format auto|dcd|trr|xtc|mdcrd|crd|crdbox|netcdf|nc|ncdf|ncrst|h5md|rst7|lammps|binpos] [--provider auto|native]
+molshredder traj load --path PATH --mapping exact|index|explicit [--file-format auto|dcd|trr|xtc|mdcrd|crd|crdbox|netcdf|nc|ncdf|ncrst|h5md|rst7|lammps|binpos] [--provider auto|native|molfile:PLUGIN]
+                                      [--plugin-path ABSOLUTE_PATH]
                                       [--coordinate-unit auto|angstrom|nanometer]
                                       [--particle-group NAME]
                                       [--atom-map STABLE_ID,...]
@@ -63,6 +64,15 @@ Python에서는 같은 순서로 `molshredder.invoke()`를 호출한다.
 전에 거부한다. `auto`는 case-insensitive `.dcd`, `.trr`, `.xtc`, `.mdcrd`, `.crd`, `.nc`, `.ncdf`, `.netcdf`, `.ncrst`, `.h5md`, `.rst7`, `.restrt`, `.inpcrd`, `.inprst`
 suffix를 사용하고 알 수 없는 suffix는 추정하지 않는다. 기본 cache budget은 256 MiB이며 decoded scientific payload의 상한이지 process RSS
 hard limit은 아니다.
+
+`--provider molfile:<plugin>`은 사용자가 명시한 ABI 18 molfile plugin으로 `dcd`, `trr`, `xtc`, `crd`, `crdbox`, `lammpstrj`,
+`netcdf`, `binpos`, `rst7`, `vcf` channel을 attach한다. `auto`는 항상 native indexed reader이며 sequential plugin으로 대체되지 않는다.
+Plugin은 순차 reader라 attach 때 frame 수를 세는 한 번의 순회(frame 하나만 메모리에 둔다)를 하고, 뒤로 가는 frame 접근은
+입력을 다시 열어 앞으로 건너뛴다. `--mapping explicit`, `--coordinate-unit`, `--particle-group`은 지원하지 않으며(unit을 plugin이 보증하지 않음)
+`--file-format`은 `auto`, plugin 이름 또는 canonical format만 허용한다. Active object의 atom 수가 plugin이 보고하거나 host가
+전달한 수와 다르면 attach 전에 실패한다. Cell은 plugin이 여섯 값을 모두 쓰고 전부 0이 아닐 때만 가져오고, velocity·force·step 번호·
+physical time은 가져오지 않고 result의 `molfile_loss`에 명시한다(plugin이 쓴 time 원값은 frame field `molfile.physical_time_raw`에 단위 미검증으로 보존).
+세부 계약은 [Format provider contract](FORMAT_PROVIDER_CONTRACT.md)의 Trajectory channel 절이다.
 
 RST7은 by definition one-frame in-memory restart다. 좌표 Å, time ps, optional temperature K와 3/6-value
 box를 보존하고 native AKMA velocity는 20.455를 곱해 Å/ps로 정규화한다. NATOM이 active topology와 다르면

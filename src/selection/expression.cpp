@@ -275,6 +275,16 @@ class Parser {
  public:
   explicit Parser(const std::vector<Token>& tokens) : tokens_{tokens} {}
 
+  operation::Result<std::shared_ptr<const NumericNode>> parse_numeric() {
+    auto root = parse_numeric_sum();
+    if (!root.has_value()) return root;
+    if (current().kind != TokenKind::end) {
+      return numeric_failure("unexpected token '" + current().text + "'",
+                             current().offset);
+    }
+    return root;
+  }
+
   operation::Result<std::shared_ptr<const Node>> parse() {
     auto root = parse_or();
     if (!root.has_value()) {
@@ -844,6 +854,21 @@ void collect_references(const std::shared_ptr<const Node>& node,
 }
 
 }  // namespace
+
+operation::Result<std::shared_ptr<const NumericNode>>
+parse_numeric_expression(std::string_view source) {
+  const auto tokens = tokenize(source);
+  if (!tokens.has_value()) {
+    return operation::Result<std::shared_ptr<const NumericNode>>::failure(
+        tokens.error());
+  }
+  if (tokens.value().size() == 1U) {
+    return operation::Result<std::shared_ptr<const NumericNode>>::failure(
+        syntax_error("numeric expression is empty", 0U));
+  }
+  Parser parser{tokens.value()};
+  return parser.parse_numeric();
+}
 
 operation::Result<Expression> Expression::parse(std::string_view source) {
   const auto tokens = tokenize(source);

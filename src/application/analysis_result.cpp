@@ -709,21 +709,186 @@ operation::Result<AnalysisResultExportReport> export_analysis_result(
        static_cast<std::uint64_t>(serialized.value().size()),std::move(losses)});
 }
 
+namespace {
+
+// Appends PyMOL-style dashes for one measured segment (RepDistDash layout).
+void append_dashes(render::RenderPacket& packet, model::Vec3d first,
+                   model::Vec3d second, render::ColorRgba color,
+                   const AnalysisOverlayStyle& style) {
+  const auto unit = style.units_per_angstrom;
+  const auto small = 1.0e-4 * unit;
+  const model::Vec3d delta{second.x - first.x, second.y - first.y,
+                           second.z - first.z};
+  const auto length =
+      std::sqrt(delta.x * delta.x + delta.y * delta.y + delta.z * delta.z);
+  if (!(length > small))
+    return;
+  const model::Vec3d direction{delta.x / length, delta.y / length,
+                               delta.z / length};
+  const auto dash_length = style.dash_length * unit;
+  const auto dash_gap = style.dash_gap * unit;
+  auto dash_sum = dash_length + dash_gap;
+  if (dash_sum < small)
+    dash_sum = 0.5 * unit;
+  const auto along = [&](model::Vec3d origin, double distance, double sign) {
+    return model::Vec3d{origin.x + sign * direction.x * distance,
+                        origin.y + sign * direction.y * distance,
+                        origin.z + sign * direction.z * distance};
+  };
+  if (dash_gap > small) {
+    const model::Vec3d middle{(first.x + second.x) * 0.5,
+                              (first.y + second.y) * 0.5,
+                              (first.z + second.z) * 0.5};
+    auto remaining = length / 2.0;
+    double used{};
+    const auto half_gap = dash_gap * 0.5;
+    const auto emit = [&](double from, double to) {
+      for (const auto sign : {1.0, -1.0})
+        packet.lines.push_back({along(middle, from, sign), along(middle, to, sign),
+                                color, color, style.dash_width, 0U});
+    };
+    while (remaining > dash_sum) {
+      emit(used + half_gap, used + dash_length + half_gap);
+      remaining -= dash_sum;
+      used += dash_sum;
+    }
+    if (remaining > dash_gap) {
+      remaining -= dash_gap;
+      emit(used + half_gap, used + remaining + half_gap);
+    }
+  } else if (dash_length > small) {
+    packet.lines.push_back({first, second, color, color, style.dash_width, 0U});
+  }
+}
+
+}  // namespace
+
+// Dashed chords along an arc around `center` from axis x toward axis y
+// (both of length `radius`), phased like PyMOL measurement arcs.
+void append_arc_dashes(render::RenderPacket& packet, model::Vec3d center,
+                       model::Vec3d x, model::Vec3d y, double angle,
+                       double radius, render::ColorRgba color,
+                       const AnalysisOverlayStyle& style) {
+  const auto unit = style.units_per_angstrom;
+  const auto dash_length = style.dash_length * unit;
+  const auto dash_gap = style.dash_gap * unit;
+  auto dash_sum = dash_length + dash_gap;
+  if (dash_sum < 1.0e-4 * unit)
+    dash_sum = 0.1 * unit;
+  // PyMOL lays dashes out over twice the arc length.
+  const auto length = angle * radius * 2.0;
+  if (!(length > 1.0e-4 * unit))
+    return;
+  const auto phase = dash_sum - std::fmod(length / 2.0 + dash_gap / 2.0, dash_sum);
+  const auto at = [&](double position) {
+    const auto turn = angle * position / length;
+    return model::Vec3d{center.x + x.x * std::cos(turn) + y.x * std::sin(turn),
+                        center.y + x.y * std::cos(turn) + y.y * std::sin(turn),
+                        center.z + x.z * std::cos(turn) + y.z * std::sin(turn)};
+  };
+  for (auto position = -phase; position < length; position += dash_sum) {
+    const auto start = std::max(position, 0.0);
+    const auto end = std::min(position + dash_length, length);
+    if (start < end) {
+      packet.lines.push_back({at(start), at(end), color, color, style.dash_width, 0U});
+      render::include(packet.bounds, at(start));
+      render::include(packet.bounds, at(end));
+    }
+  }
+}
+
+model::Vec3d minus(model::Vec3d a, model::Vec3d b) {
+  return {a.x - b.x, a.y - b.y, a.z - b.z};
+}
+double norm(model::Vec3d a) { return std::sqrt(a.x * a.x + a.y * a.y + a.z * a.z); }
+model::Vec3d scaled(model::Vec3d a, double s) { return {a.x * s, a.y * s, a.z * s}; }
+model::Vec3d normalized_or_zero(model::Vec3d a) {
+  const auto l = norm(a);
+  return l > 1.0e-8 ? scaled(a, 1.0 / l) : model::Vec3d{};
+}
+model::Vec3d without_component(model::Vec3d v, model::Vec3d unit) {
+  const auto d = v.x * unit.x + v.y * unit.y + v.z * unit.z;
+  return {v.x - unit.x * d, v.y - unit.y * d, v.z - unit.z * d};
+}
+double angle_between(model::Vec3d a, model::Vec3d b) {
+  const auto na = norm(a), nb = norm(b);
+  if (na <= 1.0e-12 || nb <= 1.0e-12)
+    return 0.0;
+  const auto c = std::clamp((a.x * b.x + a.y * b.y + a.z * b.z) / (na * nb), -1.0, 1.0);
+  return std::acos(c);
+}
+
+// PyMOL also draws a solid line along an arm whose atoms are not bonded;
+// without topology here, arms up to 2.1 A count as bonds.
+void append_arm(render::RenderPacket& packet, model::Vec3d from, model::Vec3d to,
+                render::ColorRgba color, const AnalysisOverlayStyle& style) {
+  if (norm(minus(from, to)) <= 2.1 * style.units_per_angstrom)
+    return;
+  packet.lines.push_back({from, to, color, color, style.dash_width, 0U});
+  render::include(packet.bounds, from);
+  render::include(packet.bounds, to);
+}
+
+// PyMOL angle display: a dashed arc at the vertex between the two arms.
+void append_angle(render::RenderPacket& packet, model::Vec3d first,
+                  model::Vec3d vertex, model::Vec3d third, render::ColorRgba color,
+                  const AnalysisOverlayStyle& style) {
+  const auto d1 = minus(first, vertex);
+  const auto d2 = minus(third, vertex);
+  const auto radius = std::min(norm(d1), norm(d2)) * style.angle_size;
+  const auto n1 = normalized_or_zero(d1);
+  auto d3 = without_component(d2, n1);
+  const auto n3 = norm(d3) < 1.0e-8 ? model::Vec3d{1.0, 0.0, 0.0} : normalized_or_zero(d3);
+  append_arm(packet, first, vertex, color, style);
+  append_arm(packet, third, vertex, color, style);
+  append_arc_dashes(packet, vertex, scaled(n1, radius), scaled(n3, radius),
+                    angle_between(d1, d2), radius, color, style);
+}
+
+// PyMOL dihedral display: solid radial lines from the central bond midpoint
+// toward the projected outer arms and a dashed arc between them.
+void append_dihedral(render::RenderPacket& packet, model::Vec3d p1, model::Vec3d p2,
+                     model::Vec3d p3, model::Vec3d p4, render::ColorRgba color,
+                     const AnalysisOverlayStyle& style) {
+  const auto axis = normalized_or_zero(minus(p3, p2));
+  const auto p12 = without_component(minus(p1, p2), axis);
+  const auto p43 = without_component(minus(p4, p3), axis);
+  const model::Vec3d middle{(p2.x + p3.x) * 0.5, (p2.y + p3.y) * 0.5, (p2.z + p3.z) * 0.5};
+  const auto radius = std::min(norm(p12), norm(p43)) * style.dihedral_size;
+  const auto u12 = normalized_or_zero(p12);
+  const auto u43 = normalized_or_zero(p43);
+  for (const auto& arm : {u12, u43}) {
+    const model::Vec3d end{middle.x + arm.x * radius, middle.y + arm.y * radius,
+                           middle.z + arm.z * radius};
+    packet.lines.push_back({end, middle, color, color, style.dash_width, 0U});
+    render::include(packet.bounds, end);
+  }
+  append_arm(packet, p1, p2, color, style);
+  append_arm(packet, p3, p2, color, style);
+  append_arm(packet, p3, p4, color, style);
+  auto d3 = without_component(p43, u12);
+  const auto n3 = norm(d3) < 1.0e-8 ? model::Vec3d{1.0, 0.0, 0.0} : normalized_or_zero(d3);
+  append_arc_dashes(packet, middle, scaled(u12, radius), scaled(n3, radius),
+                    angle_between(p12, p43), radius, color, style);
+}
+
 render::RenderPacket build_analysis_overlay_packet(
-    std::span<const PersistentAnalysisResult> records) {
+    std::span<const PersistentAnalysisResult> records,
+    const AnalysisOverlayStyle& style) {
   render::RenderPacket packet;
-  packet.provenance.emplace("analysis_overlay", "persistent-result-v1");
+  packet.provenance.emplace("analysis_overlay", "persistent-result-v2");
   constexpr render::ColorRgba point_color{1.0F, 0.72F, 0.05F, 1.0F};
-  constexpr render::ColorRgba distance_color{0.15F, 0.9F, 1.0F, 1.0F};
-  constexpr render::ColorRgba geometry_color{1.0F, 0.38F, 0.72F, 1.0F};
-  constexpr std::size_t dash_count = 16U;
+  // PyMOL measurement objects are yellow unless dash_color is set.
+  const auto distance_color =
+      style.dash_color.value_or(render::ColorRgba{1.0F, 1.0F, 0.0F, 1.0F});
+  const auto geometry_color = distance_color;
   for (const auto& record : records) {
     if (!record.overlay_visible) continue;
     if (const auto* point = std::get_if<PointAnalysisOverlay>(&record.overlay)) {
       packet.spheres.push_back(
           {point->position, 0.25, point_color, 0U});
       packet.labels.push_back(
-          {point->position, point->label, point_color, 0U});
+          {point->position, point->label, point_color, 0U, 0.0, 0, {}, 0U, 0U});
       render::include(packet.bounds, point->position, 0.25);
       continue;
     }
@@ -732,46 +897,38 @@ render::RenderPacket build_analysis_overlay_packet(
       const auto* geometry =
           std::get_if<GeometryAnalysisOverlay>(&record.overlay);
       if (geometry == nullptr) continue;
-      for (std::size_t index = 1U; index < geometry->positions.size(); ++index) {
-        packet.lines.push_back({geometry->positions[index - 1U],
-                                geometry->positions[index], geometry_color,
-                                geometry_color, 2.0F, 0U});
+      const auto& p = geometry->positions;
+      if (p.size() == 3U) {
+        append_angle(packet, p[0], p[1], p[2], geometry_color, style);
+      } else if (p.size() == 4U) {
+        append_dihedral(packet, p[0], p[1], p[2], p[3], geometry_color, style);
+      } else {
+        for (std::size_t index = 1U; index < p.size(); ++index)
+          append_dashes(packet, p[index - 1U], p[index], geometry_color, style);
       }
       model::Vec3d anchor{};
       for (const auto position : geometry->positions) {
         anchor.x += position.x;
         anchor.y += position.y;
         anchor.z += position.z;
-        packet.spheres.push_back({position, 0.10, geometry_color, 0U});
-        render::include(packet.bounds, position, 0.10);
       }
       const auto divisor = static_cast<double>(geometry->positions.size());
       anchor = {anchor.x / divisor, anchor.y / divisor, anchor.z / divisor};
-      packet.labels.push_back({anchor, geometry->label, geometry_color, 0U});
+      packet.labels.push_back(
+          {anchor, geometry->label, geometry_color, 0U, 0.0, 0, {}, 0U, 0U});
       continue;
     }
-    const auto delta = model::Vec3d{
-        distance->second_position.x - distance->first_position.x,
-        distance->second_position.y - distance->first_position.y,
-        distance->second_position.z - distance->first_position.z};
-    const auto at = [&](double fraction) {
-      return model::Vec3d{distance->first_position.x + delta.x * fraction,
-                          distance->first_position.y + delta.y * fraction,
-                          distance->first_position.z + delta.z * fraction};
-    };
-    for (std::size_t dash = 0; dash < dash_count; dash += 2U) {
-      packet.lines.push_back(
-          {at(static_cast<double>(dash) / dash_count),
-           at(static_cast<double>(dash + 1U) / dash_count), distance_color,
-           distance_color, 2.0F, 0U});
-    }
-    packet.spheres.push_back(
-        {distance->first_position, 0.12, distance_color, 0U});
-    packet.spheres.push_back(
-        {distance->second_position, 0.12, distance_color, 0U});
-    packet.labels.push_back({at(0.5), distance->label, distance_color, 0U});
-    render::include(packet.bounds, distance->first_position, 0.12);
-    render::include(packet.bounds, distance->second_position, 0.12);
+    append_dashes(packet, distance->first_position, distance->second_position,
+                  distance_color, style);
+    const model::Vec3d middle{
+        (distance->first_position.x + distance->second_position.x) * 0.5,
+        (distance->first_position.y + distance->second_position.y) * 0.5,
+        (distance->first_position.z + distance->second_position.z) * 0.5};
+    // PyMOL draws only the dashes and the label (no endpoint markers).
+    packet.labels.push_back(
+        {middle, distance->label, distance_color, 0U, 0.0, 0, {}, 0U, 0U});
+    render::include(packet.bounds, distance->first_position);
+    render::include(packet.bounds, distance->second_position);
   }
   return packet;
 }

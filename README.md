@@ -135,7 +135,8 @@ Staging install은 dependency와 설치 layout을 검사하기 위한 개발용 
 - [Selection language](docs/SELECTIONS.md)
 - [Analysis](docs/BASIC_ANALYSIS.md)
 - [Rendering](docs/RENDERING.md)
-- [Capability support](docs/CAPABILITY_SUPPORT.md)
+- [Capability support](docs/CAPABILITY_SUPPORT.md)(PyMOL baseline, manifest v1)
+- [Capability support v2](docs/CAPABILITY_SUPPORT_V2.md)(baseline별 분모, manifest v2)
 - [Dependencies and build support](docs/DEPENDENCIES.md)
 
 ## 라이선스

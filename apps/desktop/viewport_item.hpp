@@ -35,6 +35,9 @@ class MolecularViewport : public QQuickRhiItem {
   Q_OBJECT
   QML_NAMED_ELEMENT(MolecularViewport)
   Q_PROPERTY(float angle READ angle WRITE setAngle NOTIFY angleChanged)
+  // Q-021 b: selection display operations reach every object when true.
+  Q_PROPERTY(bool workspaceScope READ workspaceScope WRITE setWorkspaceScope
+                 NOTIFY workspaceScopeChanged)
   Q_PROPERTY(QString statusText READ statusText NOTIFY statusChanged)
   Q_PROPERTY(
       QString representation READ representation NOTIFY representationChanged)
@@ -105,6 +108,8 @@ public:
 
   [[nodiscard]] float angle() const noexcept { return angle_; }
   void setAngle(float angle);
+  [[nodiscard]] bool workspaceScope() const noexcept { return workspace_scope_; }
+  void setWorkspaceScope(bool workspace_scope);
   [[nodiscard]] const QString &statusText() const noexcept {
     return status_text_;
   }
@@ -252,6 +257,31 @@ public:
   Q_INVOKABLE QString renderSettingJson(const QString &name,
                                         const QString &scope,
                                         const QString &target) const;
+  Q_INVOKABLE bool applyColor(const QString &color, const QString &selection);
+  Q_INVOKABLE bool applySpectrum(const QString &expression,
+                                 const QString &palette,
+                                 const QString &selection, bool by_residue);
+  Q_INVOKABLE bool applyBackground(const QString &color);
+  // Saves the scene through the canonical image save operation and returns
+  // its JSON envelope.
+  Q_INVOKABLE QString exportImage(const QString &path, int width, int height,
+                                  bool ray);
+  Q_INVOKABLE bool applyCartoonType(const QString &type,
+                                    const QString &selection);
+  // Creates or replaces a named contour of the active volume; returns JSON.
+  Q_INVOKABLE QString applyContour(const QString &name, const QString &mode,
+                                   double level);
+  // Creates or replaces a color ramp; returns the JSON envelope.
+  Q_INVOKABLE QString applyRamp(const QString &name, const QString &source,
+                                const QString &range, const QString &colors);
+  Q_INVOKABLE bool applyLabel(const QString &selection,
+                              const QString &expression);
+  // Drags an atom label in screen pixels by updating its atom-scope
+  // label_placement_offset (camera-space Angstrom).
+  Q_INVOKABLE bool moveLabel(qulonglong object_id, qulonglong atom_id,
+                             double delta_x, double delta_y);
+  [[nodiscard]] application::AnalysisOverlayStyle analysisOverlayStyle() const;
+  Q_INVOKABLE QString colorJson(const QString &color) const;
   Q_INVOKABLE void orbit(double delta_x, double delta_y);
   Q_INVOKABLE void pan(double delta_x, double delta_y);
   Q_INVOKABLE void dolly(double delta);
@@ -442,6 +472,9 @@ public:
   [[nodiscard]] std::uint64_t cameraRevision() const noexcept {
     return camera_revision_;
   }
+  [[nodiscard]] render::ColorRgb backgroundRgb() const noexcept {
+    return workspace_->color_table().background_rgb();
+  }
   [[nodiscard]] const scene::StereoParameters &stereo() const noexcept {
     return workspace_->stereo();
   }
@@ -460,6 +493,7 @@ public:
 
 signals:
   void angleChanged();
+  void workspaceScopeChanged();
   void statusChanged();
   void representationChanged();
   void selectionChanged();
@@ -520,6 +554,7 @@ private:
   QString packet_update_mode_{QStringLiteral("full")};
   QString packet_update_reason_{QStringLiteral("initial packet")};
   float angle_{};
+  bool workspace_scope_{false};
   QString status_text_{
       QStringLiteral("Demo packet · open a PDB or mmCIF file")};
   QString representation_{QStringLiteral("spheres")};

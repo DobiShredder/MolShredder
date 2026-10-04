@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <compare>
 #include <cstdint>
@@ -16,10 +17,13 @@ namespace molshredder::render {
 
 // Schema 2 interprets atom_id/bond_id as persistent 64-bit topology IDs.
 inline constexpr unsigned int kRenderSettingSnapshotSchemaVersion = 2U;
+// v2 (SEQ-311 S3) appends label and measurement-dash settings; v3 (S4)
+// appends lighting, material, antialias, transparency and image settings;
+// v4 (S5) appends surface transparency/color and the isosurface algorithm.
 inline constexpr std::string_view kRenderSettingCatalogRevision =
-    "pymol-oss-3.1.0-p0-v1";
+    "pymol-oss-3.1.0-p0-v6";
 
-enum class RenderSettingValueType { boolean, integer, number, color };
+enum class RenderSettingValueType { boolean, integer, number, color, vector3 };
 enum class RenderSettingScopeLevel {
   global,
   object,
@@ -28,8 +32,9 @@ enum class RenderSettingScopeLevel {
   bond
 };
 
+using RenderSettingVector3 = std::array<double, 3>;
 using RenderSettingValue =
-    std::variant<bool, std::int64_t, double, std::string>;
+    std::variant<bool, std::int64_t, double, std::string, RenderSettingVector3>;
 
 struct RenderSettingScope {
   RenderSettingScopeLevel level{RenderSettingScopeLevel::global};

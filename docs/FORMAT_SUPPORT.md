@@ -80,7 +80,8 @@ identity는 오류다.
 
 PDB reader는 HEADER deposition date와 REMARK, 구조로 직접 소비하지 않는 record 및 CONECT 원문을
 `molecule_remarks` metadata로 보존한다. 이는 VMD molfile molecule-metadata channel과 대응하지만 원문 record를
-구조 의미로 자동 해석했다는 뜻은 아니다.
+구조 의미로 자동 해석했다는 뜻은 아니다. 예외로 `HELIX`/`SHEET` 범위는 원자 문자열 property `ss`(`H`, `S`, 빈 값)로도
+읽어 `ss` selection, `spectrum ss`, label `ss`가 쓴다(PyMOL과 같은 code). Record가 없으면 property를 만들지 않는다.
 
 PDB writer는 selected current/all frame을 순차적으로 wwPDB 3.3 fixed-column record로 출력한다. Atom serial,
 atom/residue/chain/altLoc/insertion/segment identity, element/formal charge, optional occupancy/B-factor, later-model

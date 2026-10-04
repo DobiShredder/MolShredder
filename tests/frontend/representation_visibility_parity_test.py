@@ -88,14 +88,14 @@ def main() -> int:
     )
     require(
         python_result["command"]
-        == 'invoke "toggle" --representation "everything" --selection "index 2"',
+        == 'invoke "toggle" --representation "everything" --scope "active" --selection "index 2"',
         "toggle did not preserve canonical invocation provenance",
     )
     data = python_result["data"]
     require(
         data["operation"] == "toggle"
         and data["resolved_representations"]
-        == "lines,sticks,spheres,ribbon,cartoon"
+        == "lines,sticks,spheres,ribbon,cartoon,labels"
         and data["affected_atom_count"] == 1
         and data["visible_membership_count"] == 1
         and data["representation_count"] == 1,

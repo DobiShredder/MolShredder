@@ -131,8 +131,20 @@ int main() {
       serialized.has_value() && parsed.has_value() && restored.has_value() &&
           parsed.value() == stable && restored.value().snapshot() == stable &&
           serialized.value().starts_with(
-              "molshredder-representation-visibility 1\natoms 70\n"),
+              "molshredder-representation-visibility 2\natoms 70\n"),
       "representation visibility session fragment must round-trip exactly");
+  {
+    // Schema 1 text (five kinds) migrates with an empty labels mask.
+    auto legacy = serialized.value();
+    legacy.replace(legacy.find(" 2\n"), 3U, " 1\n");
+    legacy.erase(legacy.find("labels"));
+    const auto migrated =
+        molshredder::application::parse_representation_visibility(legacy);
+    passed &= expect(migrated.has_value() &&
+                         migrated.value().schema_version == 2U &&
+                         migrated.value().masks == stable.masks,
+                     "schema 1 visibility must migrate with labels hidden");
+  }
 
   std::vector<std::uint64_t> session_atom_ids(70U);
   for (std::size_t index = 0; index < session_atom_ids.size(); ++index)

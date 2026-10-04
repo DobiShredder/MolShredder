@@ -1,3 +1,5 @@
+#include <array>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -177,7 +179,7 @@ int main(int argc, char** argv) {
                        shown_packet.labels[0].pick_id == 0U &&
                        !shown_packet.bounds.empty &&
                        shown_packet.provenance.at("analysis_overlay") ==
-                           "persistent-result-v1",
+                           "persistent-result-v2",
                    "point analysis overlay packet must be deterministic and "
                    "separate from molecular picking");
   auto angle_draft = center_draft("angle-one");
@@ -209,13 +211,39 @@ int main(int argc, char** argv) {
       .atom_id = model::AtomId{};
   passed &= expect(
       angle_added.has_value() && restored.records().size() == 2U &&
-          geometry_packet.lines.size() == 2U &&
-          geometry_packet.spheres.size() == 4U &&
+          // PyMOL angle display: a dashed arc (radius 0.6666 of the 1 A
+          // arms, no arm lines for bonded-length arms, no markers).
+          geometry_packet.lines.size() == 4U &&
+          geometry_packet.spheres.size() == 1U &&
           geometry_packet.labels.size() == 2U &&
           !restored.add(std::move(invalid_geometry)).has_value() &&
           restored.records().size() == 2U,
       "geometry results must validate stable atom references and render a "
       "deterministic persistent overlay");
+  {
+    // 3 A distance with dash_length 0.15/dash_gap 0.45 (PyMOL defaults):
+    // dashes start half a gap from the midpoint and repeat every 0.6 A.
+    application::PersistentAnalysisResult distance_record;
+    distance_record.overlay_visible = true;
+    distance_record.overlay = application::DistanceAnalysisOverlay{
+        {}, {}, {0.0, 0.0, 0.0}, {3.0, 0.0, 0.0}, "3.0"};
+    const std::array records{distance_record};
+    const auto dashed = application::build_analysis_overlay_packet(records);
+    application::AnalysisOverlayStyle solid;
+    solid.dash_gap = 0.0;
+    solid.dash_width = 4.0F;
+    const auto unbroken = application::build_analysis_overlay_packet(records, solid);
+    passed &= expect(dashed.lines.size() == 4U &&
+                         std::abs(dashed.lines[0].start.x - 1.725) < 1.0e-12 &&
+                         std::abs(dashed.lines[0].end.x - 1.875) < 1.0e-12 &&
+                         std::abs(dashed.lines[1].start.x - 1.275) < 1.0e-12 &&
+                         std::abs(dashed.lines[2].start.x - 2.325) < 1.0e-12 &&
+                         std::abs(dashed.lines[2].end.x - 2.475) < 1.0e-12 &&
+                         dashed.lines[0].width_pixels == 2.5F &&
+                         unbroken.lines.size() == 1U &&
+                         unbroken.lines[0].width_pixels == 4.0F,
+                     "distance dashes must follow the PyMOL layout and settings");
+  }
   auto malformed = snapshot;
   malformed.records[0].result_id = 0U;
   passed &= expect(restored.restore(malformed).has_value() &&

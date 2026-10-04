@@ -12,6 +12,8 @@
 
 #include <QGuiApplication>
 #include <QEventLoop>
+#include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QMetaObject>
 #include <QPointer>
@@ -643,6 +645,14 @@ int main(int argc, char *argv[]) {
         QStringLiteral("represent.ribbon"),
         QStringLiteral("represent.cartoon"),
         QStringLiteral("represent.settings"),
+        QStringLiteral("represent.color"),
+        QStringLiteral("represent.spectrum"),
+        QStringLiteral("represent.label"),
+        QStringLiteral("represent.cartoon-type"),
+        QStringLiteral("represent.contour"),
+        QStringLiteral("represent.ramp"),
+        QStringLiteral("scene.export-image"),
+        QStringLiteral("scene.background"),
         QStringLiteral("analyze.open-panel"),
         QStringLiteral("scene.views"),
         QStringLiteral("scene.named-scenes"), QStringLiteral("scene.movie"),
@@ -1295,11 +1305,68 @@ int main(int argc, char *argv[]) {
     const auto query = viewport->renderSettingJson(
         QStringLiteral("sphere_scale"), QStringLiteral("atom"),
         QStringLiteral("1"));
+    const auto spectrum = viewport->applySpectrum(
+        QStringLiteral("count"), QStringLiteral("blue_red"),
+        QStringLiteral("all"), false);
+    const auto backgrounded = viewport->applyBackground(QStringLiteral("white")) &&
+                              viewport->backgroundRgb().red == 1.0F &&
+                              viewport->applyBackground(QStringLiteral("default"));
+    const auto label_items =
+        viewport->applyLabel(QStringLiteral("all"), QStringLiteral("name"))
+            ? viewport->analysisLabelItems()
+            : QVariantList{};
+    bool label_moved = false;
+    if (!label_items.isEmpty()) {
+      const auto first = label_items.front().toMap();
+      const auto object_id = first.value(QStringLiteral("objectId")).toULongLong();
+      const auto atom_id = first.value(QStringLiteral("atomId")).toULongLong();
+      const auto before_x = first.value(QStringLiteral("x")).toDouble();
+      label_moved = viewport->moveLabel(object_id, atom_id, 20.0, 0.0);
+      for (const auto &entry : viewport->analysisLabelItems()) {
+        const auto moved = entry.toMap();
+        if (moved.value(QStringLiteral("atomId")).toULongLong() == atom_id)
+          label_moved = label_moved &&
+                        std::abs(moved.value(QStringLiteral("x")).toDouble() -
+                                 before_x - 20.0) < 1.0;
+      }
+    }
+    const auto image_path =
+        QDir::temp().filePath(QStringLiteral("molshredder-desktop-smoke.png"));
+    const auto exported = viewport->exportImage(image_path, 32, 24, true);
+    const auto image_saved =
+        exported.contains(QStringLiteral("\"status\":\"ok\"")) &&
+        QFileInfo::exists(image_path);
+    QFile::remove(image_path);
+    const auto ramp_json = viewport->applyRamp(
+        QStringLiteral("smoke_ramp"), QString::number(1), QStringLiteral("0 2 4"),
+        QStringLiteral("red green blue"));
+    const auto ramped = ramp_json.contains(QStringLiteral("\"status\":\"ok\"")) &&
+                        viewport->applyColor(QStringLiteral("smoke_ramp"),
+                                             QStringLiteral("all"));
+    const auto cartoon_typed = ramped &&
+        viewport->applyCartoonType(QStringLiteral("tube"), QStringLiteral("all")) &&
+        viewport->applyCartoonType(QStringLiteral("automatic"), QStringLiteral("all"));
+    const auto labeled =
+        cartoon_typed && image_saved && label_moved &&
+        viewport->applyLabel(QStringLiteral("all"), QStringLiteral("''"));
+    // Q-021 b: the All objects toggle routes color through workspace scope.
+    viewport->setWorkspaceScope(true);
+    const auto scoped = viewport->workspaceScope() &&
+                        viewport->applyColor(QStringLiteral("0x00ff00"),
+                                             QStringLiteral("all"));
+    viewport->setWorkspaceScope(false);
+    const auto colored = spectrum && backgrounded && labeled && scoped &&
+                         viewport->applyColor(QStringLiteral("0x00ff00"),
+                                              QStringLiteral("all"));
+    const auto color_query = viewport->colorJson(QStringLiteral("0x00ff00"));
     const auto &packet = viewport->renderPacket();
     const auto geometry_passed =
-        !packet.spheres.empty() && packet.spheres.front().radius > 3.0 &&
+        colored && color_query.contains(QStringLiteral("\"color_index\":1073807104")) &&
+        packet.spheres.size() > 1U && packet.spheres.front().radius > 3.0 &&
         packet.spheres.front().color.red > 0.9F &&
-        packet.spheres.front().color.alpha == 0.5F;
+        packet.spheres.front().color.alpha == 0.5F &&
+        packet.spheres.back().color.green == 1.0F &&
+        packet.spheres.back().color.red == 0.0F;
     const auto opened = QMetaObject::invokeMethod(
         window, "openRenderSettings", Qt::DirectConnection);
     auto *overlay = window->findChild<QObject *>(
@@ -1491,7 +1558,8 @@ int main(int argc, char *argv[]) {
         center && distance && sasa_complete && rdf_complete &&
         viewport->analysisItems().size() == 4U &&
         viewport->analysisLabelItems().size() == 1U &&
-        before_hide.labels.size() == 2U && before_hide.lines.size() >= 8U &&
+        // A 1.73 A distance holds one mirrored PyMOL dash pair (0.15/0.45 A).
+        before_hide.labels.size() == 2U && before_hide.lines.size() >= 2U &&
         after_hide.labels.size() == 1U && hidden &&
         detail.contains(QStringLiteral("molshredder-distance-v1")) &&
         sasa_detail.contains(QStringLiteral(

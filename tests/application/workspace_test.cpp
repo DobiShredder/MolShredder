@@ -778,8 +778,8 @@ int main(int argc, char** argv) {
                          all_state_orient.value().principal_axes.axes[0],
                          scene::normalized(model::Vec3d{1.0, 1.0, 1.0}))) -
                      1.0) < 1.0e-10 &&
-            all_state_orient.value().camera.parameters().target ==
-                all_state_orient.value().oriented_center &&
+            scene::length(all_state_orient.value().camera.parameters().target -
+                          all_state_orient.value().extent.center) < 1.0e-12 &&
             !cancelled_orient.has_value() &&
             cancelled_orient.error().code == operation::ErrorCode::cancelled &&
             !out_of_range_orient.has_value() &&
@@ -1191,7 +1191,8 @@ int main(int argc, char** argv) {
       navigation_seed.succeeded() && moved_x.succeeded() &&
           moved_z.succeeded() && turn_response != nullptr &&
           std::abs(workspace->camera().parameters().target.x) < 1.0e-12 &&
-          std::abs(workspace->camera().parameters().target.y + 1.0) <
+          // PyMOL turn (M * R^T): +90 deg about z takes +x to +y.
+          std::abs(workspace->camera().parameters().target.y - 1.0) <
               1.0e-12 &&
           workspace->camera().parameters().model_origin == model::Vec3d{} &&
           workspace->camera().parameters().distance == 9.0 &&

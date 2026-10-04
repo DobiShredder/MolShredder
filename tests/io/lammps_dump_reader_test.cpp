@@ -147,7 +147,8 @@ int main(int argc, char **argv) {
   }
 
   const io::TrajectoryOpenContext missing_unit{3U, ids, std::nullopt,
-                                                std::nullopt, std::nullopt};
+                                                std::nullopt, std::nullopt,
+                                                nullptr};
   const auto unitless = io::open_trajectory(
       argv[1], io::TrajectoryFormat::lammps_dump, missing_unit);
   passed &= expect(!unitless.has_value() &&

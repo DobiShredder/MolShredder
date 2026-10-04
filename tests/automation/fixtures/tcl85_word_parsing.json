@@ -1,0 +1,715 @@
+{
+ "cases": [
+  {
+   "calls": [
+    [
+     "a",
+     "b",
+     "c"
+    ]
+   ],
+   "error": null,
+   "id": "plain",
+   "returncode": 0,
+   "script": "probe a b c"
+  },
+  {
+   "calls": [
+    [
+     "a",
+     "b",
+     "c"
+    ]
+   ],
+   "error": null,
+   "id": "many_spaces",
+   "returncode": 0,
+   "script": "probe   a    b  c  "
+  },
+  {
+   "calls": [
+    [
+     "a",
+     "b"
+    ]
+   ],
+   "error": null,
+   "id": "tabs",
+   "returncode": 0,
+   "script": "probe\ta\tb"
+  },
+  {
+   "calls": [
+    [
+     "a b",
+     "c"
+    ]
+   ],
+   "error": null,
+   "id": "braced",
+   "returncode": 0,
+   "script": "probe {a b} c"
+  },
+  {
+   "calls": [
+    [
+     "a {b c} d",
+     "e"
+    ]
+   ],
+   "error": null,
+   "id": "braced_nested",
+   "returncode": 0,
+   "script": "probe {a {b c} d} e"
+  },
+  {
+   "calls": [
+    [
+     "$v [list x] \\n"
+    ]
+   ],
+   "error": null,
+   "id": "braced_no_subst",
+   "returncode": 0,
+   "script": "set v 1\nprobe {$v [list x] \\n}"
+  },
+  {
+   "calls": [
+    [
+     "a  b"
+    ]
+   ],
+   "error": null,
+   "id": "braced_backslash_newline",
+   "returncode": 0,
+   "script": "probe {a \\\nb}"
+  },
+  {
+   "calls": [
+    [
+     "a \\{ b"
+    ]
+   ],
+   "error": null,
+   "id": "braced_escaped_brace",
+   "returncode": 0,
+   "script": "probe {a \\{ b}"
+  },
+  {
+   "calls": [],
+   "error": "missing close-brace",
+   "id": "braced_unbalanced",
+   "returncode": 1,
+   "script": "probe {a {b}"
+  },
+  {
+   "calls": [],
+   "error": "extra characters after close-brace",
+   "id": "braced_extra_chars",
+   "returncode": 1,
+   "script": "probe {a}b"
+  },
+  {
+   "calls": [
+    [
+     "a b",
+     "c"
+    ]
+   ],
+   "error": null,
+   "id": "quoted",
+   "returncode": 0,
+   "script": "probe \"a b\" c"
+  },
+  {
+   "calls": [
+    [
+     "x hello y"
+    ]
+   ],
+   "error": null,
+   "id": "quoted_var",
+   "returncode": 0,
+   "script": "set v hello\nprobe \"x $v y\""
+  },
+  {
+   "calls": [
+    [
+     "x hello y"
+    ]
+   ],
+   "error": null,
+   "id": "quoted_cmd",
+   "returncode": 0,
+   "script": "set v hello\nprobe \"x [set v] y\""
+  },
+  {
+   "calls": [],
+   "error": "extra characters after close-quote",
+   "id": "quoted_extra_chars",
+   "returncode": 1,
+   "script": "probe \"a\"b"
+  },
+  {
+   "calls": [],
+   "error": "missing \"",
+   "id": "quoted_unbalanced",
+   "returncode": 1,
+   "script": "probe \"a b"
+  },
+  {
+   "calls": [
+    [
+     "a\tb\nc\\d\"e$f[g"
+    ]
+   ],
+   "error": null,
+   "id": "escapes",
+   "returncode": 0,
+   "script": "probe \"a\\tb\\nc\\\\d\\\"e\\$f\\[g\""
+  },
+  {
+   "calls": [
+    [
+     "AB"
+    ]
+   ],
+   "error": null,
+   "id": "escape_hex",
+   "returncode": 0,
+   "script": "probe \"\\x41\\x42\""
+  },
+  {
+   "calls": [
+    [
+     "é"
+    ]
+   ],
+   "error": null,
+   "id": "escape_unicode",
+   "returncode": 0,
+   "script": "probe \"\\u00e9\""
+  },
+  {
+   "calls": [
+    [
+     "AB"
+    ]
+   ],
+   "error": null,
+   "id": "escape_octal",
+   "returncode": 0,
+   "script": "probe \"\\101\\102\""
+  },
+  {
+   "calls": [
+    [
+     "a b",
+     "c"
+    ]
+   ],
+   "error": null,
+   "id": "bare_escape",
+   "returncode": 0,
+   "script": "probe a\\ b c"
+  },
+  {
+   "calls": [
+    [
+     "$v"
+    ]
+   ],
+   "error": null,
+   "id": "bare_escape_dollar",
+   "returncode": 0,
+   "script": "probe \\$v"
+  },
+  {
+   "calls": [
+    [
+     "hello"
+    ]
+   ],
+   "error": null,
+   "id": "var",
+   "returncode": 0,
+   "script": "set v hello\nprobe $v"
+  },
+  {
+   "calls": [
+    [
+     "hellox"
+    ]
+   ],
+   "error": null,
+   "id": "var_braced",
+   "returncode": 0,
+   "script": "set v hello\nprobe ${v}x"
+  },
+  {
+   "calls": [
+    [
+     "helloworld"
+    ]
+   ],
+   "error": null,
+   "id": "var_concat",
+   "returncode": 0,
+   "script": "set v hello\nset w world\nprobe $v$w"
+  },
+  {
+   "calls": [
+    [
+     "a b c"
+    ]
+   ],
+   "error": null,
+   "id": "var_with_spaces",
+   "returncode": 0,
+   "script": "set v {a b c}\nprobe $v"
+  },
+  {
+   "calls": [
+    [
+     "premid-post"
+    ]
+   ],
+   "error": null,
+   "id": "var_prefix_suffix",
+   "returncode": 0,
+   "script": "set v mid\nprobe pre$v-post"
+  },
+  {
+   "calls": [],
+   "error": "can't read \"nosuch\": no such variable",
+   "id": "var_undefined",
+   "returncode": 1,
+   "script": "probe $nosuch"
+  },
+  {
+   "calls": [
+    [
+     "$"
+    ]
+   ],
+   "error": null,
+   "id": "dollar_alone",
+   "returncode": 0,
+   "script": "probe $"
+  },
+  {
+   "calls": [
+    [
+     "$",
+     "x"
+    ]
+   ],
+   "error": null,
+   "id": "dollar_before_space",
+   "returncode": 0,
+   "script": "probe $ x"
+  },
+  {
+   "calls": [
+    [
+     "1.5"
+    ]
+   ],
+   "error": null,
+   "id": "dollar_digit",
+   "returncode": 0,
+   "script": "set v 1\nprobe $v.5"
+  },
+  {
+   "calls": [
+    [
+     "5"
+    ]
+   ],
+   "error": null,
+   "id": "cmd_subst",
+   "returncode": 0,
+   "script": "probe [set x 5]"
+  },
+  {
+   "calls": [
+    [
+     "a {b c} d"
+    ]
+   ],
+   "error": null,
+   "id": "cmd_subst_list",
+   "returncode": 0,
+   "script": "probe [list a {b c} d]"
+  },
+  {
+   "calls": [
+    [
+     "{a b} c"
+    ]
+   ],
+   "error": null,
+   "id": "cmd_subst_nested",
+   "returncode": 0,
+   "script": "probe [list [list a b] c]"
+  },
+  {
+   "calls": [
+    [
+     "x1z"
+    ]
+   ],
+   "error": null,
+   "id": "cmd_subst_concat",
+   "returncode": 0,
+   "script": "probe x[set y 1]z"
+  },
+  {
+   "calls": [],
+   "error": "missing close-bracket",
+   "id": "cmd_subst_unbalanced",
+   "returncode": 1,
+   "script": "probe [list a"
+  },
+  {
+   "calls": [
+    [
+     "a"
+    ]
+   ],
+   "error": null,
+   "id": "comment_line",
+   "returncode": 0,
+   "script": "# comment\nprobe a"
+  },
+  {
+   "calls": [
+    [
+     "a"
+    ]
+   ],
+   "error": null,
+   "id": "comment_indented",
+   "returncode": 0,
+   "script": "   # comment\nprobe a"
+  },
+  {
+   "calls": [
+    [
+     "a"
+    ],
+    [
+     "b"
+    ]
+   ],
+   "error": null,
+   "id": "comment_after_semicolon",
+   "returncode": 0,
+   "script": "probe a;# comment\nprobe b"
+  },
+  {
+   "calls": [
+    [
+     "a",
+     "#",
+     "not",
+     "a",
+     "comment"
+    ]
+   ],
+   "error": null,
+   "id": "comment_mid_line",
+   "returncode": 0,
+   "script": "probe a # not a comment"
+  },
+  {
+   "calls": [
+    [
+     "a"
+    ]
+   ],
+   "error": null,
+   "id": "comment_continued",
+   "returncode": 0,
+   "script": "# line one \\\nstill comment\nprobe a"
+  },
+  {
+   "calls": [
+    [
+     "a"
+    ],
+    [
+     "b"
+    ],
+    [
+     "c"
+    ]
+   ],
+   "error": null,
+   "id": "semicolons",
+   "returncode": 0,
+   "script": "probe a; probe b;probe c"
+  },
+  {
+   "calls": [
+    [
+     "a"
+    ]
+   ],
+   "error": null,
+   "id": "empty_commands",
+   "returncode": 0,
+   "script": "\n\n;;\nprobe a\n"
+  },
+  {
+   "calls": [
+    [
+     "a",
+     "b",
+     "c"
+    ]
+   ],
+   "error": null,
+   "id": "continuation",
+   "returncode": 0,
+   "script": "probe a \\\n   b \\\n c"
+  },
+  {
+   "calls": [
+    [
+     "a  b"
+    ]
+   ],
+   "error": null,
+   "id": "continuation_in_quotes",
+   "returncode": 0,
+   "script": "probe \"a \\\n   b\""
+  },
+  {
+   "calls": [
+    [
+     "a"
+    ],
+    [
+     "b"
+    ]
+   ],
+   "error": null,
+   "id": "crlf",
+   "returncode": 0,
+   "script": "probe a\r\nprobe b\r\n"
+  },
+  {
+   "calls": [
+    [
+     "a"
+    ],
+    [
+     "b"
+    ]
+   ],
+   "error": null,
+   "id": "no_trailing_newline",
+   "returncode": 0,
+   "script": "probe a\nprobe b"
+  },
+  {
+   "calls": [
+    [
+     "{a b} {} c"
+    ]
+   ],
+   "error": null,
+   "id": "list_quoting",
+   "returncode": 0,
+   "script": "probe [list {a b} {} c]"
+  },
+  {
+   "calls": [
+    [
+     "{a b} {c d} {e\\{f}"
+    ]
+   ],
+   "error": null,
+   "id": "list_quoting_special",
+   "returncode": 0,
+   "script": "probe [list a\\ b {c d} {e\\{f}]"
+  },
+  {
+   "calls": [
+    [
+     "",
+     ""
+    ]
+   ],
+   "error": null,
+   "id": "empty_braces",
+   "returncode": 0,
+   "script": "probe {} {}"
+  },
+  {
+   "calls": [
+    [
+     "",
+     "x"
+    ]
+   ],
+   "error": null,
+   "id": "empty_quotes",
+   "returncode": 0,
+   "script": "probe \"\" x"
+  },
+  {
+   "calls": [
+    [
+     "1",
+     "1"
+    ]
+   ],
+   "error": null,
+   "id": "set_value_return",
+   "returncode": 0,
+   "script": "probe [set a 1] [set a]"
+  },
+  {
+   "calls": [],
+   "error": "can't read \"a\": no such variable",
+   "id": "unset_then_use",
+   "returncode": 1,
+   "script": "set a 1\nunset a\nprobe $a"
+  },
+  {
+   "calls": [
+    [
+     "a \"b c\" d"
+    ]
+   ],
+   "error": null,
+   "id": "nested_quotes_in_braces",
+   "returncode": 0,
+   "script": "probe {a \"b c\" d}"
+  },
+  {
+   "calls": [
+    [
+     "a {b c}"
+    ]
+   ],
+   "error": null,
+   "id": "brace_in_quotes",
+   "returncode": 0,
+   "script": "probe \"a {b c}\""
+  },
+  {
+   "calls": [
+    [
+     "a [b c] d"
+    ]
+   ],
+   "error": null,
+   "id": "bracket_in_braces",
+   "returncode": 0,
+   "script": "probe {a [b c] d}"
+  },
+  {
+   "calls": [
+    [
+     "a;b"
+    ]
+   ],
+   "error": null,
+   "id": "semicolon_in_braces",
+   "returncode": 0,
+   "script": "probe {a;b}"
+  },
+  {
+   "calls": [
+    [
+     "a;b"
+    ]
+   ],
+   "error": null,
+   "id": "semicolon_in_quotes",
+   "returncode": 0,
+   "script": "probe \"a;b\""
+  },
+  {
+   "calls": [
+    [
+     "a#b",
+     "#c"
+    ]
+   ],
+   "error": null,
+   "id": "hash_in_word",
+   "returncode": 0,
+   "script": "probe a#b #c"
+  },
+  {
+   "calls": [
+    [
+     "a{b",
+     "c}"
+    ]
+   ],
+   "error": null,
+   "id": "brace_after_word",
+   "returncode": 0,
+   "script": "probe a{b c}"
+  },
+  {
+   "calls": [
+    [
+     "a\"b",
+     "c\""
+    ]
+   ],
+   "error": null,
+   "id": "quote_mid_word",
+   "returncode": 0,
+   "script": "probe a\"b c\""
+  },
+  {
+   "calls": [
+    [
+     "1"
+    ]
+   ],
+   "error": null,
+   "id": "var_array",
+   "returncode": 0,
+   "script": "set a(x) 1\nprobe $a(x)"
+  },
+  {
+   "calls": [],
+   "error": "invalid command name \"nosuchcommand\"",
+   "id": "unknown_command",
+   "returncode": 1,
+   "script": "nosuchcommand a b"
+  },
+  {
+   "calls": [
+    [
+     "a\\"
+    ]
+   ],
+   "error": null,
+   "id": "backslash_end",
+   "returncode": 0,
+   "script": "probe a\\"
+  },
+  {
+   "calls": [
+    [
+     "é",
+     "ü"
+    ]
+   ],
+   "error": null,
+   "id": "unicode_arg",
+   "returncode": 0,
+   "script": "probe é ü"
+  }
+ ],
+ "tcl_version": "8.5.9"
+}

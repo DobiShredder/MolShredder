@@ -1,0 +1,332 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MolShredder public capability support manifest v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schema_version",
+    "reviewed_at",
+    "policy",
+    "baselines",
+    "summary",
+    "capabilities"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "schemas/capability-support-v2.schema.json"
+    },
+    "schema_version": {
+      "const": 2
+    },
+    "reviewed_at": {
+      "type": "string",
+      "format": "date"
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verified",
+        "in_progress",
+        "planned",
+        "unavailable"
+      ],
+      "properties": {
+        "verified": {
+          "type": "string",
+          "minLength": 1
+        },
+        "in_progress": {
+          "type": "string",
+          "minLength": 1
+        },
+        "planned": {
+          "type": "string",
+          "minLength": 1
+        },
+        "unavailable": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capability_count",
+        "public_state_counts",
+        "implementation_status_counts",
+        "domain_counts"
+      ],
+      "properties": {
+        "capability_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "public_state_counts": {
+          "$ref": "#/$defs/stateCounts"
+        },
+        "implementation_status_counts": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "domain_counts": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/domainCounts"
+          }
+        }
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/capability"
+      }
+    },
+    "baselines": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/baseline"
+      }
+    }
+  },
+  "$defs": {
+    "stateCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verified",
+        "in_progress",
+        "planned",
+        "unavailable"
+      ],
+      "properties": {
+        "verified": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "in_progress": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "planned": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unavailable": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "domainCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verified",
+        "in_progress",
+        "planned",
+        "unavailable",
+        "total"
+      ],
+      "properties": {
+        "verified": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "in_progress": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "planned": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unavailable": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capability_id",
+        "title",
+        "domain",
+        "priority",
+        "implementation_status",
+        "public_state",
+        "interfaces",
+        "acceptance_level",
+        "platforms",
+        "evidence_count",
+        "baselines"
+      ],
+      "properties": {
+        "capability_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)+$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "domain": {
+          "type": "string",
+          "minLength": 1
+        },
+        "priority": {
+          "enum": [
+            "P0",
+            "P1",
+            "P2"
+          ]
+        },
+        "implementation_status": {
+          "enum": [
+            "untriaged",
+            "inventoried",
+            "specified",
+            "planned",
+            "partial",
+            "compatible",
+            "robust",
+            "deferred",
+            "excluded",
+            "blocked_access",
+            "quarantined_license"
+          ]
+        },
+        "public_state": {
+          "enum": [
+            "verified",
+            "in_progress",
+            "planned",
+            "unavailable"
+          ]
+        },
+        "interfaces": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "gui",
+            "cli",
+            "python"
+          ],
+          "properties": {
+            "gui": {
+              "type": "boolean"
+            },
+            "cli": {
+              "type": "boolean"
+            },
+            "python": {
+              "type": "boolean"
+            }
+          }
+        },
+        "acceptance_level": {
+          "enum": [
+            "unwritten",
+            "specified",
+            "compatible",
+            "robust"
+          ]
+        },
+        "platforms": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "macos",
+              "linux",
+              "windows"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "evidence_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "baselines": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "baseline_id",
+              "availability"
+            ],
+            "properties": {
+              "baseline_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "availability": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    "baseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "baseline_id",
+        "version",
+        "as_of",
+        "capability_count",
+        "public_state_counts",
+        "implementation_status_counts"
+      ],
+      "properties": {
+        "baseline_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "as_of": {
+          "type": "string",
+          "format": "date"
+        },
+        "capability_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "public_state_counts": {
+          "$ref": "#/$defs/stateCounts"
+        },
+        "implementation_status_counts": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    }
+  }
+}

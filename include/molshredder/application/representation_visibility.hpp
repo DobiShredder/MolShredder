@@ -15,10 +15,11 @@
 
 namespace molshredder::application {
 
-inline constexpr unsigned int kRepresentationVisibilitySchemaVersion = 1U;
+// Schema 2 (SEQ-311 S3) adds the labels mask; schema 1 text is migrated.
+inline constexpr unsigned int kRepresentationVisibilitySchemaVersion = 2U;
 inline constexpr unsigned int kRepresentationVisibilitySessionSchemaVersion =
     2U;
-inline constexpr std::size_t kRepresentationKindCount = 5U;
+inline constexpr std::size_t kRepresentationKindCount = 6U;
 
 enum class RepresentationVisibilityMutation { show, hide, exclusive, toggle };
 

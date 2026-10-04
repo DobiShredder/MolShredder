@@ -73,6 +73,11 @@ class Camera {
       CameraAxis axis, double angle_degrees) const;
   [[nodiscard]] operation::Result<Camera> frame_sphere(
       model::Vec3d center, double radius, double padding = 1.1) const;
+  // PyMOL SceneWindowSphere framing: target and model origin at the center,
+  // distance = radius / tan(fov / 2) (scaled by 1 / aspect for tall
+  // viewports) and clip planes at distance -/+ 1.2 * radius.
+  [[nodiscard]] operation::Result<Camera> frame_sphere_pymol(
+      model::Vec3d center, double radius) const;
   [[nodiscard]] operation::Result<Camera> frame_box(
       model::Vec3d center, model::Vec3d half_extents,
       double padding = 1.0, double minimum_radius = 2.0) const;

@@ -67,6 +67,9 @@ Desktop.ini
 
 # Agent-private files live outside this public repository
 /AGENTS.md
+/CLAUDE.md
+/CLAUDE.local.md
+/.claude/
 
 # Local release and publication automation must never be published
 /scripts/

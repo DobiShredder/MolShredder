@@ -120,8 +120,9 @@ int main() {
                    "line precedence fixture settings must be accepted");
   const auto lines = render::build_representation(
       request_for(data, store, render::RepresentationKind::lines));
-  passed &= expect(lines.has_value() && lines.value().lines.size() == 22U,
-                   "single/double/triple/zero/long bonds must emit 2/4/6/8/2 line segments");
+  // A 2 A dashed zero-order line holds six 0.15 A PyMOL dashes.
+  passed &= expect(lines.has_value() && lines.value().lines.size() == 20U,
+                   "single/double/triple/zero/long bonds must emit 2/4/6/6/2 line segments");
   if (lines.has_value()) {
     passed &= expect(lines.value().lines[0].width_pixels == 6.F &&
                          lines.value().lines[1].width_pixels == 6.F,
@@ -142,7 +143,7 @@ int main() {
                    "long-bond setting must be accepted");
   const auto hidden = render::build_representation(
       request_for(data, hidden_store, render::RepresentationKind::lines));
-  passed &= expect(hidden.has_value() && hidden.value().lines.size() == 20U &&
+  passed &= expect(hidden.has_value() && hidden.value().lines.size() == 18U &&
                        hidden.value().pick_targets.size() == 4U,
                    "hide_long_bonds must use 0.9 times summed atom radii as oracle cutoff");
 

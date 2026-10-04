@@ -12,9 +12,9 @@
 #include "molshredder/operation/task_context.hpp"
 
 int main(int argc, char* argv[]) {
-  if (argc < 2 || argc > 3) {
+  if (argc < 2 || argc > 4) {
     std::cerr << "usage: gui_probe version|info|com|view|view-origin-position|projection|view-reset|clip|"
-                 "get-clip|move|turn|stereo|pymol-view|state-all|orient-all|representation-visibility|render-setting "
+                 "get-clip|move|turn|stereo|pymol-view|state-all|orient-all|representation-visibility|render-setting|color|spectrum|label|image|contour|ramp "
                  "|object-lifecycle|object-chemistry|object-perception|object-perception-apply|object-chemistry-after-perception|load-batch "
                  "|selection-numeric|selection-numeric-error|selection-spatial|session-workflow "
                  "[fixture]\n";
@@ -121,6 +121,56 @@ int main(int argc, char* argv[]) {
     action.parameters = {{"name", "sphere_scale"},
                          {"scope", "atom"},
                          {"target", "1"}};
+  } else if (scenario == "ramp") {
+    if (argc != 4) {
+      std::cerr << "ramp requires a structure and a map fixture\n";
+      return 2;
+    }
+    action.command_name = "ramp new";
+    action.parameters = {{"color", "blue white red"}, {"name", "r1"},
+                         {"range", "0 0.5 1"}, {"source", "dens"}};
+  } else if (scenario == "contour") {
+    if (argc != 4) {
+      std::cerr << "contour requires a structure and a map fixture\n";
+      return 2;
+    }
+    action.command_name = "volume contour";
+    action.parameters = {{"carve", "1.5"},       {"level", "0.5"},
+                         {"map", "dens"},        {"mode", "mesh"},
+                         {"name", "carve1"},     {"selection", "name C1"}};
+  } else if (scenario == "image") {
+    if (argc != 4) {
+      std::cerr << "image requires a structure fixture and output path\n";
+      return 2;
+    }
+    action.command_name = "image save";
+    action.parameters = {{"path", argv[3]}, {"width", "64"}, {"height", "48"}};
+  } else if (scenario == "label") {
+    if (argc != 3) {
+      std::cerr << "label requires a structure fixture\n";
+      return 2;
+    }
+    action.command_name = "label";
+    action.parameters = {{"expression", "\"%s-%s\" % (resn, resi)"},
+                         {"selection", "all"}};
+  } else if (scenario == "spectrum") {
+    if (argc != 3) {
+      std::cerr << "spectrum requires a structure fixture\n";
+      return 2;
+    }
+    action.command_name = "spectrum";
+    action.parameters = {{"expression", "count"},
+                         {"palette", "blue_red"},
+                         {"selection", "all"}};
+  } else if (scenario == "color" || scenario == "color-workspace") {
+    if (argc != 3) {
+      std::cerr << "color requires a structure fixture\n";
+      return 2;
+    }
+    action.command_name = "color";
+    action.parameters = {{"color", "mycolor"}, {"selection", "index 1"}};
+    if (scenario == "color-workspace")
+      action.parameters.emplace("scope", "workspace");
   } else if (scenario == "object-lifecycle") {
     if (argc != 3) {
       std::cerr << "object-lifecycle requires a structure fixture\n";
@@ -216,7 +266,10 @@ int main(int argc, char* argv[]) {
   std::vector<std::string> lifecycle_results;
   if (scenario == "state-all" || scenario == "orient-all" ||
       scenario == "representation-visibility" ||
-      scenario == "render-setting" || scenario == "object-lifecycle" ||
+      scenario == "render-setting" || scenario == "color" ||
+      scenario == "color-workspace" ||
+      scenario == "spectrum" || scenario == "label" || scenario == "image" ||
+      scenario == "object-lifecycle" ||
       scenario == "edit-workflow" ||
       scenario == "session-workflow" ||
       scenario == "molecule-builder" ||
@@ -398,6 +451,67 @@ int main(int argc, char* argv[]) {
           return 2;
         }
       }
+    } else if (scenario == "color" || scenario == "color-workspace") {
+      if (scenario == "color-workspace" &&
+          !gui.trigger(molshredder::gui::Action{"load", {{"name", "second"},
+                                                          {"path", argv[2]}}},
+                       context)
+               .succeeded()) {
+        std::cerr << "color workspace setup failed\n";
+        return 2;
+      }
+      const std::array<molshredder::gui::Action, 2U> setup{
+          molshredder::gui::Action{
+              "show", {{"representation", "spheres"},
+                       {"scope", scenario == "color-workspace" ? "workspace" : "active"},
+                       {"selection", "all"}}},
+          molshredder::gui::Action{"color define", {{"name", "mycolor"},
+                                                     {"red", "255"},
+                                                     {"green", "128"},
+                                                     {"blue", "0"}}}};
+      for (const auto &setup_action : setup) {
+        if (!gui.trigger(setup_action, context).succeeded()) {
+          std::cerr << "color setup failed\n";
+          return 2;
+        }
+      }
+    } else if (scenario == "image") {
+      const std::array<molshredder::gui::Action, 5U> setup{
+          molshredder::gui::Action{"show", {{"representation", "spheres"},
+                                             {"selection", "all"}}},
+          molshredder::gui::Action{"view orient", {}},
+          molshredder::gui::Action{"view clip", {{"distance", "5"},
+                                                  {"mode", "slab"}}},
+          molshredder::gui::Action{"color", {{"color", "red"},
+                                              {"selection", "all"}}},
+          molshredder::gui::Action{"background set", {{"color", "blue"}}}};
+      for (const auto &setup_action : setup) {
+        if (!gui.trigger(setup_action, context).succeeded()) {
+          std::cerr << "image setup failed\n";
+          return 2;
+        }
+      }
+    } else if (scenario == "label") {
+      const std::array<molshredder::gui::Action, 1U> setup{
+          molshredder::gui::Action{"setting set", {{"name", "label_digits"},
+                                                    {"value", "2"}}}};
+      for (const auto &setup_action : setup) {
+        if (!gui.trigger(setup_action, context).succeeded()) {
+          std::cerr << "label setup failed\n";
+          return 2;
+        }
+      }
+    } else if (scenario == "spectrum") {
+      const std::array<molshredder::gui::Action, 2U> setup{
+          molshredder::gui::Action{"show", {{"representation", "spheres"},
+                                             {"selection", "all"}}},
+          molshredder::gui::Action{"background set", {{"color", "white"}}}};
+      for (const auto &setup_action : setup) {
+        if (!gui.trigger(setup_action, context).succeeded()) {
+          std::cerr << "spectrum setup failed\n";
+          return 2;
+        }
+      }
     } else if (scenario == "render-setting") {
       const std::array<molshredder::gui::Action, 2U> setup{
           molshredder::gui::Action{"show", {{"representation", "spheres"},
@@ -419,6 +533,16 @@ int main(int argc, char* argv[]) {
         return 2;
       }
     }
+    }
+  }
+  if (scenario == "contour" || scenario == "ramp") {
+    const auto loaded = gui.trigger(
+        {"load", {{"file-format", "pdb"}, {"path", argv[2]}}}, context);
+    const auto mapped = gui.trigger(
+        {"volume load", {{"name", "dens"}, {"path", argv[3]}}}, context);
+    if (!loaded.succeeded() || !mapped.succeeded()) {
+      std::cerr << "contour fixture load failed\n";
+      return 2;
     }
   }
   if (scenario == "selection-numeric" ||

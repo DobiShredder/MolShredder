@@ -144,7 +144,10 @@ int Adapter::run(int argc, char** argv, std::istream& input,
   const application::Dispatcher dispatcher{registry_};
 
   for (const auto& runtime : commands) {
-    if (!runtime->leaf->parsed()) {
+    // A canonical name can also be the parent of a longer one ("load" and
+    // "load batch"); only the deepest parsed command is dispatched.
+    if (!runtime->leaf->parsed() ||
+        !runtime->leaf->get_subcommands().empty()) {
       continue;
     }
     command::Arguments supplied;

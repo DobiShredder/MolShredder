@@ -2,7 +2,9 @@
 #include "molshredder/application/session.hpp"
 
 #include <algorithm>
+#include <cstring>
 #include <array>
+#include <cstdio>
 #include <charconv>
 #include "molshredder/core/parse_number.hpp"
 #include <chrono>
@@ -76,6 +78,8 @@ render::RepresentationKind representation_kind(std::string_view value) {
     return render::RepresentationKind::ribbon;
   if (value == "cartoon")
     return render::RepresentationKind::cartoon;
+  if (value == "labels")
+    return render::RepresentationKind::labels;
   return render::RepresentationKind::lines;
 }
 
@@ -92,6 +96,13 @@ render::MolecularSurfaceKind molecular_surface_kind(std::string_view value) {
                         : render::MolecularSurfaceKind::solvent_accessible;
 }
 
+application::ObjectScope object_scope_argument(const command::Arguments &arguments) {
+  const auto found = arguments.find("scope");
+  return found != arguments.end() && found->second == "workspace"
+             ? application::ObjectScope::workspace
+             : application::ObjectScope::active;
+}
+
 std::vector<render::RepresentationKind>
 representation_kinds(std::string_view value) {
   if (value == "everything") {
@@ -99,7 +110,8 @@ representation_kinds(std::string_view value) {
             render::RepresentationKind::sticks,
             render::RepresentationKind::spheres,
             render::RepresentationKind::ribbon,
-            render::RepresentationKind::cartoon};
+            render::RepresentationKind::cartoon,
+            render::RepresentationKind::labels};
   }
   if (value == "wire")
     return {render::RepresentationKind::lines};
@@ -129,6 +141,9 @@ std::string resolved_representation_names(
       break;
     case render::RepresentationKind::cartoon:
       result += "cartoon";
+      break;
+    case render::RepresentationKind::labels:
+      result += "labels";
       break;
     }
   }
@@ -254,6 +269,28 @@ operation::Result<command::Response> scientific_response(
   for (const auto& [name, value] : contract_fields.value())
     response.fields.insert_or_assign(name, value);
   return operation::Result<command::Response>::success(std::move(response));
+}
+
+// PyMOL measurement label text: "%.Nf" with label_<kind>_digits, falling
+// back to label_digits when negative (both resolved for the active object).
+std::string measurement_label(const Workspace& workspace,
+                              std::string_view digits_setting, double value) {
+  const auto* object = workspace.active_object();
+  const render::RenderSettingContext context{
+      object == nullptr ? 0U : object->id, 0U, 0U, 0U};
+  const auto read = [&](std::string_view name, std::int64_t fallback) {
+    const auto resolved = workspace.resolve_render_setting(name, context);
+    return resolved.has_value() ? std::get<std::int64_t>(resolved.value().value)
+                                : fallback;
+  };
+  auto digits = read(digits_setting, -1);
+  if (digits < 0)
+    digits = read("label_digits", 1);
+  digits = std::clamp<std::int64_t>(digits, 0, 10);
+  std::array<char, 64> buffer{};
+  std::snprintf(buffer.data(), buffer.size(), "%.*f", static_cast<int>(digits),
+                value);
+  return buffer.data();
 }
 
 operation::Result<GeometryAnalysisOverlay> geometry_analysis_overlay(
@@ -407,6 +444,10 @@ operation::Result<model::BondOrder> builder_bond_order(
   if (text == "amide")
     return operation::Result<model::BondOrder>::success(
         model::BondOrder::amide);
+  // Zero-order (coordination) bonds, like PyMOL `bond ..., order=0`.
+  if (text == "zero")
+    return operation::Result<model::BondOrder>::success(
+        model::BondOrder::zero);
   return operation::Result<model::BondOrder>::failure(operation::Error{
       operation::ErrorCode::invalid_argument,
       "unsupported builder bond order: " + std::string{text},
@@ -779,6 +820,31 @@ operation::Result<render::RenderSettingValue> parse_render_setting_value(
   }
   case render::RenderSettingValueType::color:
     return Result<render::RenderSettingValue>::success(std::string{text});
+  case render::RenderSettingValueType::vector3: {
+    // Accepts "x,y,z", "x y z" or the PyMOL list form "[x, y, z]".
+    std::string normalized{text};
+    for (auto &item : normalized)
+      if (item == '[' || item == ']' || item == ',')
+        item = ' ';
+    std::istringstream stream{normalized};
+    render::RenderSettingVector3 vector{};
+    std::string tokens[3];
+    std::string extra;
+    if (stream >> tokens[0] >> tokens[1] >> tokens[2] && !(stream >> extra)) {
+      bool parsed_all = true;
+      for (std::size_t index = 0; index < 3U; ++index) {
+        const auto &token = tokens[index];
+        const auto conversion = molshredder::core::from_chars(
+            token.data(), token.data() + token.size(), vector[index]);
+        parsed_all = parsed_all && conversion.ec == std::errc{} &&
+                     conversion.ptr == token.data() + token.size() &&
+                     std::isfinite(vector[index]);
+      }
+      if (parsed_all)
+        return Result<render::RenderSettingValue>::success(vector);
+    }
+    break;
+  }
   }
   return Result<render::RenderSettingValue>::failure(
       Error{ErrorCode::invalid_argument,
@@ -788,7 +854,14 @@ operation::Result<render::RenderSettingValue> parse_render_setting_value(
 
 command::Value render_setting_value(const render::RenderSettingValue &value) {
   return std::visit(
-      [](const auto &item) -> command::Value { return item; }, value);
+      [](const auto &item) -> command::Value {
+        if constexpr (std::is_same_v<std::decay_t<decltype(item)>,
+                                     render::RenderSettingVector3>)
+          return command::Value::Array{item[0], item[1], item[2]};
+        else
+          return item;
+      },
+      value);
 }
 
 std::string_view render_setting_type_name(render::RenderSettingValueType type) {
@@ -798,6 +871,7 @@ std::string_view render_setting_type_name(render::RenderSettingValueType type) {
   case integer: return "integer";
   case number: return "number";
   case color: return "color";
+  case vector3: return "vector3";
   }
   return "number";
 }
@@ -835,6 +909,12 @@ render::ColorRgba named_color(std::string_view name, float alpha) {
   if (name == "white") return {1.0F, 1.0F, 1.0F, alpha};
   if (name == "yellow") return {1.0F, 0.85F, 0.2F, alpha};
   return {0.2F, 0.65F, 1.0F, alpha};
+}
+
+command::Value color_rgb_value(render::ColorRgb color) {
+  return command::Value::Array{static_cast<double>(color.red),
+                               static_cast<double>(color.green),
+                               static_cast<double>(color.blue)};
 }
 
 command::Value color_value(render::ColorRgba color) {
@@ -946,6 +1026,85 @@ io::FormatProvider molfile_provider_value(
       "NOASSERTION",
       true,
       {}};
+}
+
+// Resolves `molfile:<plugin>` to a registered descriptor, registering the
+// explicit --plugin-path on first use. The caller's lock serializes first
+// discovery with the following read and Workspace commit; waiting for it
+// observes cancellation every 10 ms.
+operation::Result<io::MolfileProviderDescriptor> acquire_molfile_provider(
+    io::MolfileProviderRegistry &registry,
+    std::unique_lock<std::timed_mutex> &action_lock,
+    const std::string &requested, const std::string &selected_format,
+    const command::Arguments &arguments, operation::TaskContext &context) {
+  using Result = operation::Result<io::MolfileProviderDescriptor>;
+  const auto cancelled = [] {
+    return Result::failure(operation::Error{
+        operation::ErrorCode::cancelled,
+        "molfile load cancelled during action scheduling", {}});
+  };
+  const auto plugin_name = requested.substr(std::strlen("molfile:"));
+  if (plugin_name.empty()) {
+    return Result::failure(operation::Error{
+        operation::ErrorCode::invalid_argument,
+        "molfile provider id needs a plugin name",
+        "use --provider molfile:<plugin>, for example molfile:pqr"});
+  }
+  const std::string canonical_format =
+      plugin_name == "pdbx"    ? "mmcif"
+      : plugin_name == "parm7" ? "prmtop"
+      : plugin_name == "vsf"   ? "vtf"
+      : plugin_name == "crd"   ? "mdcrd"
+      : plugin_name == "dx"    ? "opendx"
+      : plugin_name == "ccp4"  ? "mrc"
+                               : plugin_name;
+  if (selected_format != "auto" && selected_format != plugin_name &&
+      selected_format != canonical_format) {
+    return Result::failure(operation::Error{
+        operation::ErrorCode::invalid_argument,
+        requested + " requires --file-format " + canonical_format +
+            " or auto",
+        "set --file-format " + canonical_format});
+  }
+  if (context.cancellation.is_cancelled()) return cancelled();
+  if (context.report_progress) {
+    context.report_progress({0.0, "molfile-wait-action"});
+  }
+  while (!action_lock.try_lock_for(std::chrono::milliseconds{10})) {
+    if (context.cancellation.is_cancelled()) return cancelled();
+  }
+  if (context.cancellation.is_cancelled()) return cancelled();
+  const auto find = [&] {
+    const auto registered = registry.descriptors();
+    const auto found = std::find_if(
+        registered.begin(), registered.end(),
+        [&](const auto &entry) { return entry.provider_id == requested; });
+    return found == registered.end()
+               ? std::optional<io::MolfileProviderDescriptor>{}
+               : std::optional<io::MolfileProviderDescriptor>{*found};
+  };
+  auto selected = find();
+  if (!selected.has_value()) {
+    const auto plugin_path = arguments.find("plugin-path");
+    if (plugin_path == arguments.end()) {
+      return Result::failure(operation::Error{
+          operation::ErrorCode::unsupported,
+          requested + " requires an explicitly approved plugin path",
+          "provide --plugin-path with the molfile shared library"});
+    }
+    io::MolfileDiscoveryRequest discovery;
+    discovery.explicit_files.emplace_back(plugin_path->second);
+    const auto discovered = registry.discover(discovery);
+    if (!discovered.has_value()) return Result::failure(discovered.error());
+    selected = find();
+  }
+  if (!selected.has_value()) {
+    return Result::failure(operation::Error{
+        operation::ErrorCode::unsupported,
+        "plugin did not register requested provider " + requested,
+        "inspect the plugin's registered molfile format name"});
+  }
+  return Result::success(std::move(*selected));
 }
 
 command::Value direction_value(
@@ -2829,19 +2988,53 @@ command::Registry make_default_registry(
               {"schema_version", document.value().schema_version}}});
       };
     } else if (canonical_name == "volume load") {
-      handler = [workspace](const Arguments &arguments, TaskContext &) {
-        const auto provider =
-            requested_provider(arguments, io::FormatDirection::read);
-        if (!provider.has_value()) return Result<Response>::failure(provider.error());
+      handler = [workspace, molfile_registry,
+                 molfile_action_mutex](const Arguments &arguments,
+                                       TaskContext &context) {
+        const auto requested = arguments.at("provider");
+        const auto is_molfile = requested.starts_with("molfile:");
+        std::unique_lock<std::timed_mutex> action_lock{*molfile_action_mutex,
+                                                       std::defer_lock};
+        auto provider =
+            is_molfile
+                ? Result<io::FormatProvider>::failure(operation::Error{
+                      operation::ErrorCode::unsupported,
+                      "molfile provider is not registered: " + requested, {}})
+                : requested_provider(arguments, io::FormatDirection::read);
         std::optional<std::string> name;
         if (const auto found = arguments.find("name");
             found != arguments.end()) {
           name = found->second;
         }
-        const auto loaded = workspace->load_volume(
-            arguments.at("path"), std::move(name),
-            volume_format(arguments.at("file-format")),
-            length_unit(arguments.at("coordinate-unit")));
+        operation::Result<VolumeLoadResult> loaded =
+            Result<VolumeLoadResult>::failure(operation::Error{
+                operation::ErrorCode::internal, "volume load not started", {}});
+        if (is_molfile) {
+          const auto selected = acquire_molfile_provider(
+              *molfile_registry, action_lock, requested,
+              arguments.at("file-format"), arguments, context);
+          if (!selected.has_value()) {
+            return Result<Response>::failure(selected.error());
+          }
+          provider = Result<io::FormatProvider>::success(
+              molfile_provider_value(selected.value()));
+          auto document = molfile_registry->read_volume(
+              arguments.at("path"), requested, context,
+              length_unit(arguments.at("coordinate-unit")), std::move(name));
+          if (!document.has_value()) {
+            return Result<Response>::failure(document.error());
+          }
+          loaded = workspace->load_volume_document(
+              std::move(document.value()), arguments.at("path"));
+        } else {
+          if (!provider.has_value()) {
+            return Result<Response>::failure(provider.error());
+          }
+          loaded = workspace->load_volume(
+              arguments.at("path"), std::move(name),
+              volume_format(arguments.at("file-format")),
+              length_unit(arguments.at("coordinate-unit")));
+        }
         if (!loaded.has_value())
           return Result<Response>::failure(loaded.error());
         command::Value::Array deltas;
@@ -4153,74 +4346,16 @@ command::Registry make_default_registry(
             Result<LoadResult>::failure(operation::Error{
                 operation::ErrorCode::internal, "structure load not started", {}});
         if (is_molfile) {
-          if (requested != "molfile:pqr") {
-            return Result<Response>::failure(operation::Error{
-                operation::ErrorCode::unsupported,
-                "only molfile:pqr structure staging is currently supported",
-                "select --provider molfile:pqr or use the native provider"});
-          }
-          const auto selected_format = arguments.at("file-format");
-          if (selected_format != "auto" && selected_format != "pqr") {
-            return Result<Response>::failure(operation::Error{
-                operation::ErrorCode::invalid_argument,
-                "molfile:pqr requires --file-format pqr or auto",
-                "set --file-format pqr"});
-          }
-          if (context.cancellation.is_cancelled()) {
-            return Result<Response>::failure(operation::Error{
-                operation::ErrorCode::cancelled,
-                "molfile load cancelled during action scheduling", {}});
-          }
-          std::unique_lock action_lock{*molfile_action_mutex,
-                                       std::defer_lock};
-          if (context.report_progress) {
-            context.report_progress({0.0, "molfile-wait-action"});
-          }
-          while (!action_lock.try_lock_for(std::chrono::milliseconds{10})) {
-            if (context.cancellation.is_cancelled()) {
-              return Result<Response>::failure(operation::Error{
-                  operation::ErrorCode::cancelled,
-                  "molfile load cancelled during action scheduling", {}});
-            }
-          }
-          if (context.cancellation.is_cancelled()) {
-            return Result<Response>::failure(operation::Error{
-                operation::ErrorCode::cancelled,
-                "molfile load cancelled during action scheduling", {}});
-          }
-          auto registered = molfile_registry->descriptors();
-          auto selected = std::find_if(
-              registered.begin(), registered.end(), [&](const auto &entry) {
-                return entry.provider_id == requested;
-              });
-          if (selected == registered.end()) {
-            const auto plugin_path = arguments.find("plugin-path");
-            if (plugin_path == arguments.end()) {
-              return Result<Response>::failure(operation::Error{
-                  operation::ErrorCode::unsupported,
-                  "molfile:pqr requires an explicitly approved plugin path",
-                  "provide --plugin-path with the molfile shared library"});
-            }
-            io::MolfileDiscoveryRequest discovery;
-            discovery.explicit_files.emplace_back(plugin_path->second);
-            const auto discovered = molfile_registry->discover(discovery);
-            if (!discovered.has_value()) {
-              return Result<Response>::failure(discovered.error());
-            }
-            registered = molfile_registry->descriptors();
-            selected = std::find_if(
-                registered.begin(), registered.end(), [&](const auto &entry) {
-                  return entry.provider_id == requested;
-                });
-          }
-          if (selected == registered.end()) {
-            return Result<Response>::failure(operation::Error{
-                operation::ErrorCode::unsupported,
-                "plugin did not register requested provider " + requested,
-                "inspect the plugin's registered molfile format name"});
+          std::unique_lock<std::timed_mutex> action_lock{*molfile_action_mutex,
+                                                         std::defer_lock};
+          const auto selected = acquire_molfile_provider(
+              *molfile_registry, action_lock, requested,
+              arguments.at("file-format"), arguments, context);
+          if (!selected.has_value()) {
+            return Result<Response>::failure(selected.error());
           }
           provider = Result<io::FormatProvider>::success(
-              molfile_provider_value(*selected));
+              molfile_provider_value(selected.value()));
           auto document = molfile_registry->read_structure(
               arguments.at("path"), requested, context);
           if (!document.has_value()) {
@@ -4361,12 +4496,367 @@ command::Registry make_default_registry(
                                          .override_count())}},
              std::move(table)});
       };
+    } else if (canonical_name == "color") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const auto assigned = workspace->assign_color(
+            arguments.at("color"), arguments.at("selection"),
+            object_scope_argument(arguments));
+        if (!assigned.has_value())
+          return Result<Response>::failure(assigned.error());
+        const auto &value = assigned.value();
+        return Result<Response>::success(
+            {"color assigned",
+             {{"affected_atom_count", value.affected_atom_count},
+              {"color_index", value.color_index},
+              {"color_name", value.color_name},
+              {"colored_atom_count", value.colored_atom_count},
+              {"object_id", value.object_id},
+              {"representation_count", value.representation_count}}});
+      };
+    } else if (canonical_name == "color define") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        std::array<double, 3> components{};
+        constexpr std::array<std::string_view, 3> names{"red", "green", "blue"};
+        for (std::size_t index = 0; index < names.size(); ++index) {
+          const auto component = number_argument(arguments, names[index]);
+          if (!component.has_value())
+            return Result<Response>::failure(component.error());
+          components[index] = component.value();
+        }
+        const auto defined =
+            workspace->define_color(arguments.at("name"), components);
+        if (!defined.has_value())
+          return Result<Response>::failure(defined.error());
+        const auto &value = defined.value();
+        return Result<Response>::success(
+            {value.created ? "color defined" : "color replaced",
+             {{"color_index", value.index},
+              {"color_name", value.name},
+              {"created", value.created},
+              {"rgb", color_rgb_value(value.rgb)}}});
+      };
+    } else if (canonical_name == "color get") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const auto queried = workspace->query_color(arguments.at("color"));
+        if (!queried.has_value())
+          return Result<Response>::failure(queried.error());
+        const auto &value = queried.value();
+        return Result<Response>::success(
+            {"color resolved",
+             {{"color_index", value.index},
+              {"color_name", value.name},
+              {"rgb", value.rgb.has_value() ? color_rgb_value(*value.rgb)
+                                            : command::Value{nullptr}}}});
+      };
+    } else if (canonical_name == "color list") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const auto &scope_name = arguments.at("scope");
+        const auto scope = scope_name == "all"      ? render::ColorListScope::all
+                           : scope_name == "custom" ? render::ColorListScope::custom
+                                                    : render::ColorListScope::named;
+        command::Table table;
+        table.columns = {"index", "name", "red", "green", "blue", "builtin",
+                         "modified"};
+        for (const auto &entry : workspace->color_table().list(scope))
+          table.rows.push_back(
+              {entry.index, entry.name, static_cast<double>(entry.rgb.red),
+               static_cast<double>(entry.rgb.green),
+               static_cast<double>(entry.rgb.blue), entry.builtin,
+               entry.modified});
+        return Result<Response>::success(
+            {"listed " + std::to_string(table.rows.size()) + " colors",
+             {{"catalog_revision", std::string{render::kColorCatalogRevision}},
+              {"color_count",
+               static_cast<std::uint64_t>(workspace->color_table().size())},
+              {"scope", scope_name}},
+             std::move(table)});
+      };
+    } else if (canonical_name == "spectrum") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        application::SpectrumRequest request;
+        request.expression = arguments.at("expression");
+        request.palette = arguments.at("palette");
+        request.selection = arguments.at("selection");
+        request.by_residue = arguments.at("byres") == "true";
+        request.interpolation = arguments.at("interpolation");
+        for (const auto *name : {"minimum", "maximum"}) {
+          const auto found = arguments.find(name);
+          if (found == arguments.end() || found->second.empty())
+            continue;
+          const auto parsed = number_argument(arguments, name);
+          if (!parsed.has_value())
+            return Result<Response>::failure(parsed.error());
+          (std::string_view{name} == "minimum" ? request.minimum
+                                               : request.maximum) =
+              parsed.value();
+        }
+        const auto colored = workspace->spectrum(request);
+        if (!colored.has_value())
+          return Result<Response>::failure(colored.error());
+        const auto &value = colored.value();
+        return Result<Response>::success(
+            {"spectrum applied",
+             {{"affected_atom_count", value.affected_atom_count},
+              {"colored_atom_count", value.colored_atom_count},
+              {"maximum", value.maximum},
+              {"minimum", value.minimum},
+              {"mode", value.mode},
+              {"object_id", value.object_id},
+              {"palette", value.palette},
+              {"representation_count", value.representation_count}}});
+      };
+    } else if (canonical_name == "background set" ||
+               canonical_name == "background get") {
+      handler = [workspace, canonical_name](const Arguments &arguments,
+                                            TaskContext &) {
+        application::BackgroundResult value = workspace->background();
+        if (canonical_name == "background set") {
+          const auto changed = workspace->set_background(arguments.at("color"));
+          if (!changed.has_value())
+            return Result<Response>::failure(changed.error());
+          value = changed.value();
+        }
+        return Result<Response>::success(
+            {canonical_name == "background set" ? "background color set"
+                                                : "background color",
+             {{"color_index", value.color_index.has_value()
+                                  ? command::Value{*value.color_index}
+                                  : command::Value{nullptr}},
+              {"color_name", value.color_name},
+              {"rgb", color_rgb_value(value.rgb)}}});
+      };
+    } else if (canonical_name == "label" ||
+               canonical_name == "label literal") {
+      handler = [workspace, canonical_name](const Arguments &arguments,
+                                            TaskContext &) {
+        const auto literal = canonical_name == "label literal";
+        const auto labeled = workspace->label(
+            arguments.at("selection"),
+            arguments.at(literal ? "text" : "expression"), literal);
+        if (!labeled.has_value())
+          return Result<Response>::failure(labeled.error());
+        const auto &value = labeled.value();
+        return Result<Response>::success(
+            {"labels updated",
+             {{"affected_atom_count", value.affected_atom_count},
+              {"first_text", value.first_text},
+              {"labeled_atom_count", value.labeled_atom_count},
+              {"object_id", value.object_id},
+              {"visible_label_count", value.visible_label_count}}});
+      };
+    } else if (canonical_name == "volume contour" ||
+               canonical_name == "volume isolevel" ||
+               canonical_name == "volume isolevel get") {
+      handler = [workspace, canonical_name](const Arguments &arguments,
+                                            TaskContext &context) {
+        operation::Result<application::ContourResult> outcome =
+            operation::Result<application::ContourResult>::failure({});
+        if (canonical_name == "volume contour") {
+          application::ContourRequest request;
+          request.name = arguments.at("name");
+          const auto &mode = arguments.at("mode");
+          request.mode = mode == "surface" ? application::ContourMode::surface
+                         : mode == "dot"   ? application::ContourMode::dot
+                                           : application::ContourMode::mesh;
+          request.map = arguments.at("map");
+          request.color = arguments.at("color");
+          if (const auto found = arguments.find("selection");
+              found != arguments.end())
+            request.selection = found->second;
+          for (const auto *name : {"level", "carve", "buffer"}) {
+            const auto parsed = number_argument(arguments, name);
+            if (!parsed.has_value())
+              return Result<Response>::failure(parsed.error());
+            const std::string_view key{name};
+            (key == "level"   ? request.level
+             : key == "carve" ? request.carve
+                              : request.buffer) = parsed.value();
+          }
+          outcome = workspace->create_contour(request, context);
+        } else {
+          std::optional<double> level;
+          if (canonical_name == "volume isolevel") {
+            const auto parsed = number_argument(arguments, "level");
+            if (!parsed.has_value())
+              return Result<Response>::failure(parsed.error());
+            level = parsed.value();
+          }
+          outcome = workspace->contour_level(arguments.at("name"), level, context);
+        }
+        if (!outcome.has_value())
+          return Result<Response>::failure(outcome.error());
+        const auto &value = outcome.value();
+        const auto vector = [](model::Vec3d point) {
+          return command::Value::Array{point.x, point.y, point.z};
+        };
+        command::Value::Array warnings;
+        for (const auto &warning : value.warnings)
+          warnings.emplace_back(warning);
+        return Result<Response>::success(
+            {canonical_name == "volume isolevel get" ? "contour level"
+             : canonical_name == "volume isolevel"   ? "contour level updated"
+                                                     : "contour created",
+             {{"extent_maximum", vector(value.extent.maximum)},
+              {"extent_minimum", vector(value.extent.minimum)},
+              {"level", value.level},
+              {"mode", std::string{value.mode == application::ContourMode::surface
+                                       ? "surface"
+                                   : value.mode == application::ContourMode::dot
+                                       ? "dot"
+                                       : "mesh"}},
+              {"name", value.name},
+              {"primitive_count", static_cast<std::uint64_t>(value.primitive_count)},
+              {"replaced", value.replaced},
+              {"volume_id", value.volume_id},
+              {"warnings", std::move(warnings)}}});
+      };
+    } else if (canonical_name == "ramp new" || canonical_name == "ramp update") {
+      handler = [workspace, canonical_name](const Arguments &arguments,
+                                            TaskContext &) {
+        const auto ramp =
+            canonical_name == "ramp new"
+                ? workspace->define_ramp(arguments.at("name"),
+                                         arguments.at("source"),
+                                         arguments.at("range"),
+                                         arguments.at("color"))
+                : workspace->update_ramp(arguments.at("name"),
+                                         arguments.at("range"),
+                                         arguments.at("color"));
+        if (!ramp.has_value())
+          return Result<Response>::failure(ramp.error());
+        const auto &value = ramp.value();
+        command::Value::Array levels;
+        for (const auto level : value.levels)
+          levels.emplace_back(level);
+        return Result<Response>::success(
+            {canonical_name == "ramp new" ? "ramp defined" : "ramp updated",
+             {{"color_count", static_cast<std::uint64_t>(value.color_count)},
+              {"color_index", value.color_index},
+              {"levels", std::move(levels)},
+              {"name", value.name},
+              {"replaced", value.replaced},
+              {"source_kind", value.source_kind},
+              {"spectrum", static_cast<std::int64_t>(value.spectrum)}}});
+      };
+    } else if (canonical_name == "cartoon") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const auto assigned = workspace->set_cartoon_type(
+            arguments.at("type"), arguments.at("selection"));
+        if (!assigned.has_value())
+          return Result<Response>::failure(assigned.error());
+        const auto &value = assigned.value();
+        return Result<Response>::success(
+            {"cartoon type assigned",
+             {{"affected_atom_count", value.affected_atom_count},
+              {"code", value.code},
+              {"object_id", value.object_id},
+              {"representation_count", value.representation_count},
+              {"type", value.type}}});
+      };
+    } else if (canonical_name == "image save") {
+      handler = [workspace](const Arguments &arguments, TaskContext &context) {
+        if (context.cancellation.is_cancelled())
+          return Result<Response>::failure(operation::Error{
+              operation::ErrorCode::cancelled, "image save cancelled", {}});
+        application::ImageSaveRequest request;
+        request.path = arguments.at("path");
+        const auto width = size_argument(arguments, "width");
+        const auto height = size_argument(arguments, "height");
+        if (!width.has_value())
+          return Result<Response>::failure(width.error());
+        if (!height.has_value())
+          return Result<Response>::failure(height.error());
+        request.width = width.value();
+        request.height = height.value();
+        if (const auto dpi = arguments.find("dpi");
+            dpi != arguments.end() && !dpi->second.empty()) {
+          const auto parsed = number_argument(arguments, "dpi");
+          if (!parsed.has_value())
+            return Result<Response>::failure(parsed.error());
+          request.dpi = parsed.value();
+        }
+        request.ray = arguments.at("ray") == "true";
+        const auto saved = workspace->save_image(request);
+        if (!saved.has_value())
+          return Result<Response>::failure(saved.error());
+        const auto &value = saved.value();
+        command::Value::Array warnings;
+        for (const auto &warning : value.warnings)
+          warnings.emplace_back(warning);
+        return Result<Response>::success(
+            {"image saved",
+             {{"bytes", static_cast<std::uint64_t>(value.bytes)},
+              {"height", static_cast<std::uint64_t>(value.height)},
+              {"opaque_background", value.opaque_background},
+              {"path", value.path.string()},
+              {"primitive_count",
+               static_cast<std::uint64_t>(value.primitive_count)},
+              {"renderer", value.renderer},
+              {"warnings", std::move(warnings)},
+              {"width", static_cast<std::uint64_t>(value.width)}}});
+      };
+    } else if (canonical_name == "view refresh") {
+      handler = [workspace](const Arguments &, TaskContext &) {
+        std::size_t count{};
+        for (const auto &object : workspace->objects())
+          count += object.representations.size();
+        return Result<Response>::success(
+            {"viewport refresh requested",
+             {{"representation_count", static_cast<std::uint64_t>(count)}}});
+      };
+    } else if (canonical_name == "recolor") {
+      handler = [workspace](const Arguments &, TaskContext &) {
+        const auto rebuilt = workspace->recolor();
+        if (!rebuilt.has_value())
+          return Result<Response>::failure(rebuilt.error());
+        return Result<Response>::success(
+            {"representations recolored",
+             {{"representation_count",
+               static_cast<std::uint64_t>(rebuilt.value())}}});
+      };
     } else if (canonical_name == "setting set" ||
                canonical_name == "setting get" ||
                canonical_name == "setting unset" ||
                canonical_name == "setting reset") {
-      handler = [workspace, canonical_name](const Arguments &arguments,
+      handler = [workspace, canonical_name](const Arguments &request,
                                              TaskContext &) {
+        // --selection (atom scope, set/unset) targets every selected atom;
+        // the first selected atom stands in for the reported resolution.
+        const auto selection = request.find("selection");
+        Arguments arguments = request;
+        std::optional<std::vector<std::uint64_t>> selected;
+        if (selection != request.end()) {
+          if ((canonical_name != "setting set" &&
+               canonical_name != "setting unset") ||
+              (request.at("scope") != "atom" && request.at("scope") != "bond") ||
+              request.contains("target"))
+            return Result<Response>::failure(operation::Error{
+                operation::ErrorCode::invalid_argument,
+                "--selection applies to setting set/unset at atom or bond "
+                "scope without --target",
+                "use --scope atom|bond --selection EXPR"});
+          arguments.insert_or_assign("target", "1");
+          const auto placeholder = render_setting_target(arguments, *workspace);
+          if (!placeholder.has_value())
+            return Result<Response>::failure(placeholder.error());
+          auto ids = workspace->selected_atom_ids(
+              placeholder.value().scope.object_id, selection->second);
+          if (!ids.has_value())
+            return Result<Response>::failure(ids.error());
+          if (request.at("scope") == "bond") {
+            const auto bonds = workspace->selected_bond_ids(
+                placeholder.value().scope.object_id, ids.value());
+            if (!bonds.has_value())
+              return Result<Response>::failure(bonds.error());
+            ids = bonds;
+          }
+          if (ids.value().empty())
+            return Result<Response>::failure(operation::Error{
+                operation::ErrorCode::invalid_argument,
+                "render setting selection matched no atoms or bonds", {}});
+          arguments.insert_or_assign("target", std::to_string(ids.value().front()));
+          selected = std::move(ids.value());
+        }
         const auto target = render_setting_target(arguments, *workspace);
         if (!target.has_value())
           return Result<Response>::failure(target.error());
@@ -4402,16 +4892,30 @@ command::Registry make_default_registry(
               parse_render_setting_value(*definition, arguments.at("value"));
           if (!value.has_value())
             return Result<Response>::failure(value.error());
-          if (const auto error = workspace->set_render_setting(
-                  name, target.value().scope, value.value());
-              error.has_value())
+          if (selected.has_value()) {
+            const auto applied = workspace->set_render_setting_selection(
+                name, target.value().scope, selection->second, value.value());
+            if (!applied.has_value())
+              return Result<Response>::failure(applied.error());
+          } else if (const auto error = workspace->set_render_setting(
+                         name, target.value().scope, value.value());
+                     error.has_value()) {
             return Result<Response>::failure(*error);
+          }
         } else if (canonical_name == "setting unset") {
-          const auto result =
-              workspace->unset_render_setting(name, target.value().scope);
-          if (!result.has_value())
-            return Result<Response>::failure(result.error());
-          removed = result.value();
+          if (selected.has_value()) {
+            const auto applied = workspace->set_render_setting_selection(
+                name, target.value().scope, selection->second, std::nullopt);
+            if (!applied.has_value())
+              return Result<Response>::failure(applied.error());
+            removed = true;
+          } else {
+            const auto result =
+                workspace->unset_render_setting(name, target.value().scope);
+            if (!result.has_value())
+              return Result<Response>::failure(result.error());
+            removed = result.value();
+          }
         }
         const auto resolved = workspace->resolve_render_setting(
             name, target.value().context);
@@ -4436,6 +4940,8 @@ command::Registry make_default_registry(
                                          .override_count())},
               {"removed", removed},
               {"requested_scope", requested_scope},
+              {"selected_atom_count",
+               static_cast<std::uint64_t>(selected.has_value() ? selected->size() : 0U)},
               {"source_scope", std::move(source_scope)},
               {"type",
                std::string{render_setting_type_name(definition->value_type)}},
@@ -4533,20 +5039,25 @@ command::Registry make_default_registry(
           mutation = RepresentationVisibilityMutation::toggle;
         const auto kinds =
             representation_kinds(arguments.at("representation"));
+        const auto scope = object_scope_argument(arguments);
         const auto changed = workspace->mutate_representation_visibility(
-            kinds, arguments.at("selection"), mutation);
+            kinds, arguments.at("selection"), mutation, scope);
         if (!changed.has_value())
           return Result<Response>::failure(changed.error());
         std::size_t primitive_count{};
-        for (const auto &representation :
-             workspace->active_object()->representations) {
-          if (std::find(kinds.begin(), kinds.end(), representation.kind) ==
-              kinds.end())
+        for (const auto &object : workspace->objects()) {
+          if (scope == application::ObjectScope::active &&
+              &object != workspace->active_object())
             continue;
-          primitive_count += representation.packet.lines.size() +
-                             representation.packet.cylinders.size() +
-                             representation.packet.spheres.size() +
-                             representation.packet.mesh_triangles.size();
+          for (const auto &representation : object.representations) {
+            if (std::find(kinds.begin(), kinds.end(), representation.kind) ==
+                kinds.end())
+              continue;
+            primitive_count += representation.packet.lines.size() +
+                               representation.packet.cylinders.size() +
+                               representation.packet.spheres.size() +
+                               representation.packet.mesh_triangles.size();
+          }
         }
         return Result<Response>::success(
             {"representation visibility updated",
@@ -4690,8 +5201,12 @@ command::Registry make_default_registry(
                static_cast<std::uint64_t>(distance.second.value + 1U)},
               {"to", measured.value().to_expression},
               {"unit", std::string{length_unit_name(target_unit)}}}};
-        const auto label = std::to_string(component(distance.distance)) + " " +
-                           std::string{length_unit_name(target_unit)};
+        const auto label =
+            measurement_label(*workspace, "label_distance_digits",
+                              component(distance.distance)) +
+            (target_unit == operation::LengthUnit::angstrom
+                 ? std::string{}
+                 : " " + std::string{length_unit_name(target_unit)});
         const auto overlay =
             workspace->distance_analysis_overlay(measured.value(), label);
         if (!overlay.has_value())
@@ -4765,7 +5280,7 @@ command::Registry make_default_registry(
                                    angle.third_position};
         const auto overlay = geometry_analysis_overlay(
             *workspace, measured.value().object_id, indices, positions,
-            std::to_string(value) + " deg");
+            measurement_label(*workspace, "label_angle_digits", value));
         if (!overlay.has_value())
           return Result<Response>::failure(overlay.error());
         AnalysisResultDraft draft;
@@ -4836,7 +5351,7 @@ command::Registry make_default_registry(
             dihedral.third_position, dihedral.fourth_position};
         const auto overlay = geometry_analysis_overlay(
             *workspace, measured.value().object_id, indices, positions,
-            std::to_string(value) + " deg");
+            measurement_label(*workspace, "label_dihedral_digits", value));
         if (!overlay.has_value())
           return Result<Response>::failure(overlay.error());
         AnalysisResultDraft draft;
@@ -5688,9 +6203,55 @@ command::Registry make_default_registry(
                 "error", 1.0e-9, 1.0e-12, "trajectory_range"));
       };
     } else if (canonical_name == "traj load") {
-      handler = [workspace](const Arguments &arguments, TaskContext &) {
-        const auto provider =
-            requested_provider(arguments, io::FormatDirection::read);
+      handler = [workspace, molfile_registry,
+                 molfile_action_mutex](const Arguments &arguments,
+                                       TaskContext &context) {
+        const auto requested = arguments.at("provider");
+        const auto is_molfile = requested.starts_with("molfile:");
+        std::unique_lock<std::timed_mutex> action_lock{*molfile_action_mutex,
+                                                       std::defer_lock};
+        std::shared_ptr<const io::MolfileTrajectorySource> molfile_source;
+        auto provider =
+            is_molfile
+                ? Result<io::FormatProvider>::failure(operation::Error{
+                      operation::ErrorCode::unsupported,
+                      "molfile provider is not registered: " + requested, {}})
+                : requested_provider(arguments, io::FormatDirection::read);
+        if (is_molfile) {
+          const auto selected = acquire_molfile_provider(
+              *molfile_registry, action_lock, requested,
+              arguments.at("file-format"), arguments, context);
+          if (!selected.has_value()) {
+            return Result<Response>::failure(selected.error());
+          }
+          provider = Result<io::FormatProvider>::success(
+              molfile_provider_value(selected.value()));
+          const auto particle_group = arguments.find("particle-group");
+          if (arguments.at("mapping") == "explicit" ||
+              arguments.at("coordinate-unit") != "auto" ||
+              (particle_group != arguments.end() &&
+               !particle_group->second.empty())) {
+            return Result<Response>::failure(operation::Error{
+                operation::ErrorCode::unsupported,
+                "molfile trajectories support only exact or index mapping in "
+                "the plugin's own unit",
+                "drop --coordinate-unit, --particle-group and explicit mapping"});
+          }
+          const auto *active = workspace->active_object();
+          if (active == nullptr) {
+            return Result<Response>::failure(operation::Error{
+                operation::ErrorCode::not_found,
+                "trajectory attachment requires an active object",
+                "load or select a structure first"});
+          }
+          const auto opened = molfile_registry->open_trajectory(
+              arguments.at("path"), requested,
+              active->system->topology()->atom_count(), context);
+          if (!opened.has_value()) {
+            return Result<Response>::failure(opened.error());
+          }
+          molfile_source = opened.value();
+        }
         if (!provider.has_value()) return Result<Response>::failure(provider.error());
         const auto cache_mib = size_argument(arguments, "cache-mib", true);
         const auto prefetch_frames =
@@ -5748,14 +6309,15 @@ command::Registry make_default_registry(
         }
         const auto loaded = workspace->load_trajectory(
             arguments.at("path"),
-            trajectory_format(arguments.at("file-format")),
+            is_molfile ? io::TrajectoryFormat::molfile
+                       : trajectory_format(arguments.at("file-format")),
             cache_mib.value() * bytes_per_mib, prefetch_frames.value(),
             arguments.at("coordinate-unit") == "auto"
                 ? std::nullopt
                 : std::optional<operation::LengthUnit>{length_unit(
                       arguments.at("coordinate-unit"))},
             std::move(h5md_particle_group), mapping_policy, atom_map.value(),
-            expected_topology_version);
+            expected_topology_version, molfile_source);
         if (!loaded.has_value()) {
           return Result<Response>::failure(loaded.error());
         }
@@ -5783,6 +6345,13 @@ command::Registry make_default_registry(
                            loaded.value().prefetch.frame_indices.size()));
         fields.emplace("prefetch_state", std::string{trajectory::to_string(
                                              loaded.value().prefetch.state)});
+        if (molfile_source != nullptr) {
+          command::Value::Array loss;
+          for (const auto &entry : molfile_source->loss()) {
+            loss.emplace_back(entry);
+          }
+          fields.emplace("molfile_loss", std::move(loss));
+        }
         fields.emplace("atom_mapping",
                        trajectory_mapping_value(loaded.value().mapping));
         fields.emplace("semantics",

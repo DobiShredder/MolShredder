@@ -4,6 +4,7 @@
 #include <functional>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -43,6 +44,9 @@ struct EvaluationContext {
   std::string_view object_name;
   std::optional<model::Vec3d> scene_center;
   std::optional<model::Vec3d> rotation_origin;
+  // Rounds stored property and coordinate values to float32 before numeric
+  // arithmetic, matching references that store atom fields as float.
+  bool float32_field_values{};
 };
 
 [[nodiscard]] operation::Result<Mask> evaluate(
@@ -52,5 +56,19 @@ struct EvaluationContext {
 
 [[nodiscard]] bool mask_is_valid(std::span<const std::uint8_t> mask,
                                  std::size_t atom_count) noexcept;
+
+// Evaluates a numeric atom expression for every atom. Missing source values
+// (absent property presence or frame atom) yield nullopt for that atom.
+[[nodiscard]] operation::Result<std::vector<std::optional<double>>>
+evaluate_numeric(const NumericNode& expression, const model::Topology& topology,
+                 const EvaluationContext& context = {});
+
+// Per-atom van der Waals radii in Angstrom: PQR/vdw_radius property when
+// present, otherwise the Bondi element table (1.7 A for unknown elements).
+[[nodiscard]] operation::Result<std::vector<double>>
+atom_vdw_radii(const model::Topology& topology);
+
+// Canonical element symbol for an atomic number ("" when unknown).
+[[nodiscard]] std::string atom_element_symbol(std::uint8_t atomic_number);
 
 }  // namespace molshredder::selection

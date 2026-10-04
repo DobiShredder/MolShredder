@@ -236,7 +236,23 @@ export_analysis_result(const PersistentAnalysisResult& record,
                        const std::filesystem::path& path,
                        operation::OutputFormat format, bool overwrite);
 
+// PyMOL-compatible measurement display: dashes are laid out symmetrically
+// from each segment midpoint with dash_length/dash_gap (Angstrom, scaled to
+// packet units by units_per_angstrom); a gap <= 1e-4 draws solid segments.
+struct AnalysisOverlayStyle {
+  double dash_length{0.15};
+  double dash_gap{0.45};
+  float dash_width{2.5F};
+  std::optional<render::ColorRgba> dash_color;
+  double units_per_angstrom{1.0};
+  // PyMOL angle_size/dihedral_size: arc radius as a fraction of the shorter
+  // (projected) arm.
+  double angle_size{0.6666};
+  double dihedral_size{0.6666};
+};
+
 [[nodiscard]] render::RenderPacket build_analysis_overlay_packet(
-    std::span<const PersistentAnalysisResult> records);
+    std::span<const PersistentAnalysisResult> records,
+    const AnalysisOverlayStyle &style = {});
 
 }  // namespace molshredder::application
