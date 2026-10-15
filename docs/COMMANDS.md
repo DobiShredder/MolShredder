@@ -165,6 +165,11 @@ object rename --object 2 --name "ligand A"
 object reorder --object 2 --position 1
 object delete --object current
 object topology-retain --atom-ids 3,1 --expected-version 1
+object count --object current --selection "name CA"
+object create --name cas --selection "name CA" --source ubq
+object copy --object ubq --name ubq-copy
+object extract --name waters --selection "resn HOH" --source ubq
+object remove-atoms --selection "resn HOH"
 ```
 
 `--object`는 `current`, stable object ID 또는 exact name을 받는다. `--position`은 object
@@ -172,6 +177,13 @@ panel의 1-based position이다. Rename과 reorder는 object ID와 scene-node ID
 Delete는 object에 속한 measurement와 render-setting override를 같이 제거하고, active object를
 지우면 같은 panel position의 다음 object 또는 직전 object를 선택한다. Missing target,
 duplicate name이나 범위 밖 position은 Workspace와 scene을 변경하지 않는다.
+
+`object count`는 상태를 바꾸지 않고 selection의 atom 수와 object의 state 수를 반환한다. `object create`와
+`object copy`는 선택한 atom의 stable ID·bond·모든 state를 복사한 새 object를 만들고 source를 바꾸지 않는다
+(copy는 `all` selection). `object extract`는 같은 object를 만든 뒤 source에서 그 atom을 제거하며 source가 빈
+object가 되는 경우는 거부한다. `object remove-atoms`는 active object에서 선택 atom과 그 bond를 제거하고
+(measurement와 해당 atom·bond의 setting override도 함께 정리) 모든 atom을 지우는 요청은 거부한다. 새 object 이름이
+이미 있거나 selection이 비어 있으면 아무 것도 바꾸지 않는다. 이 operation들은 아직 undo history에 들어가지 않는다.
 
 `object topology-retain`은 editing UI가 도입되기 전의 low-level snapshot operation이다. Active
 object의 stable atom ID를 주어진 순서로 유지하고 나머지를 삭제한다. 반드시 읽은 topology
@@ -247,6 +259,10 @@ molshredder toggle --representation REP [--selection EXPR]
 molshredder analyze center [--selection EXPR] [--mode centroid|com]
                                [--precision 0..15] [--unit angstrom|nanometer]
                                [--result-name NAME]
+molshredder analyze gyration [--selection EXPR] [--mode centroid|com]
+                               [--precision 0..15] [--unit angstrom|nanometer]
+molshredder analyze inertia [--selection EXPR] [--mode com|centroid]
+                               [--precision 0..15] [--unit angstrom|nanometer]
 molshredder measure distance --from EXPR --to EXPR
                                [--mode atom|centroid|com|minimum|maximum|mean|closest]
                                [--pbc raw|minimum-image]
@@ -405,6 +421,11 @@ Additive `format list`와 `save` 문법, atomic output 및 semantic loss table�
 - `analyze center`: 재사용 가능한 scalar/vector analysis result를 계산한다. `centroid`와 `com`을
   구분하며 기본 selection은 `all`이다. COM은 topology의 explicit `mass` property를 우선하고 없을
   때 versioned estimated element-mass table을 사용하며 provenance를 결과에 포함한다.
+- `analyze gyration`, `analyze inertia`: active object의 selection을 현재 frame에서 읽어 회전 반경
+  (`sqrt(sum(w|r-c|^2)/sum(w))`)과 중심 기준 관성 텐서의 principal moment(오름차순)·axis를 반환하는 pure result다.
+  `centroid`는 가중치 1, `com`은 `analyze center`와 같은 mass 규칙과 provenance를 쓴다. Axis는 오른손 직교 기저이며
+  각 axis의 절대값이 가장 큰 성분이 양수가 되도록 부호를 고정한다. 퇴화(`degenerate`)이면 그 사실을 보고한다. Moment는
+  `질량 단위*길이^2`(centroid는 `unit^2`)이며 `--unit`을 따른다. 빈 selection, 누락 atom(기본 error)은 오류다.
 - `measure distance`: scene/session에 남는 measurement를 만든다. 두 endpoint는 atom 또는 selection
   expression이고 mode가 reduction semantics를 지정한다. 현재 실행되는 첫 slice는 endpoint마다
   정확히 한 atom을 선택하는 `mode=atom`이며 `pbc=raw|minimum-image`를 지원한다. Minimum-image는

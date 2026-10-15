@@ -3720,6 +3720,68 @@ command::Registry make_default_registry(
             {"reordered object " + changed.value().name,
              object_lifecycle_fields(changed.value())});
       };
+    } else if (canonical_name == "object count") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const auto counted = workspace->count_selection(
+            arguments.at("object"), arguments.at("selection"));
+        if (!counted.has_value())
+          return Result<Response>::failure(counted.error());
+        const auto &value = counted.value();
+        return Result<Response>::success(
+            {"counted selection in " + value.object_name,
+             {{"atom_count", value.atom_count},
+              {"object_atom_count", value.object_atom_count},
+              {"object_id", value.object_id},
+              {"object_name", value.object_name},
+              {"selection", value.selection_expression},
+              {"state_count", optional_frame_count(value.state_count)}}});
+      };
+    } else if (canonical_name == "object create" ||
+               canonical_name == "object extract" ||
+               canonical_name == "object copy") {
+      const bool extract = canonical_name == "object extract";
+      const bool copy = canonical_name == "object copy";
+      handler = [workspace, extract, copy](const Arguments &arguments,
+                                           TaskContext &) {
+        const auto created = workspace->create_object_from_selection(
+            copy ? arguments.at("object") : arguments.at("source"),
+            arguments.at("name"), copy ? "all" : arguments.at("selection"),
+            extract);
+        if (!created.has_value())
+          return Result<Response>::failure(created.error());
+        const auto &value = created.value();
+        return Result<Response>::success(
+            {(extract ? "extracted object " : "created object ") +
+                 value.object_name,
+             {{"atom_count", value.atom_count},
+              {"bond_count", value.bond_count},
+              {"object_id", value.object_id},
+              {"object_name", value.object_name},
+              {"removed_from_source_atom_count",
+               value.removed_from_source_atom_count},
+              {"selection", value.selection_expression},
+              {"source_object_id", value.source_object_id},
+              {"source_object_name", value.source_object_name},
+              {"state_count", optional_frame_count(value.state_count)}}});
+      };
+    } else if (canonical_name == "object remove-atoms") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const auto removed =
+            workspace->remove_active_selection(arguments.at("selection"));
+        if (!removed.has_value())
+          return Result<Response>::failure(removed.error());
+        const auto &value = removed.value();
+        return Result<Response>::success(
+            {"removed atoms",
+             {{"atom_count", value.atom_count},
+              {"invalidated_measurement_count",
+               value.invalidated_measurement_count},
+              {"object_id", value.object_id},
+              {"previous_atom_count", value.previous_atom_count},
+              {"removed_atom_count", value.removed_atom_count},
+              {"removed_bond_count", value.removed_bond_count},
+              {"topology_version", value.topology_version}}});
+      };
     } else if (canonical_name == "object topology-retain") {
       handler = [workspace](const Arguments &arguments, TaskContext &) {
         const auto ids = atom_id_list_argument(arguments, "atom-ids");
@@ -5080,6 +5142,79 @@ command::Registry make_default_registry(
               {"visible_membership_count",
                static_cast<std::uint64_t>(
                    changed.value().visible_atom_count)}}});
+      };
+    } else if (canonical_name == "analyze gyration" ||
+               canonical_name == "analyze inertia") {
+      const bool inertia = canonical_name == "analyze inertia";
+      handler = [workspace, inertia](const Arguments &arguments, TaskContext &) {
+        const auto mode = arguments.at("mode") == "com"
+                              ? analysis::CenterMode::center_of_mass
+                              : analysis::CenterMode::centroid;
+        const auto analyzed =
+            workspace->analyze_shape(arguments.at("selection"), mode);
+        if (!analyzed.has_value())
+          return Result<Response>::failure(analyzed.error());
+        const auto target_unit = length_unit(arguments.at("unit"));
+        const auto precision =
+            static_cast<unsigned int>(std::stoul(arguments.at("precision")));
+        const auto &shape = analyzed.value().shape;
+        const auto length = [&](double value) {
+          return rounded(
+              convert_length(value, shape.coordinate_unit, target_unit),
+              precision);
+        };
+        const auto vector = [&](const model::Vec3d &value) {
+          return command::Value::Array{rounded(value.x, precision),
+                                       rounded(value.y, precision),
+                                       rounded(value.z, precision)};
+        };
+        const auto unit_name = std::string{length_unit_name(target_unit)};
+        command::Value::Object fields{
+            {"mode", arguments.at("mode")},
+            {"object_id", analyzed.value().object_id},
+            {"precision", precision},
+            {"selected_atom_count",
+             static_cast<std::uint64_t>(shape.selected_atom_count)},
+            {"selection", analyzed.value().selection_expression},
+            {"skipped_missing_atom_count",
+             static_cast<std::uint64_t>(shape.skipped_missing_atom_count)},
+            {"unit", unit_name},
+            {"used_atom_count",
+             static_cast<std::uint64_t>(shape.used_atom_count)}};
+        if (inertia) {
+          // Moments scale with length squared (and with mass in com mode).
+          const auto scale = convert_length(1.0, shape.coordinate_unit, target_unit);
+          command::Value::Array moments;
+          command::Value::Array axes;
+          for (std::size_t index = 0; index < 3U; ++index) {
+            moments.emplace_back(
+                rounded(shape.principal_moments[index] * scale * scale, precision));
+            axes.emplace_back(vector(shape.principal_axes[index]));
+          }
+          fields.emplace("center",
+                         command::Value::Array{length(shape.center.x),
+                                               length(shape.center.y),
+                                               length(shape.center.z)});
+          fields.emplace("degenerate", shape.degenerate);
+          fields.emplace("moment_unit",
+                         (shape.total_mass.has_value()
+                              ? shape.mass_unit.value_or("mass") + "*"
+                              : std::string{}) +
+                             unit_name + "^2");
+          fields.emplace("principal_axes", std::move(axes));
+          fields.emplace("principal_moments", std::move(moments));
+        } else {
+          fields.emplace("radius_of_gyration", length(shape.radius_of_gyration));
+        }
+        if (shape.total_mass.has_value()) {
+          fields.emplace("mass_estimated", shape.masses_estimated);
+          fields.emplace("mass_source", shape.mass_source);
+          fields.emplace("mass_unit", shape.mass_unit.value_or("unspecified"));
+          fields.emplace("total_mass", shape.total_mass.value());
+        }
+        return Result<Response>::success(
+            {inertia ? "inertia calculated" : "gyration calculated",
+             std::move(fields)});
       };
     } else if (canonical_name == "analyze center") {
       handler = [workspace](const Arguments &arguments, TaskContext &) {

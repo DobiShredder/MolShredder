@@ -15,6 +15,7 @@
 #include "molshredder/analysis/basic.hpp"
 #include "molshredder/analysis/contacts.hpp"
 #include "molshredder/analysis/principal_axes.hpp"
+#include "molshredder/analysis/shape.hpp"
 #include "molshredder/analysis/rdf.hpp"
 #include "molshredder/analysis/sasa.hpp"
 #include "molshredder/analysis/secondary_structure.hpp"
@@ -492,6 +493,30 @@ struct WorkspaceObjectInfo {
   bool has_trajectory{};
 };
 
+// Atom and state counts of one selection in one object (PyMOL count_atoms /
+// count_states).
+struct SelectionCountResult {
+  std::uint64_t object_id{};
+  std::string object_name;
+  std::string selection_expression;
+  std::size_t atom_count{};
+  std::size_t object_atom_count{};
+  std::optional<std::size_t> state_count;
+};
+
+// A new molecular object made from the selected atoms of another object.
+struct ObjectCreateResult {
+  std::uint64_t source_object_id{};
+  std::string source_object_name;
+  std::uint64_t object_id{};
+  std::string object_name;
+  std::string selection_expression;
+  std::size_t atom_count{};
+  std::size_t bond_count{};
+  std::optional<std::size_t> state_count;
+  std::size_t removed_from_source_atom_count{};
+};
+
 struct ObjectLifecycleResult {
   std::uint64_t object_id{};
   std::uint64_t scene_node_id{};
@@ -755,6 +780,13 @@ struct SelectionSnapshot {
   std::vector<std::string> atom_names;
   std::vector<std::uint8_t> atomic_numbers;
   std::vector<model::Vec3d> positions;
+};
+
+struct ShapeAnalysisResult {
+  std::uint64_t object_id{};
+  std::string selection_expression;
+  analysis::CenterMode mode{analysis::CenterMode::centroid};
+  analysis::ShapeResult shape;
 };
 
 struct CenterAnalysisResult {
@@ -1132,6 +1164,22 @@ public:
   [[nodiscard]] operation::Result<ObjectLifecycleResult>
   reorder_object(std::string_view object_reference,
                  std::size_t new_position);
+  // Counts selected atoms and states without changing any state.
+  [[nodiscard]] operation::Result<SelectionCountResult>
+  count_selection(std::string_view object_reference,
+                  std::string selection_expression) const;
+  // Creates a new object from the selected atoms of `source_reference`
+  // (all states, stable atom IDs kept). With `remove_from_source` the atoms
+  // are also removed from the source object (PyMOL extract).
+  [[nodiscard]] operation::Result<ObjectCreateResult>
+  create_object_from_selection(std::string_view source_reference,
+                               std::string name,
+                               std::string selection_expression,
+                               bool remove_from_source);
+  // Removes the selected atoms of the active object and their bonds
+  // (PyMOL remove). Removing every atom is refused; delete the object instead.
+  [[nodiscard]] operation::Result<TopologyMutationResult>
+  remove_active_selection(std::string selection_expression);
   [[nodiscard]] operation::Result<TopologyMutationResult>
   retain_active_atoms(std::span<const model::AtomId> ordered_atom_ids,
                       std::uint64_t expected_topology_version);
@@ -1183,6 +1231,10 @@ public:
       const RepresentationVisibilitySessionSnapshot &snapshot);
   [[nodiscard]] operation::Result<CenterAnalysisResult>
   analyze_center(std::string selection_expression, analysis::CenterMode mode);
+  // Radius of gyration and principal inertia axes of the active object's
+  // selection in its current frame (pure result; no state change).
+  [[nodiscard]] operation::Result<ShapeAnalysisResult>
+  analyze_shape(std::string selection_expression, analysis::CenterMode mode);
   [[nodiscard]] operation::Result<PersistentAnalysisResult>
   store_analysis_result(AnalysisResultDraft draft);
   [[nodiscard]] operation::Result<ScientificResultContract>

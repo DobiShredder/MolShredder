@@ -374,6 +374,7 @@ target_sources(
     src/analysis/basic.cpp
     src/analysis/contacts.cpp
     src/analysis/principal_axes.cpp
+    src/analysis/shape.cpp
     src/analysis/sasa.cpp
     src/analysis/rdf.cpp
     src/analysis/secondary_structure.cpp
@@ -476,6 +477,7 @@ target_sources(
       include/molshredder/analysis/basic.hpp
       include/molshredder/analysis/contacts.hpp
       include/molshredder/analysis/principal_axes.hpp
+      include/molshredder/analysis/shape.hpp
       include/molshredder/analysis/secondary_structure.hpp
       include/molshredder/analysis/time_series.hpp
       include/molshredder/application/default_registry.hpp
@@ -2456,6 +2458,15 @@ if(BUILD_TESTING)
   add_test(NAME selection.expression COMMAND molshredder_selection_tests)
 
   add_executable(
+    molshredder_shape_analysis_tests
+    tests/analysis/shape_test.cpp
+  )
+  target_compile_features(molshredder_shape_analysis_tests PRIVATE cxx_std_20)
+  target_link_libraries(molshredder_shape_analysis_tests PRIVATE MolShredder::Core)
+  molshredder_enable_warnings(molshredder_shape_analysis_tests)
+  add_test(NAME analysis.shape COMMAND molshredder_shape_analysis_tests)
+
+  add_executable(
     molshredder_basic_analysis_tests
     tests/analysis/basic_test.cpp
   )
@@ -3403,6 +3414,15 @@ if(BUILD_TESTING)
       "$<TARGET_FILE:molshredder_sample_plugin_good>"
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb"
       "${CMAKE_CURRENT_BINARY_DIR}"
+  )
+
+  add_test(
+    NAME frontend.closure_gap
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/closure_gap_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures"
   )
 
   add_test(

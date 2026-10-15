@@ -1782,6 +1782,177 @@ operation::Result<TopologyMutationResult> Workspace::retain_active_atoms(
       std::move(ids)});
 }
 
+operation::Result<SelectionCountResult>
+Workspace::count_selection(std::string_view object_reference,
+                           std::string selection_expression) const {
+  using R = operation::Result<SelectionCountResult>;
+  const auto index = object_index_by_reference(object_reference);
+  if (!index.has_value())
+    return R::failure(index.error());
+  const auto &object = objects_[index.value()];
+  const auto mask = selection_mask(object, selection_expression);
+  if (!mask.has_value())
+    return R::failure(mask.error());
+  const auto selected = static_cast<std::size_t>(
+      std::count_if(mask.value().begin(), mask.value().end(),
+                    [](const auto value) { return value != 0U; }));
+  return R::success(
+      {object.id, object.system->name(), std::move(selection_expression),
+       selected, object.system->topology()->atom_count(),
+       object.trajectory.has_value()
+           ? object.trajectory->cache->frame_count()
+           : object.system->coordinates()->frame_count()});
+}
+
+namespace {
+
+// Subset of a topology and its coordinate source for an ordered atom-ID list.
+struct AtomSubset {
+  std::shared_ptr<const model::Topology> topology;
+  std::shared_ptr<const model::CoordinateSource> coordinates;
+};
+
+operation::Result<AtomSubset>
+make_atom_subset(const model::MolecularSystem &system,
+                 std::span<const model::AtomId> ordered_atom_ids) {
+  using R = operation::Result<AtomSubset>;
+  const auto source_topology = system.topology();
+  auto builder = model::TopologyBuilder::from(*source_topology);
+  if (const auto error = builder.retain_atoms(ordered_atom_ids);
+      error.has_value())
+    return R::failure(*error);
+  const auto target = builder.build();
+  if (!target.has_value())
+    return R::failure(target.error());
+  const auto remap = model::remap_topology(*source_topology, *target.value());
+  std::vector<std::optional<std::size_t>> mapping;
+  mapping.reserve(remap.target_atoms.size());
+  for (const auto source : remap.target_atoms)
+    mapping.push_back(source.has_value()
+                          ? std::optional<std::size_t>{source->value}
+                          : std::nullopt);
+  const auto remapped =
+      model::RemappedCoordinateSource::create(system.coordinates(),
+                                              std::move(mapping));
+  if (!remapped.has_value())
+    return R::failure(remapped.error());
+  return R::success({target.value(), remapped.value()});
+}
+
+std::vector<model::AtomId> atom_ids_from(const std::vector<std::uint64_t> &ids) {
+  std::vector<model::AtomId> result;
+  result.reserve(ids.size());
+  for (const auto id : ids)
+    result.push_back(model::AtomId{id});
+  return result;
+}
+
+} // namespace
+
+operation::Result<ObjectCreateResult> Workspace::create_object_from_selection(
+    std::string_view source_reference, std::string name,
+    std::string selection_expression, bool remove_from_source) {
+  using R = operation::Result<ObjectCreateResult>;
+  const auto index = object_index_by_reference(source_reference);
+  if (!index.has_value())
+    return R::failure(index.error());
+  const auto source_id = objects_[index.value()].id;
+  const auto source_name = objects_[index.value()].system->name();
+  if (name.empty())
+    return R::failure(invalid("new object name must not be empty",
+                              "provide a unique object name"));
+  const auto selected = selected_atom_ids(source_id, selection_expression);
+  if (!selected.has_value())
+    return R::failure(selected.error());
+  if (selected.value().empty())
+    return R::failure(invalid("selection matches no atoms",
+                              "check the selection expression"));
+  const auto source_atom_count =
+      objects_[index.value()].system->topology()->atom_count();
+  if (remove_from_source && selected.value().size() == source_atom_count)
+    return R::failure(invalid(
+        "extracting every atom would leave an empty source object",
+        "use object copy, or rename the source object"));
+  const auto ids = atom_ids_from(selected.value());
+  const auto subset = make_atom_subset(*objects_[index.value()].system, ids);
+  if (!subset.has_value())
+    return R::failure(subset.error());
+  const auto previous_active = active_index_;
+  io::StructureDocument document;
+  document.format = io::StructureFormat::auto_detect;
+  document.source_name = "<object-" + std::to_string(source_id) + ">";
+  document.structures.push_back(
+      {name, subset.value().topology, subset.value().coordinates,
+       {{"derived_from_object", std::to_string(source_id)},
+        {"selection", selection_expression}}});
+  const auto loaded = load_structure_document(std::move(document), {}, name);
+  if (!loaded.has_value())
+    return R::failure(loaded.error());
+  const auto created_id = loaded.value().object_id;
+  const auto created_index = object_index_by_reference(std::to_string(created_id));
+  if (!created_index.has_value())
+    return R::failure(created_index.error());
+  const auto &created = objects_[created_index.value()];
+  ObjectCreateResult result{
+      source_id,
+      source_name,
+      created_id,
+      created.system->name(),
+      selection_expression,
+      created.system->topology()->atom_count(),
+      created.system->topology()->bonds().size(),
+      created.system->coordinates()->frame_count(),
+      0U};
+  if (remove_from_source) {
+    // Keep the new object active only after the source edit succeeds.
+    const auto source_index = object_index_by_reference(std::to_string(source_id));
+    if (!source_index.has_value())
+      return R::failure(source_index.error());
+    const auto activated = activate_object(source_id);
+    if (!activated.has_value()) {
+      static_cast<void>(delete_object(std::to_string(created_id)));
+      return R::failure(activated.error());
+    }
+    const auto removed = remove_active_selection(selection_expression);
+    if (!removed.has_value()) {
+      static_cast<void>(delete_object(std::to_string(created_id)));
+      if (previous_active.has_value() && *previous_active < objects_.size())
+        static_cast<void>(activate_object(objects_[*previous_active].id));
+      return R::failure(removed.error());
+    }
+    result.removed_from_source_atom_count = removed.value().removed_atom_count;
+    static_cast<void>(activate_object(created_id));
+  }
+  return R::success(std::move(result));
+}
+
+operation::Result<TopologyMutationResult>
+Workspace::remove_active_selection(std::string selection_expression) {
+  using R = operation::Result<TopologyMutationResult>;
+  const auto *object = active_object();
+  if (object == nullptr)
+    return R::failure(missing_active());
+  const auto selected = selected_atom_ids(object->id, selection_expression);
+  if (!selected.has_value())
+    return R::failure(selected.error());
+  if (selected.value().empty())
+    return R::failure(invalid("selection matches no atoms",
+                              "check the selection expression"));
+  const auto &topology = *object->system->topology();
+  if (selected.value().size() == topology.atom_count())
+    return R::failure(invalid(
+        "removing every atom would leave an empty object",
+        "use object delete to remove the whole object"));
+  std::set<std::uint64_t> removed(selected.value().begin(),
+                                  selected.value().end());
+  std::vector<model::AtomId> kept;
+  kept.reserve(topology.atom_count() - removed.size());
+  for (const auto id : topology.atom_ids())
+    if (!removed.contains(id.value))
+      kept.push_back(id);
+  return retain_active_atoms(kept, topology.version());
+}
+
 operation::Result<CoordinateEditResult> Workspace::set_active_atom_position(
     model::AtomId atom_id, model::Vec3d position,
     std::uint64_t expected_topology_version,
@@ -4908,6 +5079,46 @@ Workspace::analyze_center(std::string selection_expression,
   }
   return operation::Result<CenterAnalysisResult>::success(CenterAnalysisResult{
       object->id, std::move(selection_expression), mode, center.value()});
+}
+
+operation::Result<ShapeAnalysisResult>
+Workspace::analyze_shape(std::string selection_expression,
+                         analysis::CenterMode mode) {
+  using R = operation::Result<ShapeAnalysisResult>;
+  auto *object = mutable_active_object();
+  if (object == nullptr)
+    return R::failure(missing_active());
+  const auto mask = selection_mask(*object, selection_expression);
+  if (!mask.has_value())
+    return R::failure(mask.error());
+  const auto frame = active_frame(*object);
+  if (!frame.has_value())
+    return R::failure(frame.error());
+  analysis::MassValues masses;
+  if (mode == analysis::CenterMode::center_of_mass) {
+    auto resolved = analysis::masses_from_property(*object->system->topology());
+    if (!resolved.has_value() &&
+        resolved.error().code == operation::ErrorCode::not_found)
+      resolved = analysis::estimated_element_masses(*object->system->topology());
+    if (!resolved.has_value())
+      return R::failure(resolved.error());
+    masses = std::move(resolved.value());
+  }
+  analysis::ShapeRequest request;
+  request.frame = frame.value().get();
+  request.selected = mask.value();
+  request.mode = mode;
+  request.masses = masses.values;
+  request.mass_unit = masses.unit.has_value()
+                          ? std::string_view{masses.unit.value()}
+                          : std::string_view{};
+  request.mass_source = masses.source;
+  request.masses_estimated = masses.estimated;
+  const auto shape = analysis::calculate_shape(request);
+  if (!shape.has_value())
+    return R::failure(shape.error());
+  return R::success(ShapeAnalysisResult{
+      object->id, std::move(selection_expression), mode, shape.value()});
 }
 
 operation::Result<PersistentAnalysisResult>
