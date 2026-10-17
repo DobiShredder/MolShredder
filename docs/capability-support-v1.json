@@ -8,7 +8,7 @@
       "capability_id": "analysis.alignment.all_to_target",
       "domain": "analysis",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -16,7 +16,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Align all objects to a target"
     },
     {
@@ -24,7 +24,7 @@
       "capability_id": "analysis.alignment.ce",
       "domain": "analysis",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -32,7 +32,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Combinatorial Extension alignment"
     },
     {
@@ -40,7 +40,7 @@
       "capability_id": "analysis.alignment.multi_object",
       "domain": "analysis",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -48,7 +48,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Align multiple objects to one reference"
     },
     {
@@ -56,7 +56,7 @@
       "capability_id": "analysis.alignment.residue_structural",
       "domain": "analysis",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -64,7 +64,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Residue/structure-guided refined alignment"
     },
     {
@@ -88,7 +88,7 @@
       "capability_id": "analysis.atom_property.iterate",
       "domain": "analysis",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -96,7 +96,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Iterate atom properties read-only"
     },
     {
@@ -119,32 +119,32 @@
       "acceptance_level": "specified",
       "capability_id": "analysis.charge.sum_formal",
       "domain": "analysis",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Sum formal charges"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "analysis.charge.sum_partial",
       "domain": "analysis",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Sum partial charges"
     },
     {
@@ -152,7 +152,7 @@
       "capability_id": "analysis.contacts.find_pairs",
       "domain": "analysis",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -160,7 +160,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Find atom pairs API"
     },
     {
@@ -168,7 +168,7 @@
       "capability_id": "analysis.contacts.interchain",
       "domain": "analysis",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -176,7 +176,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Inter-chain contact distances"
     },
     {
@@ -184,7 +184,7 @@
       "capability_id": "analysis.coordinates.iterate_state",
       "domain": "analysis",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -192,7 +192,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Iterate atom coordinates read-only"
     },
     {
@@ -215,16 +215,16 @@
       "acceptance_level": "specified",
       "capability_id": "analysis.fit.explicit_pairs",
       "domain": "analysis",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Explicit-pair rigid fit"
     },
     {
@@ -299,16 +299,16 @@
       "acceptance_level": "specified",
       "capability_id": "analysis.mass.compute",
       "domain": "analysis",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Compute molecular mass"
     },
     {
@@ -380,7 +380,7 @@
       "capability_id": "analysis.measurement_object.distance.bonded",
       "domain": "analysis",
       "evidence_count": 0,
-      "implementation_status": "specified",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -388,7 +388,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Bond distances"
     },
     {
@@ -412,7 +412,7 @@
       "capability_id": "analysis.measurement_object.distance.exclusion_filtered",
       "domain": "analysis",
       "evidence_count": 0,
-      "implementation_status": "specified",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -420,7 +420,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Exclusion-filtered distances"
     },
     {
@@ -492,7 +492,7 @@
       "capability_id": "analysis.measurement_object.distance.vdw_ratio",
       "domain": "analysis",
       "evidence_count": 0,
-      "implementation_status": "specified",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -500,39 +500,39 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "VDW-ratio contact distances"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "analysis.query.atom_ids",
       "domain": "analysis",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Query atom ID list"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "analysis.query.atom_indices",
       "domain": "analysis",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Query object atom indices"
     },
     {
@@ -555,16 +555,16 @@
       "acceptance_level": "specified",
       "capability_id": "analysis.query.chains",
       "domain": "analysis",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Query chain identifiers"
     },
     {
@@ -603,16 +603,16 @@
       "acceptance_level": "specified",
       "capability_id": "analysis.query.phi_psi",
       "domain": "analysis",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 2,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Query backbone phi/psi"
     },
     {
@@ -684,7 +684,7 @@
       "capability_id": "analysis.secondary_structure.setting.ss_helix_phi_exclude",
       "domain": "analysis",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -692,7 +692,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Setting ss_helix_phi_exclude"
     },
     {
@@ -700,7 +700,7 @@
       "capability_id": "analysis.secondary_structure.setting.ss_helix_phi_include",
       "domain": "analysis",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -708,7 +708,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Setting ss_helix_phi_include"
     },
     {
@@ -716,7 +716,7 @@
       "capability_id": "analysis.secondary_structure.setting.ss_helix_phi_target",
       "domain": "analysis",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -724,7 +724,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Setting ss_helix_phi_target"
     },
     {
@@ -732,7 +732,7 @@
       "capability_id": "analysis.secondary_structure.setting.ss_helix_psi_exclude",
       "domain": "analysis",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -740,7 +740,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Setting ss_helix_psi_exclude"
     },
     {
@@ -748,7 +748,7 @@
       "capability_id": "analysis.secondary_structure.setting.ss_helix_psi_include",
       "domain": "analysis",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -756,7 +756,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Setting ss_helix_psi_include"
     },
     {
@@ -764,7 +764,7 @@
       "capability_id": "analysis.secondary_structure.setting.ss_helix_psi_target",
       "domain": "analysis",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -772,7 +772,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Setting ss_helix_psi_target"
     },
     {
@@ -780,7 +780,7 @@
       "capability_id": "analysis.secondary_structure.setting.ss_strand_phi_exclude",
       "domain": "analysis",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -788,7 +788,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Setting ss_strand_phi_exclude"
     },
     {
@@ -796,7 +796,7 @@
       "capability_id": "analysis.secondary_structure.setting.ss_strand_phi_include",
       "domain": "analysis",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -804,7 +804,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Setting ss_strand_phi_include"
     },
     {
@@ -812,7 +812,7 @@
       "capability_id": "analysis.secondary_structure.setting.ss_strand_phi_target",
       "domain": "analysis",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -820,7 +820,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Setting ss_strand_phi_target"
     },
     {
@@ -828,7 +828,7 @@
       "capability_id": "analysis.secondary_structure.setting.ss_strand_psi_exclude",
       "domain": "analysis",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -836,7 +836,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Setting ss_strand_psi_exclude"
     },
     {
@@ -844,7 +844,7 @@
       "capability_id": "analysis.secondary_structure.setting.ss_strand_psi_include",
       "domain": "analysis",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -852,7 +852,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Setting ss_strand_psi_include"
     },
     {
@@ -860,7 +860,7 @@
       "capability_id": "analysis.secondary_structure.setting.ss_strand_psi_target",
       "domain": "analysis",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -868,7 +868,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Setting ss_strand_psi_target"
     },
     {
@@ -1324,7 +1324,7 @@
       "capability_id": "analysis.surface_area.relative_per_residue",
       "domain": "analysis",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -1332,7 +1332,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Relative per-residue SASA"
     },
     {
@@ -1390,7 +1390,7 @@
       "capability_id": "automation.command.alias",
       "domain": "automation",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -1398,7 +1398,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Register a literal command alias"
     },
     {
@@ -1438,7 +1438,7 @@
       "capability_id": "automation.command.register",
       "domain": "automation",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -1446,7 +1446,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Register a Python function as a command"
     },
     {
@@ -1486,7 +1486,7 @@
       "capability_id": "automation.embedding.context_manager",
       "domain": "automation",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -1494,7 +1494,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Context-managed embedded lifecycle"
     },
     {
@@ -1534,7 +1534,7 @@
       "capability_id": "automation.embedding.manage",
       "domain": "automation",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -1542,7 +1542,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Embedded application lifecycle"
     },
     {
@@ -1550,7 +1550,7 @@
       "capability_id": "automation.embedding.multi_instance",
       "domain": "automation",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -1558,23 +1558,23 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Multiple embedded instances"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "automation.embedding.singleton",
       "domain": "automation",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Embedded singleton instance"
     },
     {
@@ -1616,7 +1616,7 @@
       "capability_id": "automation.script.namespace.global",
       "domain": "automation",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -1624,7 +1624,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Run in the global PyMOL namespace"
     },
     {
@@ -1632,7 +1632,7 @@
       "capability_id": "automation.script.namespace.local",
       "domain": "automation",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -1640,7 +1640,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Run with local variable isolation"
     },
     {
@@ -1648,7 +1648,7 @@
       "capability_id": "automation.script.namespace.main",
       "domain": "automation",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -1656,7 +1656,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Run in the main Python namespace"
     },
     {
@@ -1664,7 +1664,7 @@
       "capability_id": "automation.script.namespace.module",
       "domain": "automation",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -1672,7 +1672,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Run as a synthetic Python module"
     },
     {
@@ -1680,7 +1680,7 @@
       "capability_id": "automation.script.namespace.private",
       "domain": "automation",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -1688,7 +1688,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Run with private local variables"
     },
     {
@@ -1730,7 +1730,7 @@
       "capability_id": "automation.script.threaded_spawn",
       "domain": "automation",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -1738,7 +1738,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Spawn a Python script thread"
     },
     {
@@ -1778,7 +1778,7 @@
       "capability_id": "automation.startup.config_discovery",
       "domain": "automation",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -1786,7 +1786,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Discover startup configuration scripts"
     },
     {
@@ -1794,7 +1794,7 @@
       "capability_id": "automation.startup.deferred_order",
       "domain": "automation",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -1802,7 +1802,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Deterministic deferred startup order"
     },
     {
@@ -1826,7 +1826,7 @@
       "capability_id": "automation.startup.manage",
       "domain": "automation",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -1834,7 +1834,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Startup automation lifecycle"
     },
     {
@@ -1842,7 +1842,7 @@
       "capability_id": "automation.startup.python_foreground",
       "domain": "automation",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -1850,7 +1850,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Execute startup Python script in foreground"
     },
     {
@@ -1873,16 +1873,16 @@
       "acceptance_level": "specified",
       "capability_id": "automation.startup.stdin",
       "domain": "automation",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Read command stream from standard input"
     },
     {
@@ -1890,7 +1890,7 @@
       "capability_id": "script.api.sync",
       "domain": "automation",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -1898,7 +1898,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Synchronize command queue"
     },
     {
@@ -1940,7 +1940,7 @@
       "capability_id": "script.log.close",
       "domain": "automation",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -1948,7 +1948,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Close command log"
     },
     {
@@ -1956,7 +1956,7 @@
       "capability_id": "script.log.open",
       "domain": "automation",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -1964,7 +1964,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Open command log"
     },
     {
@@ -4346,7 +4346,7 @@
       "capability_id": "io.format.aln.read",
       "domain": "io",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -4354,7 +4354,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "ALN read"
     },
     {
@@ -4362,7 +4362,7 @@
       "capability_id": "io.format.aln.write",
       "domain": "io",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -4370,7 +4370,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "ALN write"
     },
     {
@@ -4441,16 +4441,16 @@
       "acceptance_level": "specified",
       "capability_id": "io.format.ccp4.write",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "CCP4 write"
     },
     {
@@ -4554,7 +4554,7 @@
       "capability_id": "io.format.fasta.read",
       "domain": "io",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -4562,7 +4562,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "FASTA read"
     },
     {
@@ -4570,7 +4570,7 @@
       "capability_id": "io.format.fasta.write",
       "domain": "io",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -4578,7 +4578,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "FASTA write"
     },
     {
@@ -4681,16 +4681,16 @@
       "acceptance_level": "specified",
       "capability_id": "io.format.map.write",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "MAP write"
     },
     {
@@ -4890,7 +4890,7 @@
       "capability_id": "io.format.p1m.read",
       "domain": "io",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -4898,7 +4898,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "P1M read"
     },
     {
@@ -5002,7 +5002,7 @@
       "capability_id": "io.format.pkl.write",
       "domain": "io",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -5010,7 +5010,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "PKL write"
     },
     {
@@ -5018,7 +5018,7 @@
       "capability_id": "io.format.pkla.write",
       "domain": "io",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -5026,7 +5026,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "PKLA write"
     },
     {
@@ -5034,7 +5034,7 @@
       "capability_id": "io.format.ply.read",
       "domain": "io",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -5042,7 +5042,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "PLY read"
     },
     {
@@ -5116,7 +5116,7 @@
       "capability_id": "io.format.pwg.read",
       "domain": "io",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -5124,7 +5124,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "PWG read"
     },
     {
@@ -5132,7 +5132,7 @@
       "capability_id": "io.format.py.read",
       "domain": "io",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "excluded",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -5140,7 +5140,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "PY read"
     },
     {
@@ -5148,7 +5148,7 @@
       "capability_id": "io.format.r3d.read",
       "domain": "io",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -5156,7 +5156,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "R3D read"
     },
     {
@@ -5372,7 +5372,7 @@
       "capability_id": "io.load.batch_glob",
       "domain": "io",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -5380,7 +5380,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Batch glob load"
     },
     {
@@ -5388,7 +5388,7 @@
       "capability_id": "io.load.compression",
       "domain": "io",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -5396,7 +5396,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Compressed input"
     },
     {
@@ -5404,7 +5404,7 @@
       "capability_id": "io.load.discrete",
       "domain": "io",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -5412,7 +5412,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Discrete multi-model load"
     },
     {
@@ -5435,16 +5435,16 @@
       "acceptance_level": "specified",
       "capability_id": "io.load.extension_alias",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Load extension alias normalization"
     },
     {
@@ -5483,16 +5483,16 @@
       "acceptance_level": "specified",
       "capability_id": "io.load.memory",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Load in-memory content"
     },
     {
@@ -5500,7 +5500,7 @@
       "capability_id": "io.load.multiplex",
       "domain": "io",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -5508,7 +5508,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Multiplex multi-model load"
     },
     {
@@ -5612,7 +5612,7 @@
       "capability_id": "io.load.remote_url",
       "domain": "io",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -5620,14 +5620,14 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Remote URL input"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "io.load.state_append",
       "domain": "io",
-      "evidence_count": 0,
+      "evidence_count": 1,
       "implementation_status": "partial",
       "interfaces": {
         "cli": true,
@@ -5660,7 +5660,7 @@
       "capability_id": "io.load.trajectory.image_shift",
       "domain": "io",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -5668,7 +5668,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "AMBER trajectory image and shift"
     },
     {
@@ -5692,7 +5692,7 @@
       "capability_id": "io.load.trajectory.selection",
       "domain": "io",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -5700,7 +5700,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Trajectory coordinate subset"
     },
     {
@@ -5708,7 +5708,7 @@
       "capability_id": "io.model.export",
       "domain": "io",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -5716,7 +5716,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Export in-memory model"
     },
     {
@@ -5724,7 +5724,7 @@
       "capability_id": "io.model.import",
       "domain": "io",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -5732,7 +5732,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Import in-memory model"
     },
     {
@@ -5772,7 +5772,7 @@
       "capability_id": "io.save.compression",
       "domain": "io",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -5780,7 +5780,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Compressed output"
     },
     {
@@ -5820,7 +5820,7 @@
       "capability_id": "io.save.multifile_template",
       "domain": "io",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -5828,14 +5828,14 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Object/state filename template export"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "io.save.selection",
       "domain": "io",
-      "evidence_count": 0,
+      "evidence_count": 1,
       "implementation_status": "partial",
       "interfaces": {
         "cli": true,
@@ -6779,64 +6779,64 @@
       "acceptance_level": "specified",
       "capability_id": "io.string.read_mol",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Read MOL text"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "io.string.read_pdb",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Read PDB text"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "io.string.read_sdf",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Read SDF text"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "io.string.write_pdb",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Write PDB text"
     },
     {
@@ -6860,7 +6860,7 @@
       "capability_id": "session.dirty_state",
       "domain": "io",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -6868,7 +6868,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Session dirty-state tracking"
     },
     {
@@ -6892,7 +6892,7 @@
       "capability_id": "session.export.compatibility",
       "domain": "io",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "excluded",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -6900,7 +6900,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Export sessions for older PyMOL versions"
     },
     {
@@ -6908,7 +6908,7 @@
       "capability_id": "session.extension.hooks",
       "domain": "io",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -6916,7 +6916,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Extension session save and restore hooks"
     },
     {
@@ -6974,7 +6974,7 @@
       "capability_id": "session.partial",
       "domain": "io",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -6982,7 +6982,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Partial session export and restore"
     },
     {
@@ -6990,7 +6990,7 @@
       "capability_id": "session.path.current",
       "domain": "io",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -6998,7 +6998,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Current session-file path tracking"
     },
     {
@@ -7090,7 +7090,7 @@
       "capability_id": "session.serialization.encoding",
       "domain": "io",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -7098,7 +7098,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Session binary and compression encoding"
     },
     {
@@ -7140,7 +7140,7 @@
       "capability_id": "object.copy.merge_renamed",
       "domain": "object_state",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -7148,7 +7148,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Copy selection into object with identifier conflict repair"
     },
     {
@@ -7220,7 +7220,7 @@
       "capability_id": "object.edit.sort_atoms",
       "domain": "object_state",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -7228,7 +7228,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Canonical atom reorder"
     },
     {
@@ -7236,7 +7236,7 @@
       "capability_id": "object.edit.uniquify_identifier",
       "domain": "object_state",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -7244,7 +7244,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Repair identifier collisions"
     },
     {
@@ -7268,7 +7268,7 @@
       "capability_id": "object.hierarchy.auto_name",
       "domain": "object_state",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -7276,19 +7276,19 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Dot-prefix automatic grouping"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "object.hierarchy.group.add",
       "domain": "object_state",
-      "evidence_count": 0,
+      "evidence_count": 1,
       "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
@@ -7300,7 +7300,7 @@
       "capability_id": "object.hierarchy.group.auto",
       "domain": "object_state",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -7308,35 +7308,35 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Context-sensitive group add or toggle"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "object.hierarchy.group.close",
       "domain": "object_state",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Collapse a group in the object panel"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "object.hierarchy.group.empty",
       "domain": "object_state",
-      "evidence_count": 0,
+      "evidence_count": 1,
       "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
@@ -7347,28 +7347,28 @@
       "acceptance_level": "specified",
       "capability_id": "object.hierarchy.group.excise",
       "domain": "object_state",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Delete a group while retaining its members"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "object.hierarchy.group.manage",
       "domain": "object_state",
-      "evidence_count": 0,
+      "evidence_count": 1,
       "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
@@ -7379,32 +7379,32 @@
       "acceptance_level": "specified",
       "capability_id": "object.hierarchy.group.open",
       "domain": "object_state",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Expand a group in the object panel"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "object.hierarchy.group.purge_members",
       "domain": "object_state",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Delete all members of a group"
     },
     {
@@ -7427,12 +7427,12 @@
       "acceptance_level": "specified",
       "capability_id": "object.hierarchy.group.remove",
       "domain": "object_state",
-      "evidence_count": 0,
+      "evidence_count": 1,
       "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
@@ -7443,28 +7443,28 @@
       "acceptance_level": "specified",
       "capability_id": "object.hierarchy.group.toggle",
       "domain": "object_state",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Toggle group expansion in the object panel"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "object.hierarchy.group.ungroup",
       "domain": "object_state",
-      "evidence_count": 0,
+      "evidence_count": 1,
       "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
@@ -7475,16 +7475,16 @@
       "acceptance_level": "specified",
       "capability_id": "object.matrix.copy",
       "domain": "object_state",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Copy object transformation matrix"
     },
     {
@@ -7523,16 +7523,16 @@
       "acceptance_level": "specified",
       "capability_id": "object.matrix.reset",
       "domain": "object_state",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Reset object transformation matrix"
     },
     {
@@ -7587,16 +7587,16 @@
       "acceptance_level": "specified",
       "capability_id": "object.order.natural_sort",
       "domain": "object_state",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Natural-sort object-panel names"
     },
     {
@@ -7635,7 +7635,7 @@
       "acceptance_level": "specified",
       "capability_id": "object.query.covering_objects",
       "domain": "object_state",
-      "evidence_count": 0,
+      "evidence_count": 1,
       "implementation_status": "partial",
       "interfaces": {
         "cli": true,
@@ -7652,7 +7652,7 @@
       "capability_id": "object.query.discrete_count",
       "domain": "object_state",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -7660,7 +7660,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Discrete-object count"
     },
     {
@@ -7699,7 +7699,7 @@
       "acceptance_level": "specified",
       "capability_id": "object.query.type",
       "domain": "object_state",
-      "evidence_count": 0,
+      "evidence_count": 1,
       "implementation_status": "partial",
       "interfaces": {
         "cli": true,
@@ -7731,48 +7731,48 @@
       "acceptance_level": "specified",
       "capability_id": "object.split.chains",
       "domain": "object_state",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Split objects by chain"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "object.state.delete",
       "domain": "object_state",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Delete coordinate states"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "object.state.join",
       "domain": "object_state",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Join objects into one multi-state object"
     },
     {
@@ -7795,32 +7795,32 @@
       "acceptance_level": "specified",
       "capability_id": "object.state.join.identical_topology",
       "domain": "object_state",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Join states assuming identical topology"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "object.state.join.identifier_intersection",
       "domain": "object_state",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Join states by identifier intersection"
     },
     {
@@ -7843,16 +7843,16 @@
       "acceptance_level": "specified",
       "capability_id": "object.state.split",
       "domain": "object_state",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Split states into single-state objects"
     },
     {
@@ -7891,7 +7891,7 @@
       "acceptance_level": "specified",
       "capability_id": "object.visibility.disable.named",
       "domain": "object_state",
-      "evidence_count": 0,
+      "evidence_count": 1,
       "implementation_status": "partial",
       "interfaces": {
         "cli": true,
@@ -7907,23 +7907,23 @@
       "acceptance_level": "specified",
       "capability_id": "object.visibility.disable.selection",
       "domain": "object_state",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Disable objects covered by an atom selection"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "object.visibility.enable.named",
       "domain": "object_state",
-      "evidence_count": 0,
+      "evidence_count": 1,
       "implementation_status": "partial",
       "interfaces": {
         "cli": true,
@@ -7940,7 +7940,7 @@
       "capability_id": "object.visibility.enable.parents",
       "domain": "object_state",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -7948,23 +7948,23 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Enable an object's parent groups"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "object.visibility.enable.selection",
       "domain": "object_state",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Enable objects covered by an atom selection"
     },
     {
@@ -8051,32 +8051,32 @@
       "acceptance_level": "specified",
       "capability_id": "pbc.unwrap",
       "domain": "pbc",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 2,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Unwrap periodic jumps"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "pbc.wrap",
       "domain": "pbc",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 2,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Wrap into periodic box"
     },
     {
@@ -9277,144 +9277,144 @@
       "acceptance_level": "specified",
       "capability_id": "export.image.dimension_units",
       "domain": "rendering",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Physical image dimensions"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "export.image.dimension_units.mode.centimeters",
       "domain": "rendering",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Image dimensions in centimeters"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "export.image.dimension_units.mode.inches",
       "domain": "rendering",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Image dimensions in inches"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "export.image.dimension_units.mode.millimeters",
       "domain": "rendering",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Image dimensions in millimeters"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "export.image.dimension_units.mode.pixels",
       "domain": "rendering",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Image dimensions in pixels"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "export.image.filename_extension",
       "domain": "rendering",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Image filename extension policy"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "export.image.format",
       "domain": "rendering",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Image encoding selection"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "export.image.format.mode.guess",
       "domain": "rendering",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Image format guess"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "export.image.format.mode.png",
       "domain": "rendering",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Image format png"
     },
     {
@@ -9454,7 +9454,7 @@
       "capability_id": "export.image.prior_buffer",
       "domain": "rendering",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -9462,7 +9462,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Prior image-buffer policy"
     },
     {
@@ -9470,7 +9470,7 @@
       "capability_id": "export.image.prior_buffer.mode.render_current",
       "domain": "rendering",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -9478,7 +9478,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Image prior-buffer mode render_current"
     },
     {
@@ -9486,7 +9486,7 @@
       "capability_id": "export.image.prior_buffer.mode.require_prior",
       "domain": "rendering",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -9494,7 +9494,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Image prior-buffer mode require_prior"
     },
     {
@@ -9502,7 +9502,7 @@
       "capability_id": "export.image.prior_buffer.mode.try_prior",
       "domain": "rendering",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -9510,7 +9510,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Image prior-buffer mode try_prior"
     },
     {
@@ -9533,32 +9533,32 @@
       "acceptance_level": "specified",
       "capability_id": "export.image.source.mode.ray",
       "domain": "rendering",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Image source ray"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "export.image.source.mode.viewport_or_draw",
       "domain": "rendering",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Image source viewport_or_draw"
     },
     {
@@ -9581,16 +9581,16 @@
       "acceptance_level": "specified",
       "capability_id": "export.movie.frame_sequence",
       "domain": "rendering",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Export movie frame sequence"
     },
     {
@@ -9693,32 +9693,32 @@
       "acceptance_level": "specified",
       "capability_id": "export.movie.frame_sequence.range",
       "domain": "rendering",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Frame-sequence inclusive range"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "export.movie.frame_sequence.render_mode",
       "domain": "rendering",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Frame-sequence render mode"
     },
     {
@@ -11283,16 +11283,16 @@
       "acceptance_level": "specified",
       "capability_id": "render.image.draw.aspect_preserving_size",
       "domain": "rendering",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Draw aspect-preserving dimensions"
     },
     {
@@ -11318,7 +11318,7 @@
       "capability_id": "render.image.draw.requires_graphics_context",
       "domain": "rendering",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -11326,7 +11326,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Draw graphics-context requirement"
     },
     {
@@ -11368,7 +11368,7 @@
       "capability_id": "render.image.ray.antialias",
       "domain": "rendering",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -11376,23 +11376,23 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Ray antialias override"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "render.image.ray.aspect_preserving_size",
       "domain": "rendering",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Ray aspect-preserving dimensions"
     },
     {
@@ -11400,7 +11400,7 @@
       "capability_id": "render.image.ray.execution.async",
       "domain": "rendering",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -11408,7 +11408,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Asynchronous ray execution"
     },
     {
@@ -11468,7 +11468,7 @@
       "capability_id": "render.image.ray.renderer.mode.default_setting",
       "domain": "rendering",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -11476,7 +11476,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Ray renderer default_setting"
     },
     {
@@ -11484,7 +11484,7 @@
       "capability_id": "render.image.ray.renderer.mode.geometry_count",
       "domain": "rendering",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -11492,7 +11492,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Ray renderer geometry_count"
     },
     {
@@ -11500,7 +11500,7 @@
       "capability_id": "render.image.ray.renderer.mode.povray",
       "domain": "rendering",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -11508,7 +11508,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Ray renderer povray"
     },
     {
@@ -11516,7 +11516,7 @@
       "capability_id": "render.image.ray.stereo_pair",
       "domain": "rendering",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -11524,7 +11524,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Ray stereo angle and shift"
     },
     {
@@ -11532,7 +11532,7 @@
       "capability_id": "render.image.ray.stops_animation",
       "domain": "rendering",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -11540,7 +11540,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Ray animation stop policy"
     },
     {
@@ -13574,7 +13574,7 @@
       "capability_id": "setting.service.bond.get",
       "domain": "rendering",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -13582,7 +13582,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Get per-bond setting"
     },
     {
@@ -13590,7 +13590,7 @@
       "capability_id": "setting.service.bond.set",
       "domain": "rendering",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -13598,7 +13598,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Set per-bond setting"
     },
     {
@@ -13606,7 +13606,7 @@
       "capability_id": "setting.service.bond.unset",
       "domain": "rendering",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -13614,7 +13614,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Unset per-bond setting"
     },
     {
@@ -13750,7 +13750,7 @@
       "capability_id": "setting.service.unset_deep",
       "domain": "rendering",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "partial",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -13758,7 +13758,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Deep unset of scoped settings"
     },
     {
@@ -24631,80 +24631,80 @@
       "acceptance_level": "specified",
       "capability_id": "camera.named_view.clear_all",
       "domain": "scene",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Clear or list all named camera views"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "camera.named_view.delete",
       "domain": "scene",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Delete a named camera view"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "camera.named_view.manage",
       "domain": "scene",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Named camera-view lifecycle"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "camera.named_view.recall",
       "domain": "scene",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Recall a named camera view"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "camera.named_view.store",
       "domain": "scene",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Store a named camera view"
     },
     {
@@ -24730,7 +24730,7 @@
       "capability_id": "camera.navigation.rock",
       "domain": "scene",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -24738,7 +24738,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Continuous Y-axis camera rocking"
     },
     {
@@ -25320,7 +25320,7 @@
       "capability_id": "camera.stereo.quadbuffer",
       "domain": "scene",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -25328,7 +25328,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Quad-buffered stereo mode"
     },
     {
@@ -25479,112 +25479,112 @@
       "acceptance_level": "specified",
       "capability_id": "scene.navigate.first",
       "domain": "scene",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Recall the first ordered scene"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "scene.navigate.next",
       "domain": "scene",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Recall the next ordered scene"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "scene.navigate.previous",
       "domain": "scene",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Recall the previous ordered scene"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "scene.order.manage",
       "domain": "scene",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Ordered scene collection management"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "scene.order.move_top",
       "domain": "scene",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Move scenes to the top"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "scene.order.natural_sort",
       "domain": "scene",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Natural-sort scene names"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "scene.order.relative",
       "domain": "scene",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Move scenes at their current relative location"
     },
     {
@@ -25608,7 +25608,7 @@
       "capability_id": "scene.query.thumbnail",
       "domain": "scene",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -25616,7 +25616,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Query a scene thumbnail"
     },
     {
@@ -25639,16 +25639,16 @@
       "acceptance_level": "specified",
       "capability_id": "scene.snapshot.component.color",
       "domain": "scene",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Scene color channel"
     },
     {
@@ -25672,7 +25672,7 @@
       "capability_id": "scene.snapshot.component.message",
       "domain": "scene",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -25680,7 +25680,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Scene playback-message channel"
     },
     {
@@ -25704,7 +25704,7 @@
       "capability_id": "scene.snapshot.component.selection_scope",
       "domain": "scene",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -25712,7 +25712,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Scene atom-channel selection scope"
     },
     {
@@ -25720,7 +25720,7 @@
       "capability_id": "scene.snapshot.component.thumbnail",
       "domain": "scene",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -25728,7 +25728,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Scene thumbnail channel"
     },
     {
@@ -25767,32 +25767,32 @@
       "acceptance_level": "specified",
       "capability_id": "scene.snapshot.insert_after",
       "domain": "scene",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Store current state after the current scene"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "scene.snapshot.insert_before",
       "domain": "scene",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Store current state before the current scene"
     },
     {
@@ -25833,16 +25833,16 @@
       "acceptance_level": "specified",
       "capability_id": "scene.snapshot.rename",
       "domain": "scene",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Rename a scene snapshot"
     },
     {
@@ -25867,16 +25867,16 @@
       "acceptance_level": "specified",
       "capability_id": "scene.snapshot.update",
       "domain": "scene",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Update the current scene while preserving its message"
     },
     {
@@ -27275,32 +27275,32 @@
       "acceptance_level": "specified",
       "capability_id": "selection.macro.slash",
       "domain": "selection",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 2,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Slash selection macro"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "selection.macro.slash.absolute",
       "domain": "selection",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 2,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Leading-slash absolute macro"
     },
     {
@@ -27308,7 +27308,7 @@
       "capability_id": "selection.macro.slash.all_empty",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -27316,23 +27316,23 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "All-empty slash macro"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "selection.macro.slash.name_alt_backtick",
       "domain": "selection",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 2,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Name-backtick altloc qualifier"
     },
     {
@@ -27340,7 +27340,7 @@
       "capability_id": "selection.macro.slash.numeric_resn_as_resi",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -27348,87 +27348,87 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Numeric residue-name field as residue identifier"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "selection.macro.slash.object_index_backtick",
       "domain": "selection",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 2,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Object-backtick atom index"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "selection.macro.slash.relative",
       "domain": "selection",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 2,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Right-aligned relative macro"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "selection.macro.slash.resn_resi_backtick",
       "domain": "selection",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 2,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Resn-backtick residue identifier"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "selection.macro.slash.skip_empty_star",
       "domain": "selection",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 2,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Empty and wildcard macro fields"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "selection.macro.slash.slash_limit",
       "domain": "selection",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 2,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Slash-count limit"
     },
     {
@@ -27483,16 +27483,16 @@
       "acceptance_level": "specified",
       "capability_id": "selection.named.default_name",
       "domain": "selection",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 2,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Default selection-name shortcut"
     },
     {
@@ -27532,7 +27532,7 @@
       "capability_id": "selection.named.domain_scope",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -27540,7 +27540,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Domain-scoped named selection"
     },
     {
@@ -27548,7 +27548,7 @@
       "capability_id": "selection.named.indicate",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -27556,7 +27556,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Transient indicated selection"
     },
     {
@@ -27564,7 +27564,7 @@
       "capability_id": "selection.named.indicator_policy",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -27572,7 +27572,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Creation-time selection indicator policy"
     },
     {
@@ -27611,16 +27611,16 @@
       "acceptance_level": "specified",
       "capability_id": "selection.named.merge",
       "domain": "selection",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 2,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Merge into an existing named selection"
     },
     {
@@ -27628,7 +27628,7 @@
       "capability_id": "selection.named.pop",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -27636,7 +27636,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Destructive atom-by-atom selection iteration"
     },
     {
@@ -27659,96 +27659,96 @@
       "acceptance_level": "specified",
       "capability_id": "selection.named.select_list",
       "domain": "selection",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 2,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Direct identifier-list selection API"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "selection.named.select_list.id",
       "domain": "selection",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 2,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Select-list by source atom ID"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "selection.named.select_list.index",
       "domain": "selection",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 2,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Select-list by current atom index"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "selection.named.select_list.rank",
       "domain": "selection",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 2,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Select-list by load-order atom rank"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "selection.named.select_list.state_scope",
       "domain": "selection",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 2,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "State-scoped select-list API"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "selection.named.state_scope",
       "domain": "selection",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 2,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "State-scoped named selection"
     },
     {
@@ -28508,7 +28508,7 @@
       "capability_id": "selection.value.atom_name_wildcard",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -28516,7 +28516,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Atom-name wildcard override"
     },
     {
@@ -28524,7 +28524,7 @@
       "capability_id": "selection.value.case_chain_segment",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -28532,7 +28532,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Chain and segment case policy"
     },
     {
@@ -28540,7 +28540,7 @@
       "capability_id": "selection.value.case_general",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -28548,15 +28548,15 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "General selection case policy"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "selection.value.escape",
       "domain": "selection",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 2,
+      "implementation_status": "partial",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -28564,7 +28564,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Selection value escape handling"
     },
     {
@@ -28619,16 +28619,16 @@
       "acceptance_level": "specified",
       "capability_id": "selection.value.mixed_residue",
       "domain": "selection",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 2,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Mixed residue identifier matching"
     },
     {
@@ -28651,8 +28651,8 @@
       "acceptance_level": "specified",
       "capability_id": "selection.value.range.alpha",
       "domain": "selection",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 2,
+      "implementation_status": "partial",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -28660,7 +28660,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Alphabetic ranges"
     },
     {
@@ -28700,7 +28700,7 @@
       "capability_id": "trajectory.coordinates.smooth",
       "domain": "trajectory",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -28708,7 +28708,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Window-average coordinate states"
     },
     {
@@ -28732,7 +28732,7 @@
       "capability_id": "trajectory.fit.intra_states",
       "domain": "trajectory",
       "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "implementation_status": "deferred",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -28740,7 +28740,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "unavailable",
       "title": "Fit all states to a reference state"
     },
     {
@@ -30013,16 +30013,16 @@
       "acceptance_level": "specified",
       "capability_id": "trajectory.timeline.frame_count_query",
       "domain": "trajectory",
-      "evidence_count": 0,
-      "implementation_status": "inventoried",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "planned",
+      "public_state": "in_progress",
       "title": "Query movie frame count"
     },
     {
@@ -31462,17 +31462,17 @@
     "capability_count": 1942,
     "domain_counts": {
       "analysis": {
-        "in_progress": 15,
-        "planned": 32,
+        "in_progress": 29,
+        "planned": 0,
         "total": 85,
-        "unavailable": 38,
+        "unavailable": 56,
         "verified": 0
       },
       "automation": {
-        "in_progress": 12,
-        "planned": 20,
+        "in_progress": 28,
+        "planned": 0,
         "total": 54,
-        "unavailable": 20,
+        "unavailable": 24,
         "verified": 2
       },
       "data": {
@@ -31490,22 +31490,22 @@
         "verified": 0
       },
       "io": {
-        "in_progress": 39,
-        "planned": 36,
+        "in_progress": 49,
+        "planned": 0,
         "total": 186,
-        "unavailable": 111,
+        "unavailable": 137,
         "verified": 0
       },
       "object_state": {
-        "in_progress": 24,
-        "planned": 18,
+        "in_progress": 41,
+        "planned": 0,
         "total": 54,
-        "unavailable": 12,
+        "unavailable": 13,
         "verified": 0
       },
       "pbc": {
-        "in_progress": 0,
-        "planned": 2,
+        "in_progress": 2,
+        "planned": 0,
         "total": 6,
         "unavailable": 4,
         "verified": 0
@@ -31525,10 +31525,10 @@
         "verified": 0
       },
       "rendering": {
-        "in_progress": 34,
-        "planned": 32,
+        "in_progress": 54,
+        "planned": 0,
         "total": 290,
-        "unavailable": 221,
+        "unavailable": 233,
         "verified": 3
       },
       "representation": {
@@ -31539,24 +31539,24 @@
         "verified": 101
       },
       "scene": {
-        "in_progress": 33,
-        "planned": 23,
+        "in_progress": 50,
+        "planned": 0,
         "total": 123,
-        "unavailable": 36,
+        "unavailable": 42,
         "verified": 31
       },
       "selection": {
-        "in_progress": 101,
-        "planned": 28,
+        "in_progress": 120,
+        "planned": 0,
         "total": 152,
-        "unavailable": 23,
+        "unavailable": 32,
         "verified": 0
       },
       "trajectory": {
-        "in_progress": 21,
-        "planned": 3,
+        "in_progress": 22,
+        "planned": 0,
         "total": 83,
-        "unavailable": 59,
+        "unavailable": 61,
         "verified": 0
       },
       "ui": {
@@ -31570,16 +31570,14 @@
     "implementation_status_counts": {
       "blocked_access": 14,
       "compatible": 137,
-      "deferred": 1128,
-      "excluded": 118,
-      "inventoried": 191,
-      "partial": 351,
-      "specified": 3
+      "deferred": 1204,
+      "excluded": 120,
+      "partial": 467
     },
     "public_state_counts": {
-      "in_progress": 351,
-      "planned": 194,
-      "unavailable": 1260,
+      "in_progress": 467,
+      "planned": 0,
+      "unavailable": 1338,
       "verified": 137
     }
   }

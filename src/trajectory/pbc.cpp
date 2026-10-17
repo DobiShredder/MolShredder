@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <functional>
 #include <limits>
+#include <mutex>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -405,6 +406,69 @@ TrajectoryUnwrapper::push(const model::CoordinateFrame& wrapped_frame) {
   continuity_ = std::move(next_continuity);
   ++processed_frame_count_;
   return result;
+}
+
+PbcProcessedSource::PbcProcessedSource(
+    std::shared_ptr<const model::CoordinateSource> base, PbcMode mode,
+    std::size_t maximum_replay_frames)
+    : base_{std::move(base)},
+      mode_{mode},
+      maximum_replay_frames_{maximum_replay_frames},
+      unwrapper_{base_->atom_count()} {}
+
+operation::Result<std::shared_ptr<const PbcProcessedSource>>
+PbcProcessedSource::create(std::shared_ptr<const model::CoordinateSource> base,
+                           PbcMode mode, std::size_t maximum_replay_frames) {
+  using R = operation::Result<std::shared_ptr<const PbcProcessedSource>>;
+  if (base == nullptr) return R::failure(invalid("PBC processing needs a coordinate source"));
+  if (maximum_replay_frames == 0U)
+    return R::failure(invalid("the unwrap replay limit must be positive"));
+  return R::success(std::shared_ptr<const PbcProcessedSource>(
+      new PbcProcessedSource{std::move(base), mode, maximum_replay_frames}));
+}
+
+operation::Result<std::shared_ptr<const model::CoordinateFrame>>
+PbcProcessedSource::read_frame(std::size_t frame_index) const {
+  using R = operation::Result<std::shared_ptr<const model::CoordinateFrame>>;
+  if (mode_ == PbcMode::wrap) {
+    const auto frame = base_->read_frame(frame_index);
+    if (!frame.has_value()) return frame;
+    return wrap_frame(*frame.value());
+  }
+  std::lock_guard lock{mutex_};
+  if (last_index_.has_value() && *last_index_ == frame_index) return R::success(last_frame_);
+  std::size_t next = 0U;
+  if (last_index_.has_value() && frame_index == *last_index_ + 1U) {
+    next = frame_index;
+  } else {
+    // A jump (backwards or forwards by more than one frame) replays from the start.
+    if (frame_index + 1U > maximum_replay_frames_)
+      return R::failure(operation::Error{
+          operation::ErrorCode::resource_exhausted,
+          "unwrapping frame " + std::to_string(frame_index) + " would replay more than " +
+              std::to_string(maximum_replay_frames_) + " frames",
+          "play the trajectory in order, use pbc mode wrap, or unwrap a shorter trajectory", {}});
+    unwrapper_.reset();
+    last_index_.reset();
+    last_frame_.reset();
+  }
+  for (std::size_t index = next; index <= frame_index; ++index) {
+    const auto frame = base_->read_frame(index);
+    if (!frame.has_value()) {
+      last_index_.reset();
+      last_frame_.reset();
+      return frame;
+    }
+    auto processed = unwrapper_.push(*frame.value());
+    if (!processed.has_value()) {
+      last_index_.reset();
+      last_frame_.reset();
+      return processed;
+    }
+    last_frame_ = processed.value();
+    last_index_ = index;
+  }
+  return R::success(last_frame_);
 }
 
 }  // namespace molshredder::trajectory

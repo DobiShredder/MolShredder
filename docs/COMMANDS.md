@@ -143,6 +143,9 @@ cartoon --type automatic
 image save --path figure.png --width 1200
 png --path figure.png --width 800 --height 600 --dpi 300
 image save --path draw.png --ray false
+image save --path figure --width 3.5 --units inches --dpi 600
+image save --path frame.ppm --height 480
+movie export --prefix frames/f_ --first 1 --last 120 --width 1280
 setting set --name opaque_background --value true
 view refresh
 ```
@@ -150,6 +153,15 @@ view refresh
 - `image save`(alias `png`)는 보이는 object의 표현과 measurement overlay를 deterministic reference ray caster로 그려 8-bit RGBA
   PNG로 저장한다. Width 0은 640, height 0은 camera 비율을 따른다. dpi는 PNG pHYs에 기록한다. 저장은 임시 파일을 거쳐
   원자적으로 바꾸며, 없는 directory는 오류다.
+- 형식과 확장자: `--image-format guess|png|ppm`(기본 guess)에서 확장자가 encoder를 정한다(`.png`, `.ppm`, 확장자 없음은
+  `.png`를 붙임). 알 수 없는 확장자(`.jpg` 등)는 오류이며 파일을 만들지 않는다. 명시 형식은 주어진 파일 이름을 그대로 쓴다.
+- 크기: `--width`/`--height`는 `--units pixels`(기본, 정수)이거나 `inches|centimeters|millimeters`(소수 허용, `--dpi` 없으면
+  300)이다. 한쪽만 주면 다른 쪽은 camera 비율로 정해지고(width만: height = width / aspect, height만: width = height * aspect)
+  둘 다 없으면 width 640이다. 최대 변은 8192 pixel이다. PNG에는 `--dpi`(또는 물리 단위 기본 300)가 기록된다.
+- `movie export --prefix P [--first F] [--last L]`은 설정된 movie 타임라인의 1-based frame 범위(기본 전체)를 차례로 이동하며
+  `P0001.png`처럼 4자리 번호 파일로 저장한다(`--image-format png|ppm`, 크기·`--ray`·`--dpi`는 `image save`와 같음). 재생 중에는 거부하고,
+  대상 파일이 하나라도 있으면 `--overwrite true` 없이는 아무 것도 쓰지 않으며, 중간에 실패하면 이번 호출이 만든 파일을 지우고 타임라인
+  위치를 되돌린다. Video 인코딩(FFmpeg 등)은 외부 encoder 연동으로 아직 제공하지 않는다.
 - 배경 alpha: `--ray true`는 `ray_opaque_background`가 0 이상이면 그 값, −1이면 `opaque_background`(기본 off: 투명)를 따른다.
   `--ray false`는 `opaque_background`만 따른다. 투명 pixel도 배경 RGB를 유지한다.
 - PyMOL ray tracing, OpenGL draw, `ray_default_renderer`의 외부 renderer는 이 reference ray caster로 대체하는 명시적 fallback이며
@@ -165,6 +177,18 @@ object rename --object 2 --name "ligand A"
 object reorder --object 2 --position 1
 object delete --object current
 object topology-retain --atom-ids 3,1 --expected-version 1
+group add --name complexes --members "ubq* 1abc"
+group remove --name complexes --members ubq2
+group empty --name complexes
+group ungroup --members ubq1
+group excise --name complexes
+group purge --name complexes
+group open --name complexes
+group list
+object enable --pattern "ubq*"
+object disable --selection "resn HOH"
+object covering --selection "name N"
+object type --name ubq
 object count --object current --selection "name CA"
 object create --name cas --selection "name CA" --source ubq
 object copy --object ubq --name ubq-copy
@@ -178,12 +202,27 @@ Delete는 object에 속한 measurement와 render-setting override를 같이 제�
 지우면 같은 panel position의 다음 object 또는 직전 object를 선택한다. Missing target,
 duplicate name이나 범위 밖 position은 Workspace와 scene을 변경하지 않는다.
 
+`object enable|disable`은 `--pattern`(이름 glob: `*`, `?`, 대소문자 구분) 또는 `--selection`(그 selection에 atom이 있는 molecular
+object) 중 정확히 하나로 대상을 정하고 visibility를 한꺼번에 바꾼다. 대상이 없거나 인자가 둘이거나 없으면 아무 것도 바꾸지 않는 오류이고,
+중간에 실패하면 이미 바꾼 object를 되돌린다. `object covering`은 selection이 걸리는 object의 목록을, `object type`은 이름이
+`object:molecule`, `object:volume`, `selection` 중 무엇인지 알려 준다(selection 이름은 active object 기준). Group은 아직 없다(Q-033).
+
+Group은 이름과 member(object 또는 다른 group)를 가진 workspace 메타데이터다(Q-033 a). Object는 계속 scene root의 직계 child라
+렌더링·순서·transform에는 영향이 없고 session journal로 그대로 복원된다. `group add`는 필요하면 group을 만들고 member를 옮기며
+(한 object는 한 group에만 속하므로 이미 다른 group에 있으면 이동), member 인자는 공백/쉼표로 구분한 이름과 glob이고 아무것도
+일치하지 않으면 오류다. 자기 자신이나 조상 group을 넣는 순환, object와 같은 group 이름, 쉼표·wildcard가 든 이름은 거부한다.
+`group remove|ungroup|empty`는 member를 최상위로 돌려보내고, `group excise`는 group을 지우고 member를 group이 있던 자리(상위 group
+안이면 그 안)에 둔다. `group purge`는 group 아래의 모든 object와 하위 group을 지우고 빈 group만 남긴다. `object enable|disable`에
+group 이름을 주면 그 아래 모든 object에 적용되며 group의 `enabled`는 아래 object 중 하나라도 보이면 true로 계산한다(그래서 member를
+켜면 상위 group도 켜진 상태가 된다). `group open|close|toggle`은 object panel 펼침 상태만 바꾸고 `group list`는 member·parent·상태를
+돌려준다. Object를 삭제하면 속한 group에서도 빠진다. Group 이름과 object 이름은 같은 이름 공간을 쓴다.
+
 `object count`는 상태를 바꾸지 않고 selection의 atom 수와 object의 state 수를 반환한다. `object create`와
 `object copy`는 선택한 atom의 stable ID·bond·모든 state를 복사한 새 object를 만들고 source를 바꾸지 않는다
 (copy는 `all` selection). `object extract`는 같은 object를 만든 뒤 source에서 그 atom을 제거하며 source가 빈
 object가 되는 경우는 거부한다. `object remove-atoms`는 active object에서 선택 atom과 그 bond를 제거하고
 (measurement와 해당 atom·bond의 setting override도 함께 정리) 모든 atom을 지우는 요청은 거부한다. 새 object 이름이
-이미 있거나 selection이 비어 있으면 아무 것도 바꾸지 않는다. 이 operation들은 아직 undo history에 들어가지 않는다.
+이미 있거나 selection이 비어 있으면 아무 것도 바꾸지 않는다. 이 operation들은 session journal에 기록되어 session 복원 때 같은 순서로 다시 실행되지만, 아직 `edit undo` history에는 들어가지 않는다.
 
 `object topology-retain`은 editing UI가 도입되기 전의 low-level snapshot operation이다. Active
 object의 stable atom ID를 주어진 순서로 유지하고 나머지를 삭제한다. 반드시 읽은 topology
@@ -249,8 +288,16 @@ molshredder volume isosurface --level NUMBER
                            [--opacity 0..1] [--replace false|true]
 molshredder save --path PATH [--file-format auto|pdb|mmcif|cif|mol|mol2|psf|pqr|sdf|gro|g96|xyz]
                  [--frames current|all] [--precision 0..15]
-                 [--comment TEXT] [--overwrite false|true]
-molshredder select --name NAME --expression EXPR [--update false|true]
+                 [--comment TEXT] [--selection EXPR] [--overwrite false|true]
+molshredder save text [--file-format pdb|mmcif|cif|mol|mol2|sdf|pqr|gro|g96|xyz]
+                      [--selection EXPR] [--frames current|all]
+                      [--precision 0..15] [--comment TEXT]
+molshredder load text --content TEXT [--name NAME]
+                      [--file-format auto|pdb|mmcif|cif|mol|mol2|sdf|pqr|gro|g96|xyz]
+molshredder select [--name NAME] --expression EXPR [--update false|true]
+                   [--merge false|true] [--state current|all|N]
+molshredder select list [--name NAME] [--by index|id|rank] --values 1,5,9-12
+                        [--merge false|true] [--state current|N]
 molshredder show --representation REP [--selection EXPR]
                    [--replace false|true]
 molshredder hide --representation REP [--selection EXPR]
@@ -259,6 +306,28 @@ molshredder toggle --representation REP [--selection EXPR]
 molshredder analyze center [--selection EXPR] [--mode centroid|com]
                                [--precision 0..15] [--unit angstrom|nanometer]
                                [--result-name NAME]
+molshredder measure fit --target-object OBJECT [--mobile-object OBJECT]
+                        [--mobile-selection EXPR] [--target-selection EXPR]
+                        [--match order|identifier] [--pairs 1:4,2:5,3:6]
+                        [--weight uniform|mass] [--precision 0..15]
+molshredder object align --target-object OBJECT [--mobile-object OBJECT] ...
+molshredder object split [--object OBJECT] [--prefix PREFIX]
+molshredder object split-states [--object OBJECT] [--first N] [--last N] [--prefix PREFIX]
+molshredder object delete-states [--object OBJECT] --states "1-3 10"
+molshredder object join-states --name NAME --objects a,b[,c] [--selection SELECTION] [--mode identical|intersection]
+molshredder traj delete-frames [--object OBJECT] [--beg N] [--end N] [--skip N]
+molshredder traj dup-frame [--object OBJECT] [--frame N]
+molshredder object fix [--object OBJECT]
+molshredder object free [--object OBJECT]
+molshredder object sort
+molshredder object matrix-copy --source OBJECT --target OBJECT
+molshredder pbc mode [--mode status|none|wrap|unwrap] [--object OBJECT]
+molshredder load append --path PATH [--object OBJECT] [--file-format FORMAT]
+molshredder analyze charge [--kind formal|partial] [--selection EXPR] [--precision 0..15]
+molshredder analyze mass [--selection EXPR] [--precision 0..15]
+molshredder analyze phi-psi [--selection EXPR] [--precision 0..15]
+molshredder object atoms [--selection EXPR] [--properties index,id,name,...] [--limit N]
+molshredder object chains [--selection EXPR]
 molshredder analyze gyration [--selection EXPR] [--mode centroid|com]
                                [--precision 0..15] [--unit angstrom|nanometer]
 molshredder analyze inertia [--selection EXPR] [--mode com|centroid]
@@ -421,6 +490,45 @@ Additive `format list`와 `save` 문법, atomic output 및 semantic loss table�
 - `analyze center`: 재사용 가능한 scalar/vector analysis result를 계산한다. `centroid`와 `com`을
   구분하며 기본 selection은 `all`이다. COM은 topology의 explicit `mass` property를 우선하고 없을
   때 versioned estimated element-mass table을 사용하며 provenance를 결과에 포함한다.
+- `measure fit`은 mobile object의 원자를 target object의 원자에 강체로 맞추는 4x4 행렬(행 우선, mobile → target)과 정렬 전후 RMSD를
+  돌려주는 순수 결과다. 계산은 두 object의 scene 변환을 반영한 world 좌표와 현재 frame에서 하고(좌표 단위가 다르면 거부), 원자 쌍은
+  `--match order`(선택 원자를 원자 순서대로 일대일, 개수 같아야 함), `--match identifier`(chain·잔기 번호·insertion code·원자 이름이
+  같은 원자끼리) 또는 `--pairs m:t,...`(각 object의 1-based 원자 index 쌍; selection보다 우선)로 정한다. 쌍은 3개 이상이고 한 직선 위에
+  있으면 안 된다. `--weight mass`는 mobile 원자의 질량을 가중치로 쓴다. `object align`은 같은 계산 뒤 결과를 mobile object의 scene
+  `local_transform`으로 적용한다(Q-035 a). 좌표는 바뀌지 않으며 `view reset --object`로 되돌릴 수 있고 session journal로 재생된다. 같은 object끼리,
+  없는 object, 쌍이 부족한 요청은 아무것도 바꾸지 않는 오류다. 서열·CE 기반 구조 정렬(`align`, `super`, `cealign`)은 제공하지 않는다.
+- `object split-states`는 multi-state(다중 모델) object의 state마다 단일 state object `<prefix><state 4자리>`(prefix가 없으면 `<원본>_`)를
+  만든다(`--last 0`은 마지막 state까지). 원본은 남고, 대상 이름 하나라도 있으면 아무 것도 만들지 않는다. `object delete-states`는 `1-3 10`
+  또는 `1-3,10` 형식의 state(1부터, 범위는 양 끝 포함, 범위 밖 번호는 무시)를 지우되 모든 state를 지우는 요청은 거부한다(PyMOL은 state
+  0개 object를 허용). `object join-states`는 여러 object의 state를 이어 붙여 새 multi-state object를 만든다. `--mode intersection`(기본,
+  PyMOL mode 2)은 모든 object에 있는 원자만 첫 object의 순서로 chain·잔기·원자 이름으로 맞춰 남기고, `identical`(mode 1)은 원자가 모두
+  같아야 한다. 이산(discrete) 합치기와 서열 정렬 합치기는 제공하지 않는다. 연결된 trajectory나 PBC 처리 중인 object는 거부한다.
+- `traj delete-frames`는 정적·다중 모델 object의 frame(0부터)을 `[beg, end]`(end -1은 마지막) 범위에서 지우되 `--skip N`(N≥1)이면
+  범위 시작부터 N번째마다 남긴다. 모든 frame을 지우는 요청은 거부한다. `traj dup-frame`은 frame(기본: 현재)의 복사본을 마지막에 추가한다.
+  연결된 trajectory(`traj load`)와 PBC 처리 중인 object는 거부한다. `object fix`는 object의 scene 배치를 고정해 `object align`·`object matrix-copy`
+  대상·`view reset --object`가 거부되게 하고 `object free`가 해제한다(`object list`의 `fixed` 열, `view reset --object all`은 고정된 object를 건너뜀).
+- `object split`은 chain마다 새 object(`<prefix><chain>`, prefix가 없으면 `<원본>_<chain>`)를 만든다. chain이 하나이거나 chain 식별자가 비어
+  있거나 대상 이름 하나라도 이미 있으면 아무 것도 만들지 않는 오류이고 중간에 실패하면 만든 object를 지운다. `object sort`는 object panel 순서를
+  이름의 natural order(`s2` < `s10`)로 바꾸고 object ID는 그대로다. `object matrix-copy`는 한 object의 scene 배치(이동·회전·scale·pivot)를 다른
+  object에 복사한다(좌표 불변, `view reset --object`로 되돌림). 확장자는 대소문자와 상관없이 `.pdb .ent .brk`를 PDB, `.cif .mmcif`를 mmCIF 등으로 읽는다.
+- `pbc mode`는 object의 frame을 단위 세포로 접은(`wrap`) 상태, atom 연속성으로 펼친(`unwrap`) 상태, 읽은 그대로(`none`)로 보여 준다
+  (Q-035 a). 파일과 저장된 좌표는 바뀌지 않고 렌더링·선택·분석·저장이 모두 처리된 frame을 읽는다. 모든 frame에 unit cell이 있어야 한다.
+  `unwrap`은 frame을 순서대로 읽을 때 O(1), 건너뛰면 처음부터 다시 계산하며 5만 frame을 넘는 재계산은 거부한다. 모드가 켜진 동안에는
+  원자 편집·`object remove-atoms|extract`·`load append`·`edit undo|redo`를 거부하고(`pbc mode --mode none` 후 가능), 복사본은 처리된 좌표를
+  그대로 담는다. `--mode status`는 상태만 알려 준다. 분자 단위 unwrap과 중심 지정은 제공하지 않는다.
+- `load append`는 구조 파일의 모든 state를 기존 object에 새 state로 추가한다. 원자 수·원자 이름·원소·잔기 이름·번호·chain·insertion
+  code가 정확히 같아야 하며 하나라도 다르면 첫 불일치를 알려 주고 object를 바꾸지 않는다. 단일 state object와 다중 모델 파일에서 연
+  object(embedded trajectory)만 대상이고, `traj load`로 붙인 trajectory가 있는 object는 거부한다. state 수는 10만 개를 넘을 수 없고 현재
+  frame 위치는 유지된다.
+- `analyze charge`는 selection의 formal(topology) 또는 partial(`partial_charge` property; 없으면 오류) 전하 합을, `analyze mass`는
+  `analyze center --mode com`과 같은 질량 규칙(topology `mass`, 없으면 추정 원소 질량)과 provenance로 질량 합을 반환한다.
+  `analyze phi-psi`는 N·CA·C를 가진 residue마다 phi(앞 residue의 C 필요)와 psi(다음 residue의 N 필요)를 도 단위로 돌려준다.
+  앞뒤 residue는 C(i-1)–N(i) 거리가 2.0 Å 미만일 때만 연결된 것으로 보며 끝이나 사슬 끊김에서는 null이다.
+  각도 부호는 IUPAC 규약(독립 공식으로 test)이다.
+- `object atoms`는 PyMOL `iterate`/`iterate_state`/`identify`/`index`를 코드 평가 없이 대신하는 읽기 전용 표다. `--properties`는
+  `index id source_id name element resn resi chain segment altloc b q partial_charge formal_charge x y z mass radius atomic_number bond_count`
+  중에서 쉼표로 고르고(좌표는 현재 frame), 없는 optional property는 null이며 `--limit`(기본 1000)를 넘으면 `truncated`와 전체 선택 수를 알려 준다.
+  `object chains`는 selection에 걸리는 chain 식별자를 처음 나타나는 순서로 돌려준다.
 - `analyze gyration`, `analyze inertia`: active object의 selection을 현재 frame에서 읽어 회전 반경
   (`sqrt(sum(w|r-c|^2)/sum(w))`)과 중심 기준 관성 텐서의 principal moment(오름차순)·axis를 반환하는 pure result다.
   `centroid`는 가중치 1, `com`은 `analyze center`와 같은 mass 규칙과 provenance를 쓴다. Axis는 오른손 직교 기저이며
@@ -525,7 +633,15 @@ Additive `format list`와 `save` 문법, atomic output 및 semantic loss table�
   화면만 시간에 따라 보간할 수 있다.
 - `scene store/recall/list/delete/clear`: object/volume/trajectory/result/edit state, representation/settings/selection,
   camera/stereo와 stable identity를 포함한 full `Workspace` snapshot을 이름으로 관리한다. Recall은 detached candidate를
-  publish하며 실패하면 현재 Workspace를 보존한다. Camera-only `view` inventory와는 독립적이다.
+  publish하며 실패하면 현재 Workspace를 보존한다. Camera-only `view` inventory와는 독립적이다. Snapshot은 atom 색(`color usage`로
+  확인), group, visibility를 포함하므로 recall이 이를 그대로 복원한다.
+- Scene order: scene 목록은 이름순이 아니라 저장 순서(scene order)다. `scene store --insert end|before|after`는 현재 scene 앞/뒤에 넣고
+  (이미 있는 이름을 다시 저장하면 위치 유지), `scene update`는 현재 scene을 지금 상태로 같은 자리에 다시 저장한다(현재 scene이 없으면 오류).
+  `scene rename --name A --new-name B`는 위치·현재 표시·movie keyframe 참조를 함께 옮긴다. `scene first|last|next|previous`는 순서를
+  따라 recall하며 next/previous는 `--wrap true`(기본)일 때 끝에서 반대편으로 돌고, 현재 scene이 없으면 next는 처음, previous는 끝에서
+  시작한다. `scene order --names "a b" --location top|bottom|current [--sort true]`는 지정한 scene(없으면 `--sort`일 때 전체)을 이동하고,
+  `current`는 현재 scene 앞에 둔다. `--sort`는 숫자 덩어리를 값으로 비교하는 natural sort(s2 < s10)다. 없는 scene·알 수 없는 위치·
+  이름도 `--sort`도 없는 요청은 순서를 바꾸지 않는 오류다.
 - `movie configure/keyframe/seek/play/pause/step/status/clear`: 1-based bounded timeline에 named scene과 optional 0-based
   trajectory frame만 연결한다. 임의 command/script payload는 허용하지 않는다. `seek`와 `step`은 scene recall 및
   trajectory seek를 하나의 failure-atomic transition으로 적용한다.

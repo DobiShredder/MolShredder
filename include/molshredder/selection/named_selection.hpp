@@ -27,6 +27,20 @@ class NamedSelections {
       const model::Topology& topology,
       const EvaluationContext& context = {});
 
+  // Unions a new membership into an existing selection of the same update
+  // mode (PyMOL select merge=1). A missing name behaves like set(). A dynamic
+  // merge becomes the expression "(old) or (new)"; a static merge keeps the
+  // old frozen membership and adds the new one.
+  [[nodiscard]] std::optional<operation::Error> merge(
+      std::string name, Expression expression, bool dynamic,
+      const model::Topology& topology, const EvaluationContext& context = {});
+
+  // Static selection whose frozen membership is the union of the expression
+  // evaluated against every given context (PyMOL select state=-1).
+  [[nodiscard]] std::optional<operation::Error> set_state_union(
+      std::string name, Expression expression, const model::Topology& topology,
+      const std::vector<EvaluationContext>& contexts);
+
   [[nodiscard]] std::optional<operation::Error> erase(std::string_view name);
 
   [[nodiscard]] operation::Result<Mask> evaluate(

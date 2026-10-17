@@ -359,9 +359,13 @@ class Topology {
   std::uint64_t version_{};
   std::vector<AtomRecord> atoms_;
   std::vector<AtomId> atom_ids_;
+  // True when the ID vector is strictly increasing, which allows an O(log n)
+  // identity lookup; reordered subsets fall back to a linear scan.
+  bool atom_ids_sorted_{false};
   std::vector<ResidueRecord> residues_;
   std::vector<Bond> bonds_;
   std::vector<BondId> bond_ids_;
+  bool bond_ids_sorted_{false};
   std::vector<Angle> angles_;
   std::vector<Dihedral> dihedrals_;
   std::vector<Improper> impropers_;

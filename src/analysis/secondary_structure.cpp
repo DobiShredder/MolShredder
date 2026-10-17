@@ -8,7 +8,9 @@
 #include <limits>
 #include <string>
 #include <tuple>
+#include <unordered_map>
 #include <utility>
+#include <vector>
 
 #include "molshredder/operation/error.hpp"
 
@@ -52,6 +54,14 @@ bool same_chain(const model::ResidueRecord& a,const model::ResidueRecord& b){
   return a.chain_id==b.chain_id && a.segment_id==b.segment_id;
 }
 using CellKey=std::array<std::int64_t,3>;
+struct CellKeyHash{
+  std::size_t operator()(const CellKey& key) const noexcept{
+    std::uint64_t hash=1469598103934665603ULL;
+    for(const auto value:key){hash^=static_cast<std::uint64_t>(value);hash*=1099511628211ULL;
+      hash^=hash>>29U;}
+    return static_cast<std::size_t>(hash);
+  }
+};
 double radial_hbond_energy(double distance){
   constexpr double optimum=3.0,minimum=-2.8; const auto ratio=optimum/distance;
   return minimum*(4.0*std::pow(ratio,6)-3.0*std::pow(ratio,8));
@@ -185,7 +195,7 @@ operation::Result<SecondaryStructureResult> assign_secondary_structure(
   const auto coordinate_scale=frame.metadata().coordinate_unit==operation::LengthUnit::nanometer?10.0:1.0;
   const auto point=[&](std::size_t atom){return mul(coordinate(frame,atom),coordinate_scale);};
   const auto search_distance=outer_hbond_distance(parameters.hydrogen_bond_energy_cutoff);
-  std::map<CellKey,std::vector<std::size_t>> acceptor_cells;
+  std::unordered_map<CellKey,std::vector<std::size_t>,CellKeyHash> acceptor_cells;
   std::vector<std::size_t> unindexed_acceptors;
   if(search_distance>0.0){
     for(std::size_t acceptor=0;acceptor<geometry.value().size();++acceptor){
@@ -217,8 +227,13 @@ operation::Result<SecondaryStructureResult> assign_secondary_structure(
               candidates.insert(candidates.end(),found->second.begin(),found->second.end());
           }
       }else{
-        for(const auto& [key,values]:acceptor_cells){static_cast<void>(key);
-          candidates.insert(candidates.end(),values.begin(),values.end());}
+        // Out-of-range donor: scan every cell in key order (deterministic).
+        std::vector<const std::pair<const CellKey,std::vector<std::size_t>>*> ordered;
+        for(const auto& entry:acceptor_cells)ordered.push_back(&entry);
+        std::sort(ordered.begin(),ordered.end(),[](const auto* left,const auto* right){
+          return left->first<right->first;});
+        for(const auto* entry:ordered)
+          candidates.insert(candidates.end(),entry->second.begin(),entry->second.end());
       }
     }
     for(const auto acceptor:candidates){

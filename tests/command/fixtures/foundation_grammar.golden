@@ -1,5 +1,5 @@
 invoke "load" --file-format "pdb" --path "model.pdb" --provider "auto"
-invoke "select" --expression "polymer.protein" --name "protein" --update "false"
+invoke "select" --expression "polymer.protein" --merge "false" --name "protein" --state "current" --update "false"
 invoke "show" --representation "sticks" --scope "active" --selection "all"
 invoke "analyze center" --mode "centroid" --precision "6" --selection "all" --unit "angstrom"
 invoke "analyze center" --mode "com" --precision "4" --selection "chain A" --unit "angstrom"

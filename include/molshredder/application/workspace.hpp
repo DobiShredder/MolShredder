@@ -14,6 +14,7 @@
 
 #include "molshredder/analysis/basic.hpp"
 #include "molshredder/analysis/contacts.hpp"
+#include "molshredder/analysis/backbone.hpp"
 #include "molshredder/analysis/principal_axes.hpp"
 #include "molshredder/analysis/shape.hpp"
 #include "molshredder/analysis/rdf.hpp"
@@ -51,6 +52,7 @@
 #include "molshredder/selection/named_selection.hpp"
 #include "molshredder/trajectory/frame_cache.hpp"
 #include "molshredder/trajectory/attachment.hpp"
+#include "molshredder/trajectory/pbc.hpp"
 #include "molshredder/trajectory/playback.hpp"
 #include "molshredder/trajectory/prefetch_scheduler.hpp"
 
@@ -72,6 +74,14 @@ struct TrajectoryState {
   std::size_t prefetch_frame_count{4U};
   trajectory::AtomMappingReport mapping;
   trajectory::TrajectorySemanticReport semantics;
+};
+
+// Non-destructive PBC processing of an object's frames (Q-035 a): the original
+// coordinate source and trajectory are kept so `pbc mode none` restores them.
+struct PbcProcessing {
+  trajectory::PbcMode mode{trajectory::PbcMode::wrap};
+  std::shared_ptr<const model::CoordinateSource> original_coordinates;
+  std::optional<TrajectoryState> original_trajectory;
 };
 
 struct WorkspaceObject {
@@ -97,6 +107,10 @@ struct WorkspaceObject {
   // Explicit PyMOL cartoon type codes keyed by AtomId (automatic omitted).
   std::shared_ptr<const std::vector<std::pair<std::uint64_t, std::int32_t>>>
       cartoon_types;
+  std::optional<PbcProcessing> pbc;
+  // VMD `mol fix`: the object's scene placement is not changed by align,
+  // placement copy or placement reset until it is freed.
+  bool fixed{false};
 };
 
 struct MolecularSurfaceResult {
@@ -491,6 +505,7 @@ struct WorkspaceObjectInfo {
   bool visible{true};
   bool effectively_visible{true};
   bool has_trajectory{};
+  bool fixed{};
 };
 
 // Atom and state counts of one selection in one object (PyMOL count_atoms /
@@ -515,6 +530,139 @@ struct ObjectCreateResult {
   std::size_t bond_count{};
   std::optional<std::size_t> state_count;
   std::size_t removed_from_source_atom_count{};
+};
+
+// Read-only table of atom properties (PyMOL iterate / iterate_state / identify /
+// index) with no code evaluation: columns are chosen from a fixed property list.
+struct AtomListing {
+  std::vector<std::string> columns;
+  std::vector<std::vector<command::Value>> rows;
+  std::size_t selected_atom_count{};
+  bool truncated{};
+};
+
+struct ChargeSum {
+  std::string kind;
+  double sum{};
+  std::size_t atom_count{};
+  std::string source;
+};
+
+struct MassSum {
+  double mass{};
+  std::size_t atom_count{};
+  std::string unit;
+  std::string source;
+  bool estimated{};
+};
+
+// Rigid alignment of one molecular object onto another (Q-035 a). The fit is
+// computed on world-space positions of the paired atoms in each object's
+// current frame; applying it only changes the mobile object's scene transform.
+struct AlignmentRequest {
+  std::string mobile_object{"current"};
+  std::string target_object;
+  std::string mobile_selection{"all"};
+  std::string target_selection{"all"};
+  // "order" pairs the selected atoms of both objects one by one in atom order
+  // (equal counts required); "identifier" pairs atoms with the same chain,
+  // residue number, insertion code and atom name.
+  std::string match{"order"};
+  // Explicit 1-based atom index pairs (mobile, target); overrides the selections.
+  std::vector<std::pair<std::size_t, std::size_t>> pairs;
+  bool uniform_weights{true};
+  bool apply{};
+};
+
+struct AlignmentResult {
+  std::uint64_t mobile_object_id{};
+  std::uint64_t target_object_id{};
+  std::size_t paired_atom_count{};
+  double rmsd_before{};
+  double rmsd_after{};
+  // Row-major 4x4 matrix taking mobile world coordinates onto the target.
+  std::array<double, 16> matrix{};
+  operation::LengthUnit coordinate_unit{operation::LengthUnit::angstrom};
+  bool applied{};
+  std::optional<scene::Transform> transform;
+  std::uint64_t scene_version{};
+};
+
+struct PbcModeResult {
+  std::uint64_t object_id{};
+  std::string object_name;
+  std::string previous_mode;
+  std::string mode;
+  std::optional<std::size_t> frame_count;
+  bool changed{};
+};
+
+struct ObjectSplitResult {
+  std::uint64_t source_object_id{};
+  std::string source_object_name;
+  std::vector<ObjectCreateResult> created;
+};
+
+struct StateAppendResult {
+  std::uint64_t object_id{};
+  std::string object_name;
+  std::size_t previous_state_count{};
+  std::size_t appended_state_count{};
+  std::size_t state_count{};
+};
+
+struct StateDeleteResult {
+  std::uint64_t object_id{};
+  std::string object_name;
+  std::size_t previous_state_count{};
+  std::size_t removed_state_count{};
+  std::size_t state_count{};
+};
+
+// How join_states matches atoms between the joined objects (PyMOL join_states
+// modes 1 and 2). Discrete (0) and sequence-alignment (3) joins are not
+// available: they need state-varying topology and a sequence alignment.
+enum class StateJoinMode { identical_topology, identifier_intersection };
+
+// A molecular object that contains at least one atom of a selection.
+struct CoveredObject {
+  std::uint64_t object_id{};
+  std::string object_name;
+  std::size_t atom_count{};
+};
+
+// A named group of molecular objects and other groups (PyMOL group object).
+// Membership is workspace metadata: objects stay direct children of the scene
+// root, so rendering, ordering and transforms are unaffected.
+struct GroupInfo {
+  std::string name;
+  // Direct members in insertion order: object names and nested group names.
+  std::vector<std::string> members;
+  std::optional<std::string> parent;
+  // Panel expansion state; it does not change visibility.
+  bool open{true};
+  // True when at least one object below the group is visible.
+  bool enabled{};
+  // Molecular objects below the group, nested groups included.
+  std::size_t object_count{};
+};
+
+struct GroupChangeResult {
+  std::string name;
+  bool created{};
+  bool deleted{};
+  // Direct members after the change.
+  std::size_t member_count{};
+  // Names that were added, removed, moved or deleted by this call.
+  std::vector<std::string> affected;
+};
+
+// Kind of a named workspace entity (PyMOL get_type).
+struct EntityTypeResult {
+  std::string name;
+  // "object:molecule", "object:volume" or "selection".
+  std::string type;
+  std::uint64_t object_id{};
 };
 
 struct ObjectLifecycleResult {
@@ -697,6 +845,37 @@ struct ImageSaveRequest {
   std::optional<double> dpi;
   // true mirrors PyMOL ray (ray_opaque_background), false mirrors draw.
   bool ray{true};
+  // "guess" picks png/ppm from the extension; "png" and "ppm" are explicit.
+  // A path without an extension gets the format's extension appended.
+  std::string format{"guess"};
+  // width_value/height_value are measured in `units` (pixels, inches,
+  // centimeters or millimeters) when set; physical units need a dpi
+  // (300 when omitted). They replace width/height.
+  std::string units{"pixels"};
+  std::optional<double> width_value;
+  std::optional<double> height_value;
+};
+
+struct MovieExportRequest {
+  // Frame files are named <prefix><4-digit frame>.<extension>.
+  std::filesystem::path prefix;
+  // 1-based inclusive movie frames; unset means the whole timeline.
+  std::optional<std::size_t> first;
+  std::optional<std::size_t> last;
+  bool overwrite{};
+  ImageSaveRequest image;
+};
+
+struct MovieExportResult {
+  std::size_t first_frame{};
+  std::size_t last_frame{};
+  std::size_t frame_count{};
+  std::size_t width{};
+  std::size_t height{};
+  std::size_t total_bytes{};
+  std::string format;
+  std::vector<std::filesystem::path> paths;
+  std::vector<std::string> warnings;
 };
 
 struct ImageSaveResult {
@@ -707,6 +886,8 @@ struct ImageSaveResult {
   std::string renderer;
   bool opaque_background{};
   std::size_t primitive_count{};
+  std::string format;
+  std::optional<double> dpi;
   std::vector<std::string> warnings;
 };
 
@@ -1044,6 +1225,15 @@ struct NamedSceneRecord {
       default;
 };
 
+enum class SceneInsert { end, before, after };
+enum class SceneStep { first, next, previous, last };
+
+struct ColorUsage {
+  std::int32_t index{};
+  std::string name;
+  std::size_t atom_count{};
+};
+
 struct NamedSceneStoreResult {
   NamedSceneRecord scene;
   std::size_t scene_count{};
@@ -1151,7 +1341,8 @@ public:
   save_active_structure(const std::filesystem::path &path,
                         io::StructureFormat format, bool all_frames,
                         unsigned int decimal_places, std::string comment,
-                        bool overwrite, operation::TaskContext &context) const;
+                        bool overwrite, operation::TaskContext &context,
+                        std::string_view selection_expression = "all") const;
   [[nodiscard]] std::vector<WorkspaceObjectInfo> list_objects() const;
   [[nodiscard]] operation::Result<WorkspaceObjectInfo>
   activate_object(std::uint64_t object_id);
@@ -1164,6 +1355,112 @@ public:
   [[nodiscard]] operation::Result<ObjectLifecycleResult>
   reorder_object(std::string_view object_reference,
                  std::size_t new_position);
+  // Molecular objects in which `selection_expression` matches an atom. A named
+  // selection that does not exist in an object simply leaves it uncovered.
+  [[nodiscard]] operation::Result<std::vector<CoveredObject>>
+  covering_objects(std::string selection_expression) const;
+  // Shows or hides every molecular object whose name matches a glob (`*`, `?`)
+  // or that is covered by a selection. Either all targets change or none.
+  [[nodiscard]] operation::Result<std::vector<WorkspaceObjectInfo>>
+  set_visibility_by_pattern(std::string_view pattern, bool visible);
+  [[nodiscard]] operation::Result<std::vector<WorkspaceObjectInfo>>
+  set_visibility_by_selection(std::string selection_expression, bool visible);
+  [[nodiscard]] operation::Result<EntityTypeResult>
+  entity_type(std::string_view name) const;
+
+  // Group lifecycle (Q-033 a). Member arguments are object or group names and
+  // may use the glob characters `*` and `?`; a pattern that matches nothing is
+  // an error and every call changes the workspace completely or not at all.
+  [[nodiscard]] operation::Result<GroupChangeResult>
+  group_add(std::string_view name, const std::vector<std::string> &members);
+  [[nodiscard]] operation::Result<GroupChangeResult>
+  group_remove(std::string_view name, const std::vector<std::string> &members);
+  [[nodiscard]] operation::Result<GroupChangeResult>
+  group_empty(std::string_view name);
+  [[nodiscard]] operation::Result<GroupChangeResult>
+  group_ungroup(const std::vector<std::string> &members);
+  // Deletes the group and moves its members to the group's parent (or the top
+  // level) in place.
+  [[nodiscard]] operation::Result<GroupChangeResult>
+  group_excise(std::string_view name);
+  // Deletes every object below the group and the nested groups; the group
+  // itself stays and becomes empty.
+  [[nodiscard]] operation::Result<GroupChangeResult>
+  group_purge(std::string_view name);
+  enum class GroupExpansion { open, close, toggle };
+  [[nodiscard]] operation::Result<GroupInfo>
+  group_set_expansion(std::string_view name, GroupExpansion expansion);
+  [[nodiscard]] std::vector<GroupInfo> list_groups() const;
+  [[nodiscard]] operation::Result<AlignmentResult>
+  align_objects(const AlignmentRequest &request);
+  // One new object per chain of the source (named <prefix><chain>, or
+  // <source>_<chain> without a prefix); chains without an identifier are
+  // refused. All objects are created or none.
+  [[nodiscard]] operation::Result<ObjectSplitResult>
+  split_object_by_chain(std::string_view object_reference, std::string prefix);
+  // Natural-sorts the object panel order by object name.
+  [[nodiscard]] operation::Result<ObjectLifecycleResult> sort_objects_by_name();
+  // Copies the scene placement (translation, rotation, scale, pivot) of one
+  // object onto another; coordinates are untouched.
+  // Fixes or frees an object's scene placement (VMD mol fix / mol free).
+  [[nodiscard]] operation::Result<ObjectLifecycleResult>
+  set_object_fixed(std::string_view object_reference, bool fixed);
+  [[nodiscard]] operation::Result<ObjectTransformResetResult>
+  copy_object_transform(std::string_view source_reference,
+                        std::string_view target_reference);
+  // Shows an object's frames wrapped into the unit cell, unwrapped by atom
+  // continuity, or as loaded ("none"; "status" only reports the mode). Source
+  // files and stored coordinates are never changed. Editing, undo and state
+  // append are refused while a mode is active.
+  [[nodiscard]] operation::Result<PbcModeResult>
+  set_pbc_mode(std::string_view object_reference, std::string_view mode);
+  // Appends every state of a parsed structure document to a static object.
+  // The topology must match atom by atom (name, element, residue name, number,
+  // chain); a trajectory-attached object and an unknown state count are
+  // refused. Either every state is appended or the object is unchanged.
+  [[nodiscard]] operation::Result<StateAppendResult>
+  append_states(std::string_view object_reference, const io::StructureDocument &document);
+  // Creates one single-state object per state of a multi-state object (PyMOL
+  // split_states). States are numbered from 1; `last` 0 means the final
+  // state. Objects are named <prefix><state:04d> (prefix defaults to
+  // "<object>_"). The source is kept. All objects are created or none.
+  using StateJoinMode = application::StateJoinMode;
+  [[nodiscard]] operation::Result<ObjectSplitResult>
+  split_states(std::string_view object_reference, std::size_t first,
+               std::size_t last, std::string prefix);
+  // Removes states given as "1-3 10" style lists/ranges (1-based, whitespace
+  // or comma separated, out-of-range numbers ignored). Removing every state
+  // is refused.
+  [[nodiscard]] operation::Result<StateDeleteResult>
+  delete_states(std::string_view object_reference, std::string_view states);
+  // VMD-style frame editing on a static or multi-model object (frames are
+  // numbered from 0): deletes the frames in [beg, end] (end -1 = last) except
+  // every `skip`-th one counted from beg (skip 0 or 1: delete the whole range;
+  // 1 keeps all). Deleting every frame is refused.
+  [[nodiscard]] operation::Result<StateDeleteResult>
+  delete_frames(std::string_view object_reference, long long beg, long long end,
+                long long skip);
+  // Appends a copy of a frame (default: the current one) as a new last frame.
+  [[nodiscard]] operation::Result<StateAppendResult>
+  duplicate_frame(std::string_view object_reference, std::optional<std::size_t> frame);
+  // Creates a multi-state object `name` from the states of several objects
+  // (PyMOL join_states). The selection restricts the atoms taken from each
+  // object. The sources are kept.
+  [[nodiscard]] operation::Result<ObjectCreateResult>
+  join_states(std::string name, const std::vector<std::string> &object_references,
+              std::string selection_expression, StateJoinMode mode);
+  // Read-only atom queries on the active object's current frame.
+  [[nodiscard]] operation::Result<AtomListing>
+  list_atoms(std::string selection_expression,
+             const std::vector<std::string> &properties, std::size_t limit) const;
+  [[nodiscard]] operation::Result<std::vector<std::string>>
+  list_chains(std::string selection_expression) const;
+  [[nodiscard]] operation::Result<ChargeSum>
+  sum_charge(std::string selection_expression, std::string_view kind) const;
+  [[nodiscard]] operation::Result<MassSum>
+  sum_mass(std::string selection_expression) const;
+  [[nodiscard]] operation::Result<std::vector<analysis::BackboneAngles>>
+  backbone_angles(std::string selection_expression) const;
   // Counts selected atoms and states without changing any state.
   [[nodiscard]] operation::Result<SelectionCountResult>
   count_selection(std::string_view object_reference,
@@ -1205,7 +1502,8 @@ public:
   apply_active_chemical_perception(
       const model::ChemicalPerceptionReport &report);
   [[nodiscard]] std::optional<operation::Error>
-  set_named_selection(std::string name, std::string expression, bool dynamic);
+  set_named_selection(std::string name, std::string expression, bool dynamic,
+                      bool merge = false, std::string state = "current");
   [[nodiscard]] operation::Result<ShowResult>
   show(render::RepresentationKind kind, std::string selection_expression,
        bool replace_existing = false);
@@ -1510,7 +1808,28 @@ public:
   [[nodiscard]] NamedViewDeleteResult clear_named_views();
   [[nodiscard]] std::vector<NamedViewRecord> list_named_views() const;
   [[nodiscard]] operation::Result<NamedSceneStoreResult>
-  store_named_scene(std::string name);
+  store_named_scene(std::string name, SceneInsert insert = SceneInsert::end);
+  // Renames a scene in place: its position, current marker and movie
+  // keyframes follow the new name.
+  [[nodiscard]] operation::Result<NamedSceneRecord>
+  rename_named_scene(std::string_view name, std::string new_name);
+  // Re-stores the current scene from the present workspace state and keeps its
+  // position in the scene order.
+  [[nodiscard]] operation::Result<NamedSceneStoreResult> update_named_scene();
+  // Recalls the first, next, previous or last scene of the scene order. Without
+  // a current scene `next` starts at the first and `previous` at the last.
+  [[nodiscard]] operation::Result<NamedSceneRecord>
+  step_named_scene(SceneStep step, bool wrap);
+  // Moves scenes inside the order: location is top, bottom or current (placed
+  // before the current scene). `sort` natural-sorts the given scenes (all when
+  // none are given). Returns the new order.
+  [[nodiscard]] operation::Result<std::vector<std::string>>
+  order_named_scenes(const std::vector<std::string> &names, bool sort,
+                     std::string_view location);
+  // Number of atoms of `selection_expression` per effective color in the
+  // active object (kColorDefault atoms use the object color when it is set).
+  [[nodiscard]] operation::Result<std::vector<ColorUsage>>
+  color_usage(std::string selection_expression) const;
   [[nodiscard]] operation::Result<NamedSceneRecord>
   recall_named_scene(std::string_view name);
   [[nodiscard]] operation::Result<NamedSceneDeleteResult>
@@ -1529,6 +1848,11 @@ public:
   [[nodiscard]] operation::Result<MovieTimelineResult>
   step_movie(std::size_t steps);
   [[nodiscard]] operation::Result<MovieTimelineResult> clear_movie();
+  // Renders movie frames to numbered image files and restores the timeline
+  // position. Refuses to run while playing, and either writes every frame or
+  // removes the files this call created.
+  [[nodiscard]] operation::Result<MovieExportResult>
+  export_movie_frames(const MovieExportRequest &request);
   [[nodiscard]] const std::optional<MovieTimelineState>& movie() const
       noexcept {
     return movie_;
@@ -1721,6 +2045,33 @@ private:
   std::vector<WorkspaceObject> objects_;
   std::optional<std::size_t> active_index_;
   std::vector<WorkspaceVolume> volumes_;
+  struct GroupMember {
+    // Exactly one of the two identifies the member.
+    std::uint64_t object_id{};
+    std::string group_name;
+  };
+  struct GroupRecord {
+    std::string name;
+    std::vector<GroupMember> members;
+    bool open{true};
+  };
+  std::vector<GroupRecord> groups_;
+  [[nodiscard]] bool group_name_exists(std::string_view name) const;
+  // Replaces an object's coordinate states (rebuilds the embedded trajectory,
+  // representations and scene entry). Used by append/delete of states.
+  [[nodiscard]] operation::Result<std::size_t> replace_object_frames(
+      std::size_t index,
+      std::vector<std::shared_ptr<const model::CoordinateFrame>> frames,
+      std::size_t current_frame);
+  [[nodiscard]] bool object_name_in_use(std::string_view name) const;
+  [[nodiscard]] const GroupRecord *find_group(std::string_view name) const;
+  [[nodiscard]] const GroupRecord *parent_group_of_object(std::uint64_t id) const;
+  [[nodiscard]] const GroupRecord *parent_group_of_group(std::string_view name) const;
+  void collect_group_objects(const GroupRecord &group,
+                             std::vector<std::uint64_t> &objects,
+                             std::vector<std::string> &groups) const;
+  [[nodiscard]] GroupInfo describe_group(const GroupRecord &group) const;
+  [[nodiscard]] std::string member_name(const GroupMember &member) const;
   std::optional<std::size_t> active_volume_index_;
   std::shared_ptr<const scene::Scene> scene_;
   std::vector<DistanceMeasurementRecord> measurements_;
@@ -1734,6 +2085,9 @@ private:
   std::map<std::string, std::shared_ptr<const Workspace>, std::less<>>
       named_scenes_;
   std::optional<std::string> current_scene_name_;
+  // Presentation order of the scenes (PyMOL scene_order); always a permutation
+  // of the named_scenes_ keys.
+  std::vector<std::string> scene_order_;
   std::optional<MovieTimelineState> movie_;
   render::RenderSettingStore render_settings_;
   render::ColorTable color_table_;

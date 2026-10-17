@@ -1,5 +1,7 @@
 #include "molshredder/selection/expression.hpp"
 
+#include <algorithm>
+#include <array>
 #include <cctype>
 #include <cmath>
 #include <memory>
@@ -47,6 +49,100 @@ std::string lowercase(std::string value) {
   return value;
 }
 
+std::optional<std::pair<NumericField, std::string>> numeric_field_from(
+    std::string text);
+std::optional<double> number(std::string_view text);
+operation::Result<std::vector<Token>> tokenize(std::string_view source);
+
+// PyMOL slash macros: /object/segi/chain/resi/name (leading slash, fields
+// left-aligned, empty fields match anything) and relative forms such as
+// A/10/CA whose fields are right-aligned to the name. Returns the equivalent
+// selection text, or an empty optional when the run is not a macro.
+std::optional<std::string> macro_expansion(std::string_view run,
+                                           const std::vector<Token>& before,
+                                           std::string& error) {
+  if (run.size() < 2U || run.find('/') == std::string_view::npos)
+    return std::nullopt;
+  if (!before.empty()) {
+    const auto& back = before.back();
+    if (back.kind == TokenKind::right_parenthesis) return std::nullopt;
+    if (back.kind == TokenKind::word && !back.quoted &&
+        (numeric_field_from(back.text).has_value() ||
+         number(back.text).has_value()))
+      return std::nullopt;  // x /2 is a division, not a macro.
+  }
+  const bool absolute = run.front() == '/';
+  if (!absolute) {
+    const auto prefix = std::string{run.substr(0, run.find('/'))};
+    if (!(std::isalnum(static_cast<unsigned char>(prefix.front())) != 0 ||
+          prefix.front() == '_') ||
+        numeric_field_from(prefix).has_value())
+      return std::nullopt;  // b/2: numeric division.
+    // 10/CA is residue 10, atom CA; 10/2 stays a division. A relative macro
+    // that starts with a number needs a non-numeric field to be a macro.
+    if (number(prefix).has_value() &&
+        std::none_of(run.begin(), run.end(), [](char character) {
+          return std::isalpha(static_cast<unsigned char>(character)) != 0;
+        }))
+      return std::nullopt;
+  }
+  std::vector<std::string> parts;
+  std::string current;
+  for (const auto character : absolute ? run.substr(1U) : run) {
+    if (character == '/') {
+      parts.push_back(std::move(current));
+      current.clear();
+    } else {
+      current.push_back(character);
+    }
+  }
+  parts.push_back(std::move(current));
+  constexpr std::array<std::string_view, 5U> fields{"object", "segment", "chain",
+                                                    "resi", "name"};
+  if (parts.size() > fields.size()) {
+    error = "selection macro has more than five fields";
+    return std::nullopt;
+  }
+  const std::size_t first = absolute ? 0U : fields.size() - parts.size();
+  // Backtick qualifiers: object`index, resn`resi and name`altloc.
+  std::string text;
+  const auto add = [&text](const std::string& clause) {
+    if (!text.empty()) text += " and ";
+    text += clause;
+  };
+  for (std::size_t index = 0; index < parts.size(); ++index) {
+    const auto& part = parts[index];
+    if (part.empty()) continue;
+    const auto field = fields[first + index];
+    const auto tick = part.find('`');
+    if (tick == std::string::npos) {
+      add(std::string{field} + " " + part);
+      continue;
+    }
+    const auto head = part.substr(0U, tick);
+    const auto tail = part.substr(tick + 1U);
+    if (tail.empty() || tail.find('`') != std::string::npos) {
+      error = "selection macro backtick qualifier needs exactly one value";
+      return std::nullopt;
+    }
+    const char* qualifier = field == "object" ? "index"
+                            : field == "resi" ? "resi"
+                            : field == "name" ? "altloc"
+                                              : nullptr;
+    if (qualifier == nullptr) {
+      error = "selection macro backtick is only valid in the object, residue and name fields";
+      return std::nullopt;
+    }
+    if (!head.empty()) add((field == "resi" ? std::string{"resn"} : std::string{field}) + " " + head);
+    add(std::string{qualifier} + " " + tail);
+  }
+  if (text.empty()) {
+    error = "selection macro has no field values";
+    return std::nullopt;
+  }
+  return "(" + text + ")";
+}
+
 operation::Result<std::vector<Token>> tokenize(std::string_view source) {
   std::vector<Token> tokens;
   std::size_t offset{};
@@ -55,6 +151,33 @@ operation::Result<std::vector<Token>> tokenize(std::string_view source) {
     if (std::isspace(byte) != 0) {
       ++offset;
       continue;
+    }
+    if (source[offset] != '\'' && source[offset] != '"' && source[offset] != '(' &&
+        source[offset] != ')') {
+      auto end = offset;
+      while (end < source.size() &&
+             std::isspace(static_cast<unsigned char>(source[end])) == 0 &&
+             source[end] != '(' && source[end] != ')' && source[end] != '<' &&
+             source[end] != '>' && source[end] != '=' && source[end] != '!' &&
+             source[end] != '&' && source[end] != '|')
+        ++end;
+      std::string macro_error;
+      const auto expansion =
+          macro_expansion(source.substr(offset, end - offset), tokens, macro_error);
+      if (!macro_error.empty())
+        return operation::Result<std::vector<Token>>::failure(
+            syntax_error(macro_error, offset));
+      if (expansion.has_value()) {
+        auto expanded = tokenize(*expansion);
+        if (!expanded.has_value()) return expanded;
+        for (auto& token : expanded.value()) {
+          if (token.kind == TokenKind::end) continue;
+          token.offset = offset;
+          tokens.push_back(std::move(token));
+        }
+        offset = end;
+        continue;
+      }
     }
     if (source[offset] == '(' || source[offset] == ')') {
       tokens.push_back(Token{
@@ -253,6 +376,13 @@ std::optional<std::pair<NumericField, std::string>> numeric_field_from(
       text == "pc;") {
     return std::pair{NumericField::property, std::string{"partial_charge"}};
   }
+  if (text == "atomicnumber")
+    return std::pair{NumericField::atomic_number, std::string{}};
+  if (text == "numbonds")
+    return std::pair{NumericField::bond_count, std::string{}};
+  if (text == "radius")
+    return std::pair{NumericField::van_der_waals_radius, std::string{}};
+  if (text == "mass") return std::pair{NumericField::property, std::string{"mass"}};
   if (text == "x")
     return std::pair{NumericField::coordinate_x, std::string{}};
   if (text == "y")
@@ -269,6 +399,65 @@ std::shared_ptr<const Node> leaf(NodeKind kind) {
   auto node = std::make_shared<Node>();
   node->kind = kind;
   return node;
+}
+
+std::optional<NumericFunction> function_from(std::string text) {
+  text = lowercase(std::move(text));
+  static const std::pair<std::string_view, NumericFunction> table[] = {
+      {"abs", NumericFunction::abs},     {"acos", NumericFunction::acos},
+      {"asin", NumericFunction::asin},   {"atan", NumericFunction::atan},
+      {"ceil", NumericFunction::ceil},   {"cos", NumericFunction::cos},
+      {"cosh", NumericFunction::cosh},   {"exp", NumericFunction::exp},
+      {"floor", NumericFunction::floor}, {"log", NumericFunction::log},
+      {"log10", NumericFunction::log10}, {"sin", NumericFunction::sin},
+      {"sinh", NumericFunction::sinh},   {"sqr", NumericFunction::sqr},
+      {"sqrt", NumericFunction::sqrt},   {"tan", NumericFunction::tan},
+      {"tanh", NumericFunction::tanh}};
+  for (const auto& [name, function] : table)
+    if (text == name) return function;
+  return std::nullopt;
+}
+
+// PyMOL word comparisons: eq, ne, lt, le, gt, ge.
+std::optional<ComparisonOperator> comparison_word(const Token& token) {
+  if (token.kind != TokenKind::word || token.quoted) return std::nullopt;
+  const auto text = lowercase(token.text);
+  if (text == "eq") return ComparisonOperator::equal;
+  if (text == "ne") return ComparisonOperator::not_equal;
+  if (text == "lt") return ComparisonOperator::less;
+  if (text == "le") return ComparisonOperator::less_equal;
+  if (text == "gt") return ComparisonOperator::greater;
+  if (text == "ge") return ComparisonOperator::greater_equal;
+  return std::nullopt;
+}
+
+// VMD residue-class keywords and their documented definitions (public VMD
+// User's Guide, atom selection keywords). Each is the equivalent selection text.
+std::optional<std::string_view> class_expansion(std::string_view lowered) {
+  static const std::pair<std::string_view, std::string_view> table[] = {
+      {"acidic", "resname ASP+GLU"},
+      {"basic", "resname ARG+HIS+LYS"},
+      {"aliphatic", "resname ALA+GLY+ILE+LEU+VAL"},
+      {"aromatic", "resname HIS+PHE+TRP+TYR"},
+      {"at", "resname ADA+A+THY+T"},
+      {"cg", "resname CYT+C+GUA+G"},
+      {"purine", "resname ADE+A+GUA+G"},
+      {"pyrimidine", "resname CYT+C+THY+T+URI+U"},
+      {"buried", "resname ALA+LEU+VAL+ILE+PHE+CYS+MET+TRP"},
+      {"cyclic", "resname HIS+PHE+PRO+TRP+TYR"},
+      {"medium", "resname VAL+THR+ASP+ASN+PRO+CYS"},
+      {"neutral", "resname VAL+PHE+GLN+TYR+HIS+CYS"},
+      {"small", "resname ALA+GLY+SER"},
+      {"charged", "(basic or acidic)"},
+      {"acyclic", "(polymer.protein and not cyclic)"},
+      {"large", "(polymer.protein and not (small or medium))"},
+      {"polar", "(polymer.protein and not resname ALA+LEU+VAL+ILE+PRO+PHE+MET+TRP)"},
+      {"surface", "(polymer.protein and not buried)"},
+      {"alpha", "ss H"},
+  };
+  for (const auto& [name, text] : table)
+    if (lowered == name) return text;
+  return std::nullopt;
 }
 
 class Parser {
@@ -540,6 +729,7 @@ class Parser {
       }
       if (close + 1U < tokens_.size() &&
           (tokens_[close + 1U].kind == TokenKind::operation ||
+           comparison_word(tokens_[close + 1U]).has_value() ||
            (tokens_[close + 1U].kind == TokenKind::word &&
             !tokens_[close + 1U].quoted &&
             lowercase(tokens_[close + 1U].text) == "in"))) {
@@ -569,6 +759,24 @@ class Parser {
       ++position_;
       return operation::Result<std::shared_ptr<const Node>>::success(
           leaf(lowered == "all" ? NodeKind::all : NodeKind::none));
+    }
+    if (!token.quoted && lowered == "amino") {
+      ++position_;
+      return operation::Result<std::shared_ptr<const Node>>::success(
+          leaf(NodeKind::amino_residue));
+    }
+    if (!token.quoted) {
+      if (const auto expansion = class_expansion(lowered); expansion.has_value()) {
+        // The next token may continue a value list ("basic + acidic" is not a
+        // list); a class keyword is always a complete selection term.
+        const auto expanded = Expression::parse(*expansion);
+        if (!expanded.has_value())
+          return operation::Result<std::shared_ptr<const Node>>::failure(
+              expanded.error());
+        ++position_;
+        return operation::Result<std::shared_ptr<const Node>>::success(
+            expanded.value().root());
+      }
     }
     if (!token.quoted &&
         (lowered == "present" || lowered == "pr." || lowered == "bonded")) {
@@ -621,9 +829,14 @@ class Parser {
     }
     if (!token.quoted && numeric_field_from(token.text).has_value() &&
         ((tokens_[position_ + 1U].kind == TokenKind::operation) ||
+         comparison_word(tokens_[position_ + 1U]).has_value() ||
          (tokens_[position_ + 1U].kind == TokenKind::word &&
           !tokens_[position_ + 1U].quoted &&
           lowercase(tokens_[position_ + 1U].text) == "in"))) {
+      return parse_numeric_comparison();
+    }
+    if (!token.quoted && function_from(token.text).has_value() &&
+        tokens_[position_ + 1U].kind == TokenKind::left_parenthesis) {
       return parse_numeric_comparison();
     }
     const auto field = token.quoted ? std::nullopt : field_from(token.text);
@@ -705,6 +918,20 @@ class Parser {
     }
     const auto token = current();
     auto node = std::make_shared<NumericNode>();
+    if (const auto function = function_from(token.text);
+        function.has_value() &&
+        tokens_[position_ + 1U].kind == TokenKind::left_parenthesis) {
+      position_ += 2U;
+      auto argument = parse_numeric_sum();
+      if (!argument.has_value()) return argument;
+      if (current().kind != TokenKind::right_parenthesis)
+        return numeric_failure("missing ')' after " + token.text + "(", token.offset);
+      ++position_;
+      node->kind = NumericNodeKind::function;
+      node->function = function.value();
+      node->left = argument.value();
+      return operation::Result<std::shared_ptr<const NumericNode>>::success(node);
+    }
     if (const auto literal = number(token.text); literal.has_value()) {
       node->kind = NumericNodeKind::literal;
       node->literal = literal.value();
@@ -799,6 +1026,8 @@ class Parser {
     if (keyword("in")) {
       comparison = ComparisonOperator::range;
       range = true;
+    } else if (const auto word = comparison_word(current()); word.has_value()) {
+      comparison = word.value();
     } else if (current().kind == TokenKind::operation) {
       if (current().text == "=" || current().text == "==")
         comparison = ComparisonOperator::equal;

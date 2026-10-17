@@ -2,11 +2,14 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cmath>
 #include <fstream>
 #include <limits>
 #include <string>
+#include <thread>
 #include <utility>
+#include <vector>
 
 #include "molshredder/scene/math.hpp"
 
@@ -357,6 +360,170 @@ void draw_lines(const RenderPacket& packet, const scene::Camera& camera,
   }
 }
 
+// Screen-space tile binning. Each primitive is registered in every tile its
+// conservative projected bounding box overlaps, in original order, so a
+// pixel sees exactly the primitives that could hit it, in the same order as
+// the brute-force loop (identical nearest-hit and tie-breaking results).
+constexpr std::size_t kTileSize = 16U;
+
+struct TileList {
+  std::vector<std::uint32_t> spheres;
+  std::vector<std::uint32_t> cylinders;
+  std::vector<std::uint32_t> triangles;
+};
+
+struct TileBins {
+  std::size_t columns{};
+  std::size_t rows{};
+  std::vector<TileList> tiles;
+};
+
+struct ScreenBox {
+  double min_x{std::numeric_limits<double>::infinity()};
+  double max_x{-std::numeric_limits<double>::infinity()};
+  double min_y{std::numeric_limits<double>::infinity()};
+  double max_y{-std::numeric_limits<double>::infinity()};
+  bool everywhere{false};
+};
+
+void extend_box(ScreenBox& box, const scene::Camera& camera,
+                model::Vec3d point, std::size_t width, std::size_t height) {
+  if (box.everywhere) return;
+  const auto camera_point =
+      scene::transform_point(camera.view_matrix(), point);
+  const auto& parameters = camera.parameters();
+  double normalized_x{};
+  double normalized_y{};
+  if (parameters.projection == scene::ProjectionMode::perspective) {
+    const auto depth = -camera_point.z;
+    if (depth <= 1.0e-6) {
+      box.everywhere = true;
+      return;
+    }
+    const auto tangent =
+        std::tan(parameters.vertical_field_of_view_radians * 0.5);
+    normalized_x = camera_point.x / (depth * tangent * parameters.aspect_ratio);
+    normalized_y = camera_point.y / (depth * tangent);
+  } else {
+    const auto half_height = parameters.orthographic_height * 0.5;
+    normalized_x = camera_point.x / (half_height * parameters.aspect_ratio);
+    normalized_y = camera_point.y / half_height;
+  }
+  const auto x = (normalized_x * 0.5 + 0.5) * static_cast<double>(width);
+  const auto y = (0.5 - normalized_y * 0.5) * static_cast<double>(height);
+  if (!std::isfinite(x) || !std::isfinite(y)) {
+    box.everywhere = true;
+    return;
+  }
+  box.min_x = std::min(box.min_x, x);
+  box.max_x = std::max(box.max_x, x);
+  box.min_y = std::min(box.min_y, y);
+  box.max_y = std::max(box.max_y, y);
+}
+
+// Projects the eight corners of the axis-aligned box [low, high].
+ScreenBox box_of(const scene::Camera& camera, model::Vec3d low,
+                 model::Vec3d high, std::size_t width, std::size_t height) {
+  ScreenBox box;
+  for (unsigned corner = 0; corner < 8U; ++corner) {
+    extend_box(box, camera,
+               model::Vec3d{(corner & 1U) != 0U ? high.x : low.x,
+                            (corner & 2U) != 0U ? high.y : low.y,
+                            (corner & 4U) != 0U ? high.z : low.z},
+               width, height);
+  }
+  return box;
+}
+
+template <typename Selector>
+void add_to_tiles(TileBins& bins, const ScreenBox& box, std::size_t width,
+                  std::size_t height, std::uint32_t index,
+                  Selector selector) {
+  std::size_t first_column = 0;
+  std::size_t last_column = bins.columns - 1U;
+  std::size_t first_row = 0;
+  std::size_t last_row = bins.rows - 1U;
+  if (!box.everywhere) {
+    // One pixel of margin absorbs floating-point rounding at the borders.
+    const auto lo_x = box.min_x - 1.0;
+    const auto hi_x = box.max_x + 1.0;
+    const auto lo_y = box.min_y - 1.0;
+    const auto hi_y = box.max_y + 1.0;
+    if (hi_x < 0.0 || lo_x > static_cast<double>(width) || hi_y < 0.0 ||
+        lo_y > static_cast<double>(height)) {
+      return;
+    }
+    const auto tile = static_cast<double>(kTileSize);
+    const auto clamp_to = [tile](double value, std::size_t extent) {
+      return static_cast<std::size_t>(
+          std::clamp(value, 0.0, static_cast<double>(extent)) / tile);
+    };
+    first_column = std::min(bins.columns - 1U, clamp_to(lo_x, width));
+    first_row = std::min(bins.rows - 1U, clamp_to(lo_y, height));
+    last_column = std::min(bins.columns - 1U, clamp_to(hi_x, width));
+    last_row = std::min(bins.rows - 1U, clamp_to(hi_y, height));
+  }
+  for (auto row = first_row; row <= last_row; ++row) {
+    for (auto column = first_column; column <= last_column; ++column) {
+      selector(bins.tiles[row * bins.columns + column]).push_back(index);
+    }
+  }
+}
+
+TileBins bin_primitives(const RenderPacket& packet,
+                        const scene::Camera& camera, std::size_t width,
+                        std::size_t height) {
+  TileBins bins;
+  bins.columns = (width + kTileSize - 1U) / kTileSize;
+  bins.rows = (height + kTileSize - 1U) / kTileSize;
+  bins.tiles.resize(bins.columns * bins.rows);
+
+  for (std::size_t i = 0; i < packet.spheres.size(); ++i) {
+    const auto& sphere = packet.spheres[i];
+    const auto r = sphere.radius;
+    const auto box = box_of(
+        camera,
+        model::Vec3d{sphere.center.x - r, sphere.center.y - r,
+                     sphere.center.z - r},
+        model::Vec3d{sphere.center.x + r, sphere.center.y + r,
+                     sphere.center.z + r},
+        width, height);
+    add_to_tiles(bins, box, width, height, static_cast<std::uint32_t>(i),
+                 [](TileList& tile) -> auto& { return tile.spheres; });
+  }
+  for (std::size_t i = 0; i < packet.cylinders.size(); ++i) {
+    const auto& cylinder = packet.cylinders[i];
+    const auto r = cylinder.radius;
+    const auto box = box_of(
+        camera,
+        model::Vec3d{std::min(cylinder.start.x, cylinder.end.x) - r,
+                     std::min(cylinder.start.y, cylinder.end.y) - r,
+                     std::min(cylinder.start.z, cylinder.end.z) - r},
+        model::Vec3d{std::max(cylinder.start.x, cylinder.end.x) + r,
+                     std::max(cylinder.start.y, cylinder.end.y) + r,
+                     std::max(cylinder.start.z, cylinder.end.z) + r},
+        width, height);
+    add_to_tiles(bins, box, width, height, static_cast<std::uint32_t>(i),
+                 [](TileList& tile) -> auto& { return tile.cylinders; });
+  }
+  for (std::size_t i = 0; i < packet.mesh_triangles.size(); ++i) {
+    const auto& triangle = packet.mesh_triangles[i];
+    const auto& a = packet.mesh_vertices[triangle.first].position;
+    const auto& b = packet.mesh_vertices[triangle.second].position;
+    const auto& c = packet.mesh_vertices[triangle.third].position;
+    const auto box = box_of(
+        camera,
+        model::Vec3d{std::min({a.x, b.x, c.x}), std::min({a.y, b.y, c.y}),
+                     std::min({a.z, b.z, c.z})},
+        model::Vec3d{std::max({a.x, b.x, c.x}), std::max({a.y, b.y, c.y}),
+                     std::max({a.z, b.z, c.z})},
+        width, height);
+    add_to_tiles(bins, box, width, height, static_cast<std::uint32_t>(i),
+                 [](TileList& tile) -> auto& { return tile.triangles; });
+  }
+  return bins;
+}
+
 }  // namespace
 
 operation::Result<ImageRgba8> render_reference(
@@ -417,51 +584,70 @@ operation::Result<ImageRgba8> render_reference(
   }
 
   const auto light_direction = scene::normalized(settings.light_direction);
-  for (std::size_t y = 0; y < image.height; ++y) {
-    for (std::size_t x = 0; x < image.width; ++x) {
-      const auto ray = pixel_ray(camera, x, y, image.width, image.height);
-      std::optional<Hit> nearest;
-      for (const auto& sphere : packet.spheres) {
-        const auto hit = intersect_sphere(ray, sphere);
-        if (hit.has_value() &&
-            (!nearest.has_value() || hit->distance < nearest->distance)) {
-          nearest = hit;
-        }
+  const TileBins bins = bin_primitives(packet, camera, image.width,
+                                       image.height);
+  // Pixels are independent and each writes only its own slot, so rows are
+  // distributed over worker threads; the image is identical to a serial run.
+  const auto render_pixel = [&](std::size_t x, std::size_t y) {
+    const auto ray = pixel_ray(camera, x, y, image.width, image.height);
+    const auto& tile = bins.tiles[(y / kTileSize) * bins.columns +
+                                  (x / kTileSize)];
+    std::optional<Hit> nearest;
+    for (const auto index : tile.spheres) {
+      const auto hit = intersect_sphere(ray, packet.spheres[index]);
+      if (hit.has_value() &&
+          (!nearest.has_value() || hit->distance < nearest->distance)) {
+        nearest = hit;
       }
-      for (const auto& cylinder : packet.cylinders) {
-        const auto hit = intersect_cylinder(ray, cylinder);
-        if (hit.has_value() &&
-            (!nearest.has_value() || hit->distance < nearest->distance)) {
-          nearest = hit;
-        }
-      }
-      for (const auto& triangle : packet.mesh_triangles) {
-        const auto hit = intersect_triangle(
-            ray, packet.mesh_vertices[triangle.first],
-            packet.mesh_vertices[triangle.second],
-            packet.mesh_vertices[triangle.third], triangle.pick_id);
-        if (hit.has_value() &&
-            (!nearest.has_value() || hit->distance < nearest->distance)) {
-          nearest = hit;
-        }
-      }
-      if (!nearest.has_value()) {
-        continue;
-      }
-      using scene::operator-;
-      const auto depth =
-          scene::dot(nearest->point - camera.position(), camera.forward());
-      const auto& parameters = camera.parameters();
-      if (depth < parameters.near_clip || depth > parameters.far_clip) {
-        continue;
-      }
-      const auto index = y * image.width + x;
-      set_pixel(image, index,
-                shaded(nearest->color, nearest->normal, light_direction,
-                       settings.ambient_light),
-                depth, nearest->pick_id);
     }
-  }
+    for (const auto index : tile.cylinders) {
+      const auto hit = intersect_cylinder(ray, packet.cylinders[index]);
+      if (hit.has_value() &&
+          (!nearest.has_value() || hit->distance < nearest->distance)) {
+        nearest = hit;
+      }
+    }
+    for (const auto index : tile.triangles) {
+      const auto& triangle = packet.mesh_triangles[index];
+      const auto hit = intersect_triangle(
+          ray, packet.mesh_vertices[triangle.first],
+          packet.mesh_vertices[triangle.second],
+          packet.mesh_vertices[triangle.third], triangle.pick_id);
+      if (hit.has_value() &&
+          (!nearest.has_value() || hit->distance < nearest->distance)) {
+        nearest = hit;
+      }
+    }
+    if (!nearest.has_value()) {
+      return;
+    }
+    using scene::operator-;
+    const auto depth =
+        scene::dot(nearest->point - camera.position(), camera.forward());
+    const auto& parameters = camera.parameters();
+    if (depth < parameters.near_clip || depth > parameters.far_clip) {
+      return;
+    }
+    const auto index = y * image.width + x;
+    set_pixel(image, index,
+              shaded(nearest->color, nearest->normal, light_direction,
+                     settings.ambient_light),
+              depth, nearest->pick_id);
+  };
+  std::atomic<std::size_t> next_row{0};
+  const auto worker = [&]() {
+    for (auto y = next_row.fetch_add(1U); y < image.height;
+         y = next_row.fetch_add(1U)) {
+      for (std::size_t x = 0; x < image.width; ++x) render_pixel(x, y);
+    }
+  };
+  const auto hardware = std::max(1U, std::thread::hardware_concurrency());
+  const auto thread_count = static_cast<std::size_t>(std::min<std::size_t>(
+      hardware, std::max<std::size_t>(1U, image.height / 16U)));
+  std::vector<std::thread> workers;
+  for (std::size_t i = 1; i < thread_count; ++i) workers.emplace_back(worker);
+  worker();
+  for (auto& thread : workers) thread.join();
   draw_lines(packet, camera, image);
   return operation::Result<ImageRgba8>::success(std::move(image));
 }

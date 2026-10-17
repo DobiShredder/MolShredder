@@ -289,6 +289,17 @@ int main() {
                   std::vector<std::optional<std::size_t>>{0U} &&
               !remapped.value()->atom_index(AtomId{3U}).has_value(),
           "mutation must preserve surviving identity/property/bond state and expose exact deleted/reordered remap");
+      // Sorted (binary search) and reordered (linear fallback) lookups agree.
+      passed &= expect(
+          built.value()->atom_index(AtomId{3U}) == AtomIndex{2U} &&
+              !built.value()->atom_index(AtomId{99U}).has_value() &&
+              !built.value()->atom_index(AtomId{0U}).has_value() &&
+              remapped.value()->atom_index(AtomId{4U}) == AtomIndex{0U} &&
+              remapped.value()->atom_index(AtomId{1U}) == AtomIndex{2U} &&
+              !remapped.value()->atom_index(AtomId{3U}).has_value() &&
+              built.value()->bond_index(BondId{1U}) == 0U &&
+              !built.value()->bond_index(BondId{9U}).has_value(),
+          "atom/bond identity lookup must agree for sorted and reordered ID tables");
 
       const AtomReference surviving{{kTopologyReferenceSchemaVersion, 42U,
                                      built.value()->version()},

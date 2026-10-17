@@ -16,7 +16,7 @@
 
 namespace {
 
-bool expect(bool condition, std::string_view message) {
+bool expect(bool condition, const std::string& message) {
   if (!condition) std::cerr << message << '\n';
   return condition;
 }
@@ -211,10 +211,169 @@ int main() {
           evaluates_to(*topology, "(name CA or name O) and not resn HOH",
                        {0U, 1U, 1U, 0U}),
       "not/and/or precedence and parentheses must be deterministic");
+  passed &= expect(evaluates_to(*topology, "chain A:W", {1U, 1U, 1U, 1U}) &&
+                       evaluates_to(*topology, "chain B:W", {0U, 0U, 0U, 1U}),
+                   "alphabetic ranges accept ':' as well as '-'");
   passed &= expect(
       evaluates_to(*topology, "chain A name CA", {0U, 1U, 0U, 0U}) &&
           evaluates_to(*topology, "chain A-W", {1U, 1U, 1U, 1U}),
       "implicit conjunction and alpha ranges must be deterministic");
+  {
+    struct MacroCase {
+      std::string_view text;
+      selection::Mask expected;
+    };
+    const std::vector<MacroCase> cases{
+        {"///A/10A/CA", {0U, 1U, 0U, 0U}},
+        {"A/10A/CA", {0U, 1U, 0U, 0U}},
+        {"10A/CA", {0U, 1U, 0U, 0U}},
+        {"A/10A/", {1U, 1U, 1U, 0U}},
+        {"W/5/O", {0U, 0U, 0U, 1U}},
+        {"//PROT", {1U, 1U, 1U, 0U}},
+        {"///W", {0U, 0U, 0U, 1U}},
+        {"A/10A/C*", {0U, 1U, 0U, 0U}},
+        {"A/10A+5/O", {0U, 0U, 1U, 0U}},
+        {"A/10A/CA or W/5/O", {0U, 1U, 0U, 1U}},
+        {"not A/10A/", {0U, 0U, 0U, 1U}},
+        {"byres A/10A/CA", {1U, 1U, 1U, 0U}},
+        {"A/10A/N`A", {1U, 0U, 0U, 0U}},
+        {"A/GLY`10A/CA", {0U, 1U, 0U, 0U}},
+        {"A/GLY`10A/", {1U, 1U, 1U, 0U}},
+        {"A/ALA`10A/", {0U, 0U, 0U, 0U}},
+        {"A/10A/N`B", {0U, 0U, 0U, 0U}},
+    };
+    for (const auto& macro : cases) {
+      passed &= expect(evaluates_to(*topology, macro.text, macro.expected),
+                       std::string{"slash macro '"} + std::string{macro.text} +
+                           "' must expand to field conjunctions");
+    }
+  }
+  passed &= expect(
+      evaluates_to(*topology, "b/2 > 10", {0U, 0U, 1U, 1U}) &&
+          evaluates_to(*topology, "b /2 > 10", {0U, 0U, 1U, 1U}) &&
+          evaluates_to(*topology, "(b)/2 > 10", {0U, 0U, 1U, 1U}),
+      "a slash after a numeric field must remain a division");
+  passed &= expect(
+      !selection::Expression::parse("/a/b/c/d/e/f").has_value() &&
+          !selection::Expression::parse("////").has_value(),
+      "macros with more than five fields or no values must be rejected");
+  {
+    struct NumericCase {
+      std::string_view text;
+      selection::Mask expected;
+    };
+    const selection::Mask everyone{1U, 1U, 1U, 1U};
+    const std::vector<NumericCase> cases{
+        {"b ge 30", {0U, 0U, 1U, 1U}},
+        {"b le 20", {1U, 1U, 0U, 0U}},
+        {"b ne 20", {1U, 0U, 1U, 1U}},
+        {"b gt 20", {0U, 0U, 1U, 1U}},
+        {"b lt 30", {1U, 1U, 0U, 0U}},
+        {"b eq 20", {0U, 1U, 0U, 0U}},
+        {"(b + 10) ge 40", {0U, 0U, 1U, 1U}},
+        {"abs(partial_charge) > 0.25", {1U, 0U, 0U, 1U}},
+        {"sqr(b) = 400", {0U, 1U, 0U, 0U}},
+        {"sqrt(b) > 5", {0U, 0U, 1U, 1U}},
+        {"floor(b / 15) = 1", {0U, 1U, 0U, 0U}},
+        {"ceil(b / 15) = 2", {0U, 1U, 1U, 0U}},
+        {"log10(b) > 1.4", {0U, 0U, 1U, 1U}},
+        {"exp(partial_charge) < 1", {1U, 0U, 1U, 1U}},
+        {"abs(b - 25) < 6", {0U, 1U, 1U, 0U}},
+        {"sin(0) = 0", everyone},
+        {"cos(0) = 1", everyone},
+        {"tan(0) = 0", everyone},
+        {"sinh(0) = 0", everyone},
+        {"cosh(0) = 1", everyone},
+        {"tanh(0) = 0", everyone},
+        {"log(1) = 0", everyone},
+        {"acos(1) = 0", everyone},
+        {"asin(1) > 1.57 and asin(1) < 1.58", everyone},
+        {"atan(1) > 0.78 and atan(1) < 0.79", everyone},
+        {"sqrt(sqr(b)) = b", everyone},
+    };
+    for (const auto& item : cases) {
+      passed &= expect(evaluates_to(*topology, item.text, item.expected),
+                       std::string{"numeric selection '"} + std::string{item.text} +
+                           "' must evaluate as specified");
+    }
+    for (const std::string_view text :
+         {"sqrt(partial_charge) > 0", "log(b - 10) > 0", "asin(b) > 0",
+          "abs(b > 1", "frobnicate(b) > 1"}) {
+      const auto parsed = selection::Expression::parse(text);
+      const auto mask = parsed.has_value()
+                            ? selection::evaluate(parsed.value(), *topology)
+                            : operation::Result<selection::Mask>::failure(parsed.error());
+      passed &= expect(!mask.has_value(),
+                       std::string{"'"} + std::string{text} +
+                           "' must fail explicitly instead of selecting silently");
+    }
+  }
+  {
+    struct KeywordCase {
+      std::string_view text;
+      selection::Mask expected;
+    };
+    const selection::Mask none{0U, 0U, 0U, 0U};
+    const selection::Mask gly{1U, 1U, 1U, 0U};
+    const std::vector<KeywordCase> cases{
+        {"small", gly},
+        {"aliphatic", gly},
+        {"acidic", none},
+        {"basic", none},
+        {"charged", none},
+        {"aromatic", none},
+        {"cyclic", none},
+        {"medium", none},
+        {"neutral", none},
+        {"buried", none},
+        {"at", none},
+        {"cg", none},
+        {"purine", none},
+        {"pyrimidine", none},
+        {"large", none},
+        {"polar", gly},
+        {"surface", gly},
+        {"acyclic", gly},
+        {"alpha", {1U, 1U, 0U, 0U}},
+        {"small and name CA", {0U, 1U, 0U, 0U}},
+        {"not small", {0U, 0U, 0U, 1U}},
+        {"atomicnumber = 8", {0U, 0U, 1U, 1U}},
+        {"atomicnumber >= 7 and atomicnumber < 8", {1U, 0U, 0U, 0U}},
+        {"numbonds = 2", {0U, 1U, 0U, 0U}},
+        {"numbonds = 1", {1U, 0U, 1U, 0U}},
+        {"numbonds = 0", {0U, 0U, 0U, 1U}},
+        {"numbonds gt 0 and bonded", {1U, 1U, 1U, 0U}},
+        {"radius > 1.6", {0U, 1U, 0U, 0U}},
+        {"radius lt 1.6", {1U, 0U, 1U, 1U}},
+    };
+    for (const auto& item : cases) {
+      passed &= expect(evaluates_to(*topology, item.text, item.expected),
+                       std::string{"VMD keyword selection '"} + std::string{item.text} +
+                           "' must evaluate as documented");
+    }
+    // charged is the documented union of basic and acidic residue names.
+    passed &= expect(
+        evaluates_to(*topology, "charged", {0U, 0U, 0U, 0U}) &&
+            evaluates_to(*topology, "resname GLY and (basic or acidic)",
+                         {0U, 0U, 0U, 0U}),
+        "charged must equal basic or acidic");
+
+    using namespace molshredder::model;
+    TopologyBuilder amino_builder;
+    const auto alanine =
+        amino_builder.add_residue(ResidueRecord{"ALA", 1, "", "A", ""});
+    const auto partial = amino_builder.add_residue(ResidueRecord{"LIG", 2, "", "A", ""});
+    for (const auto* name : {"N", "CA", "C", "O"})
+      static_cast<void>(amino_builder.add_atom(AtomRecord{name, 6U, alanine.value(), "", 0, 1}));
+    for (const auto* name : {"N", "CA", "C"})
+      static_cast<void>(amino_builder.add_atom(AtomRecord{name, 6U, partial.value(), "", 0, 2}));
+    const auto amino_topology = amino_builder.build().value();
+    passed &= expect(evaluates_to(*amino_topology, "amino",
+                                  {1U, 1U, 1U, 1U, 0U, 0U, 0U}) &&
+                         evaluates_to(*amino_topology, "not amino",
+                                      {0U, 0U, 0U, 0U, 1U, 1U, 1U}),
+                     "amino selects only residues that have N, CA, C and O atoms");
+  }
   passed &= expect(evaluates_to(*topology, "name \"and\"", {0U, 0U, 0U, 0U}),
                    "quoted logical keywords must remain predicate values");
   passed &= expect(evaluates_to(*topology, "chain \"\"", {0U, 0U, 0U, 0U}),

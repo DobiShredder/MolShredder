@@ -50,6 +50,19 @@ coordinate와의 exact minimum-image delta를 구해 이전 unwrapped coordinate
 이 알고리즘은 연속 frame 사이의 실제 atom 이동이 minimum-image ambiguity보다 작다는 전제를 가진다.
 Bond-aware whole-molecule reconstruction이나 큰 frame stride에서의 이동 추론을 대신하지 않는다.
 
+## Object frame 처리 모드 (`pbc mode`)
+
+`pbc mode --mode wrap|unwrap|none|status`는 object의 frame을 읽는 층에 `trajectory::PbcProcessedSource`를 끼워 넣어(non-destructive) 렌더링,
+선택, 분석, trajectory 재생, 저장이 같은 처리된 frame을 보게 한다. 원래의 좌표 source와 trajectory 상태는 object에 보관되어 `none`이
+그대로 복원하고, mode 전환은 coordinate revision을 올려 진행 중이던 분석 계획을 stale로 만든다.
+
+- `wrap`: frame마다 모든 atom을 단위 세포의 분수 좌표 [0,1)로 접는다(`wrap_frame`). 이미 세포 안에 있는 atom은 변하지 않는다.
+- `unwrap`: `TrajectoryUnwrapper`로 atom별 연속성을 이어 주기적 경계를 넘은 atom을 이전 위치에서 최소 이미지 변위만큼 이어 붙인다.
+  frame을 순서대로 읽으면 O(1), 건너뛰거나 거꾸로 가면 처음부터 다시 계산하며 재계산이 5만 frame을 넘으면 `resource_exhausted`다.
+- 모든 frame에 unit cell이 있어야 하며 없으면 모드 전환이 거부된다. 분자 단위(`bymol`) unwrap, 중심 지정(`center`)은 제공하지 않는다.
+- 편집(`object remove-atoms`, 원자 위치 편집), `load append`, `edit undo|redo`는 모드가 켜져 있으면 거부한다(처리된 source에 원본 기준 편집이
+  섞이는 것을 막기 위함). 복사·추출은 처리된 좌표를 새 object에 그대로 담고 새 object의 모드는 `none`이다.
+
 ## Analysis 연결 상태
 
 `analysis::atom_distance()`는 `DistanceBoundary::raw`와

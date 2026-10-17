@@ -64,6 +64,77 @@ std::optional<operation::Error> NamedSelections::set(
   return std::nullopt;
 }
 
+std::optional<operation::Error> NamedSelections::merge(
+    std::string name, Expression expression, bool dynamic,
+    const model::Topology& topology, const EvaluationContext& context) {
+  const auto existing = entries_.find(name);
+  if (existing == entries_.end())
+    return set(std::move(name), std::move(expression), dynamic, topology,
+               context);
+  if (existing->second.dynamic != dynamic)
+    return invalid("merge requires the same update mode as the existing selection",
+                   "merge a static selection into a static one, or a dynamic one "
+                   "into a dynamic one");
+  const auto old_expression = existing->second.expression.source();
+  const bool had_static_mask = !dynamic && existing->second.static_topology == &topology &&
+                               existing->second.static_topology_version == topology.version();
+  const auto old_mask = existing->second.static_mask;
+  const auto combined = Expression::parse("(" + old_expression + ") or (" +
+                                          expression.source() + ")");
+  if (!combined.has_value()) return combined.error();
+  // set() restores the previous entry on failure, so a failed merge changes nothing.
+  if (const auto error = set(name, combined.value(), dynamic, topology, context);
+      error.has_value())
+    return error;
+  if (had_static_mask) {
+    auto& entry = entries_.at(name);
+    if (entry.static_mask.size() == old_mask.size()) {
+      for (std::size_t index = 0; index < old_mask.size(); ++index)
+        entry.static_mask[index] = static_cast<std::uint8_t>(
+            entry.static_mask[index] | old_mask[index]);
+    }
+  }
+  return std::nullopt;
+}
+
+std::optional<operation::Error> NamedSelections::set_state_union(
+    std::string name, Expression expression, const model::Topology& topology,
+    const std::vector<EvaluationContext>& contexts) {
+  if (contexts.empty()) return invalid("a state union needs at least one state");
+  std::optional<Entry> saved;
+  if (const auto previous = entries_.find(name); previous != entries_.end())
+    saved = previous->second;
+  if (const auto error = set(name, expression, true, topology, contexts.front());
+      error.has_value())
+    return error;
+  // The entry is dynamic here, so each evaluation sees its own context.
+  Mask merged;
+  for (const auto& context : contexts) {
+    std::vector<std::string> stack;
+    auto mask = evaluate_impl(name, topology, context, stack);
+    if (!mask.has_value()) {
+      if (saved.has_value())
+        entries_.insert_or_assign(name, std::move(saved.value()));
+      else
+        entries_.erase(name);
+      return mask.error();
+    }
+    if (merged.empty()) {
+      merged = std::move(mask.value());
+    } else {
+      for (std::size_t index = 0; index < merged.size() && index < mask.value().size();
+           ++index)
+        merged[index] = static_cast<std::uint8_t>(merged[index] | mask.value()[index]);
+    }
+  }
+  auto& entry = entries_.at(name);
+  entry.dynamic = false;
+  entry.static_topology = &topology;
+  entry.static_topology_version = topology.version();
+  entry.static_mask = std::move(merged);
+  return std::nullopt;
+}
+
 std::optional<operation::Error> NamedSelections::erase(std::string_view name) {
   if (!entries_.contains(name)) {
     return operation::Error{operation::ErrorCode::not_found,

@@ -2,6 +2,7 @@
 #include <cmath>
 #include <cstdint>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <string_view>
@@ -209,5 +210,68 @@ int main() {
   passed &= expect(!trajectory::minimum_image(invalid_cell, {1.0, 2.0, 3.0})
                         .has_value(),
                    "degenerate unit cells must fail PBC operations");
+  // Non-destructive PBC processing of a coordinate source (Q-035 a).
+  {
+    // One atom drifting across the +x face of a 10 A box over four frames, with
+    // wrapped input: x = 8, 9.5, 1.0 (crossed), 2.5 (crossed).
+    std::vector<std::shared_ptr<const model::CoordinateFrame>> raw;
+    for (const float x : {8.0F, 9.5F, 1.0F, 2.5F})
+      raw.push_back(frame({{x, 5.0F, 5.0F}}, {1U}, orthorhombic));
+    const auto source = model::InMemoryCoordinateSource::create(1U, raw).value();
+
+    const auto wrapped = trajectory::PbcProcessedSource::create(source, trajectory::PbcMode::wrap);
+    passed &= expect(wrapped.has_value(), "wrap source must be created");
+    if (wrapped.has_value()) {
+      const auto out_of_box = frame({{23.0F, -4.0F, 5.0F}}, {1U}, orthorhombic);
+      const auto outside = model::InMemoryCoordinateSource::create(1U, {out_of_box}).value();
+      const auto folding = trajectory::PbcProcessedSource::create(outside, trajectory::PbcMode::wrap).value();
+      const auto folded = folding->read_frame(0U);
+      passed &= expect(folded.has_value() && folding->frame_count() == 1U &&
+                           folding->atom_count() == 1U,
+                       "wrap source mirrors frame and atom counts");
+      if (folded.has_value()) {
+        const auto position = std::get<std::vector<model::Vec3f>>(folded.value()->positions().values())[0];
+        passed &= expect(near(position.x, 3.0, 1.0e-5) && near(position.y, 6.0, 1.0e-5),
+                         "wrap folds 23 into 3 and -4 into 6");
+      }
+      const auto untouched = wrapped.value()->read_frame(1U);
+      passed &= expect(untouched.has_value() &&
+                           near(std::get<std::vector<model::Vec3f>>(
+                                    untouched.value()->positions().values())[0].x, 9.5, 1.0e-5),
+                       "wrap leaves an atom that is already inside unchanged");
+    }
+
+    const auto unwrapped = trajectory::PbcProcessedSource::create(source, trajectory::PbcMode::unwrap).value();
+    passed &= expect(unwrapped->access() == model::FrameAccess::sequential,
+                     "unwrapping is a sequential source");
+    const auto x_at = [&](std::size_t index) {
+      const auto result = unwrapped->read_frame(index);
+      return result.has_value()
+                 ? static_cast<double>(std::get<std::vector<model::Vec3f>>(
+                       result.value()->positions().values())[0].x)
+                 : std::numeric_limits<double>::quiet_NaN();
+    };
+    passed &= expect(near(x_at(0U), 8.0, 1.0e-5) && near(x_at(1U), 9.5, 1.0e-5) &&
+                         near(x_at(2U), 11.0, 1.0e-5) && near(x_at(3U), 12.5, 1.0e-5),
+                     "sequential unwrapping continues across the periodic boundary");
+    passed &= expect(near(x_at(3U), 12.5, 1.0e-5) && near(x_at(1U), 9.5, 1.0e-5) &&
+                         near(x_at(3U), 12.5, 1.0e-5),
+                     "a jump replays from the first frame and gives the same positions");
+    passed &= expect(!unwrapped->read_frame(99U).has_value(),
+                     "reading a frame outside the source is an error");
+    const auto limited = trajectory::PbcProcessedSource::create(source, trajectory::PbcMode::unwrap, 2U).value();
+    passed &= expect(limited->read_frame(1U).has_value() && !limited->read_frame(3U).has_value(),
+                     "a replay beyond the configured limit is refused");
+    passed &= expect(!trajectory::PbcProcessedSource::create(nullptr, trajectory::PbcMode::wrap).has_value() &&
+                         !trajectory::PbcProcessedSource::create(source, trajectory::PbcMode::wrap, 0U).has_value(),
+                     "invalid construction arguments are rejected");
+    const auto no_cell = model::InMemoryCoordinateSource::create(
+        1U, {frame({{1.0F, 1.0F, 1.0F}}, {1U}, std::nullopt)}).value();
+    passed &= expect(!trajectory::PbcProcessedSource::create(no_cell, trajectory::PbcMode::wrap)
+                          .value()->read_frame(0U).has_value() &&
+                         !trajectory::PbcProcessedSource::create(no_cell, trajectory::PbcMode::unwrap)
+                              .value()->read_frame(0U).has_value(),
+                     "frames without a unit cell cannot be wrapped or unwrapped");
+  }
   return passed ? 0 : 1;
 }

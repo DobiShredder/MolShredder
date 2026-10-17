@@ -997,14 +997,29 @@ std::vector<NamedViewRecord> Workspace::list_named_views() const {
 }
 
 operation::Result<NamedSceneStoreResult>
-Workspace::store_named_scene(std::string name) {
+Workspace::store_named_scene(std::string name, SceneInsert insert) {
   if (const auto error = validate_view_name(name); error.has_value())
     return operation::Result<NamedSceneStoreResult>::failure(*error);
   auto snapshot = std::make_shared<Workspace>(*this);
   snapshot->named_scenes_.clear();
+  snapshot->scene_order_.clear();
   snapshot->current_scene_name_.reset();
   const auto replaced = named_scenes_.contains(name);
+  const auto anchor = current_scene_name_;
   named_scenes_.insert_or_assign(name, std::move(snapshot));
+  const auto existing =
+      std::find(scene_order_.begin(), scene_order_.end(), name);
+  if (existing == scene_order_.end() || insert != SceneInsert::end) {
+    if (existing != scene_order_.end()) scene_order_.erase(existing);
+    auto position = scene_order_.end();
+    if (insert != SceneInsert::end && anchor.has_value()) {
+      const auto found =
+          std::find(scene_order_.begin(), scene_order_.end(), *anchor);
+      if (found != scene_order_.end())
+        position = insert == SceneInsert::before ? found : found + 1;
+    }
+    scene_order_.insert(position, name);
+  }
   current_scene_name_ = name;
   return operation::Result<NamedSceneStoreResult>::success(
       NamedSceneStoreResult{{std::move(name), object_count(), volume_count(),
@@ -1025,6 +1040,7 @@ Workspace::recall_named_scene(std::string_view name) {
   }
   Workspace candidate = *found->second;
   candidate.named_scenes_ = named_scenes_;
+  candidate.scene_order_ = scene_order_;
   candidate.current_scene_name_ = found->first;
   candidate.movie_ = movie_;
   candidate.session_invocations_ = session_invocations_;
@@ -1046,6 +1062,7 @@ Workspace::delete_named_scene(std::string_view name) {
         "use scene list to inspect stored scene names"});
   }
   named_scenes_.erase(found);
+  std::erase(scene_order_, std::string{name});
   if (current_scene_name_ == name) current_scene_name_.reset();
   return operation::Result<NamedSceneDeleteResult>::success(
       NamedSceneDeleteResult{std::string{name}, named_scenes_.size(), false});
@@ -1053,19 +1070,217 @@ Workspace::delete_named_scene(std::string_view name) {
 
 NamedSceneDeleteResult Workspace::clear_named_scenes() {
   named_scenes_.clear();
+  scene_order_.clear();
   current_scene_name_.reset();
   return NamedSceneDeleteResult{"", 0U, true};
 }
 
 std::vector<NamedSceneRecord> Workspace::list_named_scenes() const {
   std::vector<NamedSceneRecord> result;
-  result.reserve(named_scenes_.size());
-  for (const auto &[name, snapshot] : named_scenes_) {
+  result.reserve(scene_order_.size());
+  for (const auto &name : scene_order_) {
+    const auto found = named_scenes_.find(name);
+    if (found == named_scenes_.end()) continue;
     result.push_back(NamedSceneRecord{
-        name, snapshot->object_count(), snapshot->volume_count(),
+        name, found->second->object_count(), found->second->volume_count(),
         current_scene_name_.has_value() && *current_scene_name_ == name});
   }
   return result;
+}
+
+operation::Result<NamedSceneRecord>
+Workspace::rename_named_scene(std::string_view name, std::string new_name) {
+  using R = operation::Result<NamedSceneRecord>;
+  if (const auto error = validate_view_name(name); error.has_value())
+    return R::failure(*error);
+  if (const auto error = validate_view_name(new_name); error.has_value())
+    return R::failure(*error);
+  auto node = named_scenes_.extract(std::string{name});
+  if (node.empty())
+    return R::failure(operation::Error{
+        operation::ErrorCode::not_found,
+        "named scene does not exist: " + std::string{name},
+        "use scene list to inspect stored scene names"});
+  if (new_name != name && named_scenes_.contains(new_name)) {
+    named_scenes_.insert(std::move(node));
+    return R::failure(invalid("a scene named '" + new_name + "' already exists",
+                              "choose an unused scene name"));
+  }
+  node.key() = new_name;
+  const auto snapshot = node.mapped();
+  named_scenes_.insert(std::move(node));
+  std::replace(scene_order_.begin(), scene_order_.end(), std::string{name}, new_name);
+  if (current_scene_name_ == name) current_scene_name_ = new_name;
+  if (movie_.has_value())
+    for (auto &[frame, keyframe] : movie_->keyframes)
+      if (keyframe.scene_name == name) keyframe.scene_name = new_name;
+  const bool is_current =
+      current_scene_name_.has_value() && *current_scene_name_ == new_name;
+  return R::success(NamedSceneRecord{std::move(new_name), snapshot->object_count(),
+                                     snapshot->volume_count(), is_current});
+}
+
+operation::Result<NamedSceneStoreResult> Workspace::update_named_scene() {
+  if (!current_scene_name_.has_value())
+    return operation::Result<NamedSceneStoreResult>::failure(operation::Error{
+        operation::ErrorCode::not_found, "no scene is current",
+        "recall or store a scene first, or use scene store --name NAME"});
+  return store_named_scene(*current_scene_name_);
+}
+
+operation::Result<NamedSceneRecord>
+Workspace::step_named_scene(SceneStep step, bool wrap) {
+  using R = operation::Result<NamedSceneRecord>;
+  if (scene_order_.empty())
+    return R::failure(operation::Error{
+        operation::ErrorCode::not_found, "no scenes are stored",
+        "use scene store --name NAME first"});
+  const auto count = scene_order_.size();
+  const auto current = current_scene_name_.has_value()
+                           ? std::find(scene_order_.begin(), scene_order_.end(),
+                                       *current_scene_name_)
+                           : scene_order_.end();
+  std::size_t target{};
+  switch (step) {
+  case SceneStep::first: target = 0U; break;
+  case SceneStep::last: target = count - 1U; break;
+  case SceneStep::next:
+    if (current == scene_order_.end()) { target = 0U; break; }
+    target = static_cast<std::size_t>(current - scene_order_.begin()) + 1U;
+    if (target >= count) {
+      if (!wrap)
+        return R::failure(operation::Error{
+            operation::ErrorCode::not_found, "already at the last scene",
+            "pass --wrap true to continue from the first scene"});
+      target = 0U;
+    }
+    break;
+  case SceneStep::previous:
+    if (current == scene_order_.end()) { target = count - 1U; break; }
+    target = static_cast<std::size_t>(current - scene_order_.begin());
+    if (target == 0U) {
+      if (!wrap)
+        return R::failure(operation::Error{
+            operation::ErrorCode::not_found, "already at the first scene",
+            "pass --wrap true to continue from the last scene"});
+      target = count - 1U;
+    } else {
+      --target;
+    }
+    break;
+  }
+  const auto name = scene_order_[target];
+  return recall_named_scene(name);
+}
+
+namespace {
+
+// Natural order: digit runs compare by value, other bytes by value.
+bool natural_less(const std::string &left, const std::string &right) {
+  std::size_t a{}, b{};
+  while (a < left.size() && b < right.size()) {
+    if (std::isdigit(static_cast<unsigned char>(left[a])) != 0 &&
+        std::isdigit(static_cast<unsigned char>(right[b])) != 0) {
+      auto a_end = a, b_end = b;
+      while (a_end < left.size() &&
+             std::isdigit(static_cast<unsigned char>(left[a_end])) != 0) ++a_end;
+      while (b_end < right.size() &&
+             std::isdigit(static_cast<unsigned char>(right[b_end])) != 0) ++b_end;
+      auto a_start = a, b_start = b;
+      while (a_start + 1U < a_end && left[a_start] == '0') ++a_start;
+      while (b_start + 1U < b_end && right[b_start] == '0') ++b_start;
+      const auto a_digits = a_end - a_start;
+      const auto b_digits = b_end - b_start;
+      if (a_digits != b_digits) return a_digits < b_digits;
+      const auto compared = left.compare(a_start, a_digits, right, b_start, b_digits);
+      if (compared != 0) return compared < 0;
+      a = a_end;
+      b = b_end;
+    } else {
+      if (left[a] != right[b])
+        return static_cast<unsigned char>(left[a]) < static_cast<unsigned char>(right[b]);
+      ++a;
+      ++b;
+    }
+  }
+  return left.size() - a < right.size() - b;
+}
+
+} // namespace
+
+operation::Result<std::vector<std::string>>
+Workspace::order_named_scenes(const std::vector<std::string> &names, bool sort,
+                              std::string_view location) {
+  using R = operation::Result<std::vector<std::string>>;
+  if (location != "top" && location != "bottom" && location != "current")
+    return R::failure(invalid("scene location must be top, bottom or current"));
+  std::vector<std::string> moved;
+  for (const auto &name : names) {
+    if (!named_scenes_.contains(name))
+      return R::failure(operation::Error{
+          operation::ErrorCode::not_found,
+          "named scene does not exist: " + name,
+          "use scene list to inspect stored scene names", {}});
+    if (std::find(moved.begin(), moved.end(), name) == moved.end())
+      moved.push_back(name);
+  }
+  if (moved.empty()) {
+    if (!sort)
+      return R::failure(invalid("scene order needs scene names or --sort true"));
+    moved = scene_order_;
+  }
+  if (sort) std::stable_sort(moved.begin(), moved.end(), natural_less);
+  std::vector<std::string> remaining;
+  for (const auto &name : scene_order_)
+    if (std::find(moved.begin(), moved.end(), name) == moved.end())
+      remaining.push_back(name);
+  auto position = remaining.begin();
+  if (location == "bottom") {
+    position = remaining.end();
+  } else if (location == "current") {
+    position = remaining.end();
+    if (current_scene_name_.has_value()) {
+      const auto found =
+          std::find(remaining.begin(), remaining.end(), *current_scene_name_);
+      if (found != remaining.end()) position = found;
+    }
+  }
+  remaining.insert(position, moved.begin(), moved.end());
+  scene_order_ = std::move(remaining);
+  return R::success(scene_order_);
+}
+
+operation::Result<std::vector<ColorUsage>>
+Workspace::color_usage(std::string selection_expression) const {
+  using R = operation::Result<std::vector<ColorUsage>>;
+  const auto *object = active_object();
+  if (object == nullptr) return R::failure(missing_active());
+  const auto mask = selection_mask(*object, selection_expression);
+  if (!mask.has_value()) return R::failure(mask.error());
+  const auto &topology = *object->system->topology();
+  std::map<std::int32_t, std::size_t> counts;
+  for (std::size_t atom = 0; atom < mask.value().size(); ++atom) {
+    if (mask.value()[atom] == 0U) continue;
+    std::int32_t index = render::kColorDefault;
+    if (object->atom_colors != nullptr) {
+      const auto id = topology.atom_id(model::AtomIndex{atom});
+      if (id.has_value()) {
+        const auto found = std::lower_bound(
+            object->atom_colors->begin(), object->atom_colors->end(), id->value,
+            [](const auto &entry, std::uint64_t value) { return entry.first < value; });
+        if (found != object->atom_colors->end() && found->first == id->value)
+          index = found->second;
+      }
+    }
+    if (index == render::kColorDefault) index = object->object_color;
+    ++counts[index];
+  }
+  std::vector<ColorUsage> usage;
+  for (const auto &[index, count] : counts)
+    usage.push_back({index, color_table_.name(index).value_or(
+                                index == render::kColorDefault ? "default" : ""),
+                     count});
+  return R::success(std::move(usage));
 }
 
 operation::Result<MovieTimelineResult>
@@ -1285,7 +1500,7 @@ std::vector<WorkspaceObjectInfo> Workspace::list_objects() const {
         frame_count, active_index_.has_value() && *active_index_ == index,
         node != nullptr && node->visible(),
         scene_->effectively_visible(object.scene_node),
-        object.trajectory.has_value()});
+        object.trajectory.has_value(), object.fixed});
   }
   return result;
 }
@@ -1387,7 +1602,7 @@ Workspace::rename_object(std::string_view object_reference, std::string name) {
       std::any_of(volumes_.begin(), volumes_.end(), [&](const auto &volume) {
         return volume.name == name;
       });
-  if (duplicate_molecule || duplicate_volume) {
+  if (duplicate_molecule || duplicate_volume || group_name_exists(name)) {
     return operation::Result<ObjectLifecycleResult>::failure(invalid(
         "workspace object name already exists: " + name,
         "choose a unique object name"));
@@ -1492,6 +1707,10 @@ Workspace::delete_object(std::string_view object_reference) {
   });
 
   objects_.erase(objects_.begin() + static_cast<std::ptrdiff_t>(index));
+  for (auto &group : groups_)
+    std::erase_if(group.members, [deleted_id](const GroupMember &member) {
+      return member.group_name.empty() && member.object_id == deleted_id;
+    });
   active_index_ = next_active_index;
   measurements_ = std::move(next_measurements);
   render_settings_ = settings.value();
@@ -1610,6 +1829,10 @@ operation::Result<TopologyMutationResult> Workspace::retain_active_atoms(
   auto *object = mutable_active_object();
   if (object == nullptr)
     return operation::Result<TopologyMutationResult>::failure(missing_active());
+  if (object->pbc.has_value())
+    return operation::Result<TopologyMutationResult>::failure(invalid(
+        "the object is shown with PBC processing",
+        "run pbc mode --mode none before editing atoms or states"));
   const auto source_topology = object->system->topology();
   const model::TopologySnapshotReference snapshot{
       model::kTopologyReferenceSchemaVersion, object->id,
@@ -1782,6 +2005,1170 @@ operation::Result<TopologyMutationResult> Workspace::retain_active_atoms(
       std::move(ids)});
 }
 
+namespace {
+
+bool glob_matches(std::string_view pattern, std::string_view text) {
+  std::size_t p{}, t{};
+  std::size_t star = std::string_view::npos, retry{};
+  while (t < text.size()) {
+    if (p < pattern.size() && (pattern[p] == '?' || pattern[p] == text[t])) {
+      ++p;
+      ++t;
+    } else if (p < pattern.size() && pattern[p] == '*') {
+      star = p++;
+      retry = t;
+    } else if (star != std::string_view::npos) {
+      p = star + 1U;
+      t = ++retry;
+    } else {
+      return false;
+    }
+  }
+  while (p < pattern.size() && pattern[p] == '*') ++p;
+  return p == pattern.size();
+}
+
+} // namespace
+
+operation::Result<std::vector<CoveredObject>>
+Workspace::covering_objects(std::string selection_expression) const {
+  using R = operation::Result<std::vector<CoveredObject>>;
+  const auto parsed = selection::Expression::parse(selection_expression);
+  if (!parsed.has_value())
+    return R::failure(parsed.error());
+  std::vector<CoveredObject> covered;
+  for (const auto &object : objects_) {
+    const auto mask = selection_mask(object, selection_expression);
+    if (!mask.has_value()) {
+      // A named selection defined in another object only: not covered here.
+      if (mask.error().code == operation::ErrorCode::not_found) continue;
+      return R::failure(mask.error());
+    }
+    const auto count = static_cast<std::size_t>(
+        std::count_if(mask.value().begin(), mask.value().end(),
+                      [](const auto value) { return value != 0U; }));
+    if (count != 0U)
+      covered.push_back({object.id, object.system->name(), count});
+  }
+  return R::success(std::move(covered));
+}
+
+namespace {
+
+// Applies a visibility change to several objects, restoring the previous
+// state of the already changed ones if any step fails.
+operation::Result<std::vector<WorkspaceObjectInfo>>
+set_visibility_batch(Workspace &workspace, const std::vector<std::uint64_t> &ids,
+                     bool visible) {
+  using R = operation::Result<std::vector<WorkspaceObjectInfo>>;
+  std::vector<std::pair<std::uint64_t, bool>> previous;
+  for (const auto &info : workspace.list_objects())
+    if (std::find(ids.begin(), ids.end(), info.id) != ids.end())
+      previous.emplace_back(info.id, info.visible);
+  std::vector<WorkspaceObjectInfo> changed;
+  for (const auto id : ids) {
+    const auto result = workspace.set_object_visibility(id, visible);
+    if (!result.has_value()) {
+      for (const auto &[restore_id, was_visible] : previous)
+        static_cast<void>(workspace.set_object_visibility(restore_id, was_visible));
+      return R::failure(result.error());
+    }
+    changed.push_back(result.value());
+  }
+  return R::success(std::move(changed));
+}
+
+} // namespace
+
+operation::Result<std::vector<WorkspaceObjectInfo>>
+Workspace::set_visibility_by_pattern(std::string_view pattern, bool visible) {
+  using R = operation::Result<std::vector<WorkspaceObjectInfo>>;
+  if (pattern.empty())
+    return R::failure(invalid("object name pattern must not be empty"));
+  std::vector<std::uint64_t> ids;
+  const auto add_id = [&ids](std::uint64_t id) {
+    if (std::find(ids.begin(), ids.end(), id) == ids.end()) ids.push_back(id);
+  };
+  for (const auto &object : objects_)
+    if (glob_matches(pattern, object.system->name())) add_id(object.id);
+  // A group name selects every object below the group.
+  for (const auto &group : groups_)
+    if (glob_matches(pattern, group.name)) {
+      std::vector<std::uint64_t> below;
+      std::vector<std::string> ignored;
+      collect_group_objects(group, below, ignored);
+      for (const auto id : below) add_id(id);
+    }
+  if (ids.empty())
+    return R::failure(operation::Error{
+        operation::ErrorCode::not_found,
+        "no object name matches '" + std::string{pattern} + "'",
+        "use object list to see the current names"});
+  return set_visibility_batch(*this, ids, visible);
+}
+
+operation::Result<std::vector<WorkspaceObjectInfo>>
+Workspace::set_visibility_by_selection(std::string selection_expression,
+                                       bool visible) {
+  using R = operation::Result<std::vector<WorkspaceObjectInfo>>;
+  const auto covered = covering_objects(std::move(selection_expression));
+  if (!covered.has_value()) return R::failure(covered.error());
+  if (covered.value().empty())
+    return R::failure(operation::Error{
+        operation::ErrorCode::not_found,
+        "the selection does not cover any object", "check the selection", {}});
+  std::vector<std::uint64_t> ids;
+  for (const auto &item : covered.value()) ids.push_back(item.object_id);
+  return set_visibility_batch(*this, ids, visible);
+}
+
+bool Workspace::group_name_exists(std::string_view name) const {
+  return find_group(name) != nullptr;
+}
+
+const Workspace::GroupRecord *Workspace::find_group(std::string_view name) const {
+  const auto found = std::find_if(groups_.begin(), groups_.end(),
+                                  [&](const auto &group) { return group.name == name; });
+  return found == groups_.end() ? nullptr : &*found;
+}
+
+const Workspace::GroupRecord *
+Workspace::parent_group_of_object(std::uint64_t id) const {
+  for (const auto &group : groups_)
+    for (const auto &member : group.members)
+      if (member.group_name.empty() && member.object_id == id) return &group;
+  return nullptr;
+}
+
+const Workspace::GroupRecord *
+Workspace::parent_group_of_group(std::string_view name) const {
+  for (const auto &group : groups_)
+    for (const auto &member : group.members)
+      if (member.group_name == name) return &group;
+  return nullptr;
+}
+
+void Workspace::collect_group_objects(const GroupRecord &group,
+                                      std::vector<std::uint64_t> &objects,
+                                      std::vector<std::string> &groups) const {
+  for (const auto &member : group.members) {
+    if (member.group_name.empty()) {
+      objects.push_back(member.object_id);
+    } else if (const auto *nested = find_group(member.group_name); nested != nullptr) {
+      groups.push_back(nested->name);
+      collect_group_objects(*nested, objects, groups);
+    }
+  }
+}
+
+std::string Workspace::member_name(const GroupMember &member) const {
+  if (!member.group_name.empty()) return member.group_name;
+  const auto found = std::ranges::find(objects_, member.object_id, &WorkspaceObject::id);
+  return found == objects_.end() ? std::string{} : found->system->name();
+}
+
+GroupInfo Workspace::describe_group(const GroupRecord &group) const {
+  GroupInfo info;
+  info.name = group.name;
+  info.open = group.open;
+  for (const auto &member : group.members) {
+    if (!member.group_name.empty()) {
+      info.members.push_back(member.group_name);
+    } else if (const auto found = std::ranges::find(objects_, member.object_id,
+                                                    &WorkspaceObject::id);
+               found != objects_.end()) {
+      info.members.push_back(found->system->name());
+    }
+  }
+  if (const auto *parent = parent_group_of_group(group.name); parent != nullptr)
+    info.parent = parent->name;
+  std::vector<std::uint64_t> objects;
+  std::vector<std::string> nested;
+  collect_group_objects(group, objects, nested);
+  info.object_count = objects.size();
+  for (const auto id : objects)
+    for (const auto &object_info : list_objects())
+      if (object_info.id == id && object_info.visible) info.enabled = true;
+  return info;
+}
+
+std::vector<GroupInfo> Workspace::list_groups() const {
+  std::vector<GroupInfo> result;
+  result.reserve(groups_.size());
+  for (const auto &group : groups_) result.push_back(describe_group(group));
+  return result;
+}
+
+namespace {
+
+bool valid_group_name(std::string_view name) {
+  return !name.empty() &&
+         !std::all_of(name.begin(), name.end(), [](unsigned char character) {
+           return std::isspace(character) != 0;
+         }) &&
+         std::none_of(name.begin(), name.end(), [](unsigned char character) {
+           return character < 0x20U || character == 0x7fU || character == ',' ||
+                  character == '*' || character == '?';
+         });
+}
+
+} // namespace
+
+operation::Result<GroupChangeResult>
+Workspace::group_add(std::string_view name, const std::vector<std::string> &members) {
+  using R = operation::Result<GroupChangeResult>;
+  if (!valid_group_name(name))
+    return R::failure(invalid(
+        "group name must contain visible characters and no commas or wildcards"));
+  if (members.empty())
+    return R::failure(invalid("group add needs at least one member",
+                              "pass object or group names, for example --members \"a b*\""));
+  const bool exists = group_name_exists(name);
+  if (!exists) {
+    const bool taken =
+        std::any_of(objects_.begin(), objects_.end(),
+                    [&](const auto &object) { return object.system->name() == name; }) ||
+        std::any_of(volumes_.begin(), volumes_.end(),
+                    [&](const auto &volume) { return volume.name == name; });
+    if (taken)
+      return R::failure(invalid("group name is already used by an object: " +
+                                    std::string{name},
+                                "choose a unique group name"));
+  }
+  // Resolve every pattern before changing anything.
+  std::vector<GroupMember> resolved;
+  std::vector<std::string> names;
+  const auto add_unique = [&](GroupMember member, std::string display) {
+    const auto duplicate = std::any_of(
+        resolved.begin(), resolved.end(), [&](const GroupMember &existing) {
+          return existing.object_id == member.object_id &&
+                 existing.group_name == member.group_name;
+        });
+    if (!duplicate) {
+      resolved.push_back(std::move(member));
+      names.push_back(std::move(display));
+    }
+  };
+  for (const auto &pattern : members) {
+    bool matched = false;
+    for (const auto &object : objects_)
+      if (glob_matches(pattern, object.system->name())) {
+        add_unique({object.id, {}}, object.system->name());
+        matched = true;
+      }
+    for (const auto &group : groups_)
+      if (group.name != name && glob_matches(pattern, group.name)) {
+        add_unique({0U, group.name}, group.name);
+        matched = true;
+      }
+    if (!matched)
+      return R::failure(operation::Error{
+          operation::ErrorCode::not_found,
+          "no object or group matches '" + pattern + "'",
+          "use object list and group list to see the current names", {}});
+  }
+  // A group cannot contain itself or one of its ancestors.
+  for (const auto &member : resolved) {
+    if (member.group_name.empty()) continue;
+    const auto *nested = find_group(member.group_name);
+    std::vector<std::uint64_t> ignored_objects;
+    std::vector<std::string> below;
+    collect_group_objects(*nested, ignored_objects, below);
+    if (std::find(below.begin(), below.end(), std::string{name}) != below.end())
+      return R::failure(invalid("group '" + member.group_name +
+                                    "' already contains '" + std::string{name} + "'",
+                                "a group cannot contain one of its ancestors"));
+  }
+  auto next = groups_;
+  if (!exists) next.push_back({std::string{name}, {}, true});
+  const auto target = std::find_if(next.begin(), next.end(),
+                                   [&](const auto &group) { return group.name == name; });
+  // An object or group belongs to one group: adding it moves it.
+  for (const auto &member : resolved)
+    for (auto &group : next)
+      std::erase_if(group.members, [&](const GroupMember &existing) {
+        return existing.object_id == member.object_id &&
+               existing.group_name == member.group_name;
+      });
+  for (const auto &member : resolved) target->members.push_back(member);
+  GroupChangeResult result;
+  result.name = std::string{name};
+  result.created = !exists;
+  result.member_count = target->members.size();
+  result.affected = std::move(names);
+  groups_ = std::move(next);
+  return R::success(std::move(result));
+}
+
+operation::Result<GroupChangeResult>
+Workspace::group_remove(std::string_view name, const std::vector<std::string> &members) {
+  using R = operation::Result<GroupChangeResult>;
+  const auto *group = find_group(name);
+  if (group == nullptr)
+    return R::failure(operation::Error{operation::ErrorCode::not_found,
+                                       "no group named '" + std::string{name} + "'",
+                                       "use group list to see the current groups", {}});
+  if (members.empty())
+    return R::failure(invalid("group remove needs at least one member"));
+  std::vector<GroupMember> removed;
+  std::vector<std::string> names;
+  for (const auto &pattern : members) {
+    bool matched = false;
+    for (const auto &member : group->members) {
+      const auto display = member_name(member);
+      if (!glob_matches(pattern, display)) continue;
+      matched = true;
+      const auto already = std::any_of(removed.begin(), removed.end(), [&](const auto &m) {
+        return m.object_id == member.object_id && m.group_name == member.group_name;
+      });
+      if (!already) {
+        removed.push_back(member);
+        names.push_back(display);
+      }
+    }
+    if (!matched)
+      return R::failure(operation::Error{
+          operation::ErrorCode::not_found,
+          "'" + pattern + "' is not a member of group '" + std::string{name} + "'",
+          "use group list to see its members", {}});
+  }
+  auto next = groups_;
+  const auto target = std::find_if(next.begin(), next.end(),
+                                   [&](const auto &g) { return g.name == name; });
+  std::erase_if(target->members, [&](const GroupMember &existing) {
+    return std::any_of(removed.begin(), removed.end(), [&](const auto &m) {
+      return m.object_id == existing.object_id && m.group_name == existing.group_name;
+    });
+  });
+  GroupChangeResult result;
+  result.name = std::string{name};
+  result.member_count = target->members.size();
+  result.affected = std::move(names);
+  groups_ = std::move(next);
+  return R::success(std::move(result));
+}
+
+operation::Result<GroupChangeResult> Workspace::group_empty(std::string_view name) {
+  using R = operation::Result<GroupChangeResult>;
+  const auto *group = find_group(name);
+  if (group == nullptr)
+    return R::failure(operation::Error{operation::ErrorCode::not_found,
+                                       "no group named '" + std::string{name} + "'",
+                                       "use group list to see the current groups", {}});
+  GroupChangeResult result;
+  result.name = std::string{name};
+  result.affected = describe_group(*group).members;
+  const auto target = std::find_if(groups_.begin(), groups_.end(),
+                                   [&](const auto &g) { return g.name == name; });
+  target->members.clear();
+  return R::success(std::move(result));
+}
+
+operation::Result<GroupChangeResult>
+Workspace::group_ungroup(const std::vector<std::string> &members) {
+  using R = operation::Result<GroupChangeResult>;
+  if (members.empty())
+    return R::failure(invalid("ungroup needs at least one member"));
+  GroupChangeResult result;
+  auto next = groups_;
+  for (const auto &pattern : members) {
+    bool matched = false;
+    for (auto &group : next) {
+      std::vector<GroupMember> kept;
+      for (const auto &member : group.members) {
+        const auto display = member_name(member);
+        if (glob_matches(pattern, display)) {
+          matched = true;
+          result.affected.push_back(display);
+        } else {
+          kept.push_back(member);
+        }
+      }
+      group.members = std::move(kept);
+    }
+    if (!matched)
+      return R::failure(operation::Error{
+          operation::ErrorCode::not_found,
+          "'" + pattern + "' is not in any group",
+          "use group list to see the current members", {}});
+  }
+  groups_ = std::move(next);
+  result.member_count = result.affected.size();
+  return R::success(std::move(result));
+}
+
+operation::Result<GroupChangeResult> Workspace::group_excise(std::string_view name) {
+  using R = operation::Result<GroupChangeResult>;
+  if (find_group(name) == nullptr)
+    return R::failure(operation::Error{operation::ErrorCode::not_found,
+                                       "no group named '" + std::string{name} + "'",
+                                       "use group list to see the current groups", {}});
+  auto next = groups_;
+  const auto target = std::find_if(next.begin(), next.end(),
+                                   [&](const auto &g) { return g.name == name; });
+  const auto members = target->members;
+  GroupChangeResult result;
+  result.name = std::string{name};
+  result.deleted = true;
+  result.affected = describe_group(*find_group(name)).members;
+  // The members take the group's place in its parent, if it has one.
+  for (auto &group : next) {
+    const auto position = std::find_if(group.members.begin(), group.members.end(),
+                                       [&](const GroupMember &m) { return m.group_name == name; });
+    if (position == group.members.end()) continue;
+    const auto offset = position - group.members.begin();
+    group.members.erase(position);
+    group.members.insert(group.members.begin() + offset, members.begin(), members.end());
+    break;
+  }
+  std::erase_if(next, [&](const auto &g) { return g.name == name; });
+  result.member_count = members.size();
+  groups_ = std::move(next);
+  return R::success(std::move(result));
+}
+
+operation::Result<GroupChangeResult> Workspace::group_purge(std::string_view name) {
+  using R = operation::Result<GroupChangeResult>;
+  const auto *group = find_group(name);
+  if (group == nullptr)
+    return R::failure(operation::Error{operation::ErrorCode::not_found,
+                                       "no group named '" + std::string{name} + "'",
+                                       "use group list to see the current groups", {}});
+  std::vector<std::uint64_t> object_ids;
+  std::vector<std::string> nested;
+  collect_group_objects(*group, object_ids, nested);
+  GroupChangeResult result;
+  result.name = std::string{name};
+  for (const auto id : object_ids)
+    if (const auto found = std::ranges::find(objects_, id, &WorkspaceObject::id);
+        found != objects_.end())
+      result.affected.push_back(found->system->name());
+  for (const auto id : object_ids) {
+    const auto deleted = delete_object(std::to_string(id));
+    if (!deleted.has_value()) return R::failure(deleted.error());
+  }
+  // delete_object already removed the objects from their groups; drop the
+  // nested groups and leave the purged group empty.
+  std::erase_if(groups_, [&](const auto &g) {
+    return std::find(nested.begin(), nested.end(), g.name) != nested.end();
+  });
+  const auto target = std::find_if(groups_.begin(), groups_.end(),
+                                   [&](const auto &g) { return g.name == name; });
+  target->members.clear();
+  result.member_count = 0U;
+  return R::success(std::move(result));
+}
+
+operation::Result<GroupInfo>
+Workspace::group_set_expansion(std::string_view name, GroupExpansion expansion) {
+  using R = operation::Result<GroupInfo>;
+  const auto target = std::find_if(groups_.begin(), groups_.end(),
+                                   [&](const auto &g) { return g.name == name; });
+  if (target == groups_.end())
+    return R::failure(operation::Error{operation::ErrorCode::not_found,
+                                       "no group named '" + std::string{name} + "'",
+                                       "use group list to see the current groups", {}});
+  target->open = expansion == GroupExpansion::open    ? true
+                 : expansion == GroupExpansion::close ? false
+                                                        : !target->open;
+  return R::success(describe_group(*target));
+}
+
+operation::Result<EntityTypeResult>
+Workspace::entity_type(std::string_view name) const {
+  using R = operation::Result<EntityTypeResult>;
+  for (const auto &object : objects_)
+    if (object.system->name() == name)
+      return R::success({std::string{name}, "object:molecule", object.id});
+  for (const auto &volume : volumes_)
+    if (volume.name == name)
+      return R::success({std::string{name}, "object:volume", volume.id});
+  if (group_name_exists(name))
+    return R::success({std::string{name}, "object:group", 0U});
+  if (const auto *active = active_object(); active != nullptr)
+    for (const auto &item : active->selections.list())
+      if (item.name == name)
+        return R::success({std::string{name}, "selection", active->id});
+  return R::failure(operation::Error{
+      operation::ErrorCode::not_found,
+      "no object or selection is named '" + std::string{name} + "'",
+      "use object list to see the current names"});
+}
+
+operation::Result<AtomListing>
+Workspace::list_atoms(std::string selection_expression,
+                      const std::vector<std::string> &properties,
+                      std::size_t limit) const {
+  using R = operation::Result<AtomListing>;
+  const auto *object = active_object();
+  if (object == nullptr) return R::failure(missing_active());
+  if (limit == 0U || limit > 1000000U)
+    return R::failure(invalid("atom listing limit must be between 1 and 1000000"));
+  if (properties.empty())
+    return R::failure(invalid("atom listing needs at least one property"));
+  const auto mask = selection_mask(*object, selection_expression);
+  if (!mask.has_value()) return R::failure(mask.error());
+  const auto frame_index = object->trajectory.has_value()
+                               ? object->trajectory->timeline.snapshot().frame
+                               : 0U;
+  const auto frame = object->system->coordinates()->read_frame(frame_index);
+  if (!frame.has_value()) return R::failure(frame.error());
+  const selection::EvaluationContext context{
+      frame.value().get(), frame_index, object->system->coordinates().get(),
+      object->system->name()};
+  const auto &topology = *object->system->topology();
+
+  // Numeric properties reuse the selection grammar (b, q, pc, fc, x, y, z,
+  // mass, radius, atomicnumber, numbonds) so there is exactly one definition.
+  static const std::map<std::string, std::string, std::less<>> numeric_sources{
+      {"b", "b"}, {"q", "q"}, {"partial_charge", "partial_charge"},
+      {"formal_charge", "formal_charge"}, {"x", "x"}, {"y", "y"}, {"z", "z"},
+      {"mass", "mass"}, {"radius", "radius"}, {"atomic_number", "atomicnumber"},
+      {"bond_count", "numbonds"}};
+  static const std::set<std::string, std::less<>> text_properties{
+      "index", "id", "source_id", "name", "element", "resn", "resi", "chain",
+      "segment", "altloc"};
+  AtomListing listing;
+  listing.columns = properties;
+  std::vector<std::vector<std::optional<double>>> numeric(properties.size());
+  for (std::size_t column = 0; column < properties.size(); ++column) {
+    const auto &property = properties[column];
+    if (const auto found = numeric_sources.find(property);
+        found != numeric_sources.end()) {
+      const auto expression = selection::parse_numeric_expression(found->second);
+      if (!expression.has_value()) return R::failure(expression.error());
+      auto values = selection::evaluate_numeric(*expression.value(), topology, context);
+      if (!values.has_value()) {
+        // A missing optional property is reported per atom as null, other
+        // failures are real errors.
+        if (property == "mass" || property == "partial_charge" || property == "b" ||
+            property == "q")
+          numeric[column].assign(topology.atom_count(), std::nullopt);
+        else
+          return R::failure(values.error());
+      } else {
+        numeric[column] = std::move(values.value());
+      }
+    } else if (!text_properties.contains(property)) {
+      return R::failure(invalid("unknown atom property '" + property + "'",
+                                "choose from index id source_id name element resn "
+                                "resi chain segment altloc b q partial_charge "
+                                "formal_charge x y z mass radius atomic_number bond_count"));
+    }
+  }
+  for (std::size_t atom = 0; atom < mask.value().size(); ++atom) {
+    if (mask.value()[atom] == 0U) continue;
+    ++listing.selected_atom_count;
+    if (listing.rows.size() >= limit) {
+      listing.truncated = true;
+      continue;
+    }
+    const auto &record = topology.atoms()[atom];
+    const auto &residue = topology.residues()[record.residue.value];
+    std::vector<command::Value> row;
+    row.reserve(properties.size());
+    for (std::size_t column = 0; column < properties.size(); ++column) {
+      const auto &property = properties[column];
+      if (!numeric[column].empty()) {
+        const auto &value = numeric[column][atom];
+        row.emplace_back(value.has_value() ? command::Value{*value} : command::Value{nullptr});
+      } else if (property == "index") {
+        row.emplace_back(static_cast<std::uint64_t>(atom + 1U));
+      } else if (property == "id") {
+        const auto id = topology.atom_id(model::AtomIndex{atom});
+        row.emplace_back(id.has_value() ? command::Value{id->value} : command::Value{nullptr});
+      } else if (property == "source_id") {
+        row.emplace_back(record.source_serial.has_value()
+                             ? command::Value{static_cast<std::int64_t>(*record.source_serial)}
+                             : command::Value{nullptr});
+      } else if (property == "name") {
+        row.emplace_back(record.name);
+      } else if (property == "element") {
+        row.emplace_back(selection::atom_element_symbol(record.atomic_number));
+      } else if (property == "resn") {
+        row.emplace_back(residue.name);
+      } else if (property == "resi") {
+        row.emplace_back(std::to_string(residue.sequence_number) + residue.insertion_code);
+      } else if (property == "chain") {
+        row.emplace_back(residue.chain_id);
+      } else if (property == "segment") {
+        row.emplace_back(residue.segment_id);
+      } else {
+        row.emplace_back(record.alternate_location);
+      }
+    }
+    listing.rows.push_back(std::move(row));
+  }
+  return R::success(std::move(listing));
+}
+
+operation::Result<std::vector<std::string>>
+Workspace::list_chains(std::string selection_expression) const {
+  using R = operation::Result<std::vector<std::string>>;
+  const auto *object = active_object();
+  if (object == nullptr) return R::failure(missing_active());
+  const auto mask = selection_mask(*object, selection_expression);
+  if (!mask.has_value()) return R::failure(mask.error());
+  const auto &topology = *object->system->topology();
+  std::vector<std::string> chains;
+  for (std::size_t atom = 0; atom < mask.value().size(); ++atom) {
+    if (mask.value()[atom] == 0U) continue;
+    const auto &chain = topology.residues()[topology.atoms()[atom].residue.value].chain_id;
+    if (std::find(chains.begin(), chains.end(), chain) == chains.end())
+      chains.push_back(chain);
+  }
+  return R::success(std::move(chains));
+}
+
+operation::Result<ChargeSum>
+Workspace::sum_charge(std::string selection_expression, std::string_view kind) const {
+  using R = operation::Result<ChargeSum>;
+  const auto *object = active_object();
+  if (object == nullptr) return R::failure(missing_active());
+  if (kind != "formal" && kind != "partial")
+    return R::failure(invalid("charge kind must be formal or partial"));
+  const auto mask = selection_mask(*object, selection_expression);
+  if (!mask.has_value()) return R::failure(mask.error());
+  const auto &topology = *object->system->topology();
+  ChargeSum result;
+  result.kind = std::string{kind};
+  if (kind == "formal") {
+    result.source = "topology formal charge";
+    for (std::size_t atom = 0; atom < mask.value().size(); ++atom) {
+      if (mask.value()[atom] == 0U) continue;
+      result.sum += topology.atoms()[atom].formal_charge;
+      ++result.atom_count;
+    }
+    return R::success(std::move(result));
+  }
+  const auto *property = topology.properties().find("partial_charge");
+  if (property == nullptr)
+    return R::failure(operation::Error{
+        operation::ErrorCode::not_found,
+        "the active object has no partial_charge property",
+        "load a PQR, MOL2 or topology file that carries partial charges", {}});
+  const auto expression = selection::parse_numeric_expression("partial_charge");
+  if (!expression.has_value()) return R::failure(expression.error());
+  const auto frame = active_frame(*object);
+  if (!frame.has_value()) return R::failure(frame.error());
+  const selection::EvaluationContext context{
+      frame.value().get(),
+      object->trajectory.has_value() ? object->trajectory->timeline.snapshot().frame : 0U,
+      object->system->coordinates().get(), object->system->name()};
+  const auto values = selection::evaluate_numeric(*expression.value(), topology, context);
+  if (!values.has_value()) return R::failure(values.error());
+  result.source = "topology partial_charge property";
+  for (std::size_t atom = 0; atom < mask.value().size(); ++atom) {
+    if (mask.value()[atom] == 0U) continue;
+    if (!values.value()[atom].has_value())
+      return R::failure(invalid("an atom of the selection has no partial charge",
+                                "select only atoms that carry a partial charge"));
+    result.sum += *values.value()[atom];
+    ++result.atom_count;
+  }
+  return R::success(std::move(result));
+}
+
+operation::Result<MassSum>
+Workspace::sum_mass(std::string selection_expression) const {
+  using R = operation::Result<MassSum>;
+  const auto *object = active_object();
+  if (object == nullptr) return R::failure(missing_active());
+  const auto mask = selection_mask(*object, selection_expression);
+  if (!mask.has_value()) return R::failure(mask.error());
+  auto masses = analysis::masses_from_property(*object->system->topology());
+  if (!masses.has_value() && masses.error().code == operation::ErrorCode::not_found)
+    masses = analysis::estimated_element_masses(*object->system->topology());
+  if (!masses.has_value()) return R::failure(masses.error());
+  MassSum result;
+  result.unit = masses.value().unit.value_or("unspecified");
+  result.source = masses.value().source;
+  result.estimated = masses.value().estimated;
+  for (std::size_t atom = 0; atom < mask.value().size(); ++atom) {
+    if (mask.value()[atom] == 0U) continue;
+    result.mass += masses.value().values[atom];
+    ++result.atom_count;
+  }
+  if (result.atom_count == 0U)
+    return R::failure(invalid("selection matches no atoms", "check the selection expression"));
+  return R::success(std::move(result));
+}
+
+operation::Result<std::vector<analysis::BackboneAngles>>
+Workspace::backbone_angles(std::string selection_expression) const {
+  using R = operation::Result<std::vector<analysis::BackboneAngles>>;
+  const auto *object = active_object();
+  if (object == nullptr) return R::failure(missing_active());
+  const auto mask = selection_mask(*object, selection_expression);
+  if (!mask.has_value()) return R::failure(mask.error());
+  const auto frame = active_frame(*object);
+  if (!frame.has_value()) return R::failure(frame.error());
+  analysis::BackboneRequest request;
+  request.topology = object->system->topology().get();
+  request.frame = frame.value().get();
+  request.selected = mask.value();
+  return analysis::calculate_backbone_angles(request);
+}
+
+operation::Result<AlignmentResult>
+Workspace::align_objects(const AlignmentRequest &request) {
+  using R = operation::Result<AlignmentResult>;
+  if (request.match != "order" && request.match != "identifier")
+    return R::failure(invalid("alignment match must be order or identifier"));
+  const auto mobile_index = object_index_by_reference(request.mobile_object);
+  if (!mobile_index.has_value()) return R::failure(mobile_index.error());
+  const auto target_index = object_index_by_reference(request.target_object);
+  if (!target_index.has_value()) return R::failure(target_index.error());
+  if (mobile_index.value() == target_index.value())
+    return R::failure(invalid("the mobile and target objects must differ",
+                              "to align states of one object use analyze trajectory rmsd"));
+  const auto &mobile = objects_[mobile_index.value()];
+  const auto &target = objects_[target_index.value()];
+  const auto mobile_frame = active_frame(mobile);
+  if (!mobile_frame.has_value()) return R::failure(mobile_frame.error());
+  const auto target_frame = active_frame(target);
+  if (!target_frame.has_value()) return R::failure(target_frame.error());
+  if (mobile_frame.value()->metadata().coordinate_unit !=
+      target_frame.value()->metadata().coordinate_unit)
+    return R::failure(invalid("the objects use different coordinate units"));
+  if (request.apply && mobile.fixed)
+    return R::failure(invalid("the mobile object is fixed: " + mobile.system->name(),
+                              "run object free first"));
+
+  std::vector<std::size_t> mobile_atoms, target_atoms;
+  if (!request.pairs.empty()) {
+    for (const auto &[from, to] : request.pairs) {
+      if (from == 0U || to == 0U ||
+          from > mobile.system->topology()->atom_count() ||
+          to > target.system->topology()->atom_count())
+        return R::failure(invalid("an explicit atom pair is out of range",
+                                  "atom indices are 1-based and must exist in their object"));
+      mobile_atoms.push_back(from - 1U);
+      target_atoms.push_back(to - 1U);
+    }
+  } else {
+    const auto mobile_mask = selection_mask(mobile, request.mobile_selection);
+    if (!mobile_mask.has_value()) return R::failure(mobile_mask.error());
+    const auto target_mask = selection_mask(target, request.target_selection);
+    if (!target_mask.has_value()) return R::failure(target_mask.error());
+    std::vector<std::size_t> from, to;
+    for (std::size_t atom = 0; atom < mobile_mask.value().size(); ++atom)
+      if (mobile_mask.value()[atom] != 0U) from.push_back(atom);
+    for (std::size_t atom = 0; atom < target_mask.value().size(); ++atom)
+      if (target_mask.value()[atom] != 0U) to.push_back(atom);
+    if (request.match == "order") {
+      if (from.size() != to.size())
+        return R::failure(invalid(
+            "the selections have " + std::to_string(from.size()) + " and " +
+                std::to_string(to.size()) + " atoms",
+            "select the same number of atoms or use --match identifier"));
+      mobile_atoms = std::move(from);
+      target_atoms = std::move(to);
+    } else {
+      const auto key = [](const WorkspaceObject &object, std::size_t atom) {
+        const auto &topology = *object.system->topology();
+        const auto &record = topology.atoms()[atom];
+        const auto &residue = topology.residues()[record.residue.value];
+        return residue.chain_id + "|" + std::to_string(residue.sequence_number) + "|" +
+               residue.insertion_code + "|" + record.name + "|" + record.alternate_location;
+      };
+      std::map<std::string, std::size_t> target_by_key;
+      for (const auto atom : to) target_by_key.emplace(key(target, atom), atom);
+      for (const auto atom : from) {
+        const auto found = target_by_key.find(key(mobile, atom));
+        if (found == target_by_key.end()) continue;
+        mobile_atoms.push_back(atom);
+        target_atoms.push_back(found->second);
+      }
+    }
+  }
+  if (mobile_atoms.size() < 3U)
+    return R::failure(invalid("alignment needs at least three paired atoms",
+                              "check the selections and the matching mode"));
+
+  const auto world = [&](const WorkspaceObject &object) {
+    return scene_->world_transform(object.scene_node);
+  };
+  const auto mobile_world = world(mobile);
+  if (!mobile_world.has_value()) return R::failure(mobile_world.error());
+  const auto target_world = world(target);
+  if (!target_world.has_value()) return R::failure(target_world.error());
+  const auto positions = [&](const WorkspaceObject &object,
+                             const model::CoordinateFrame &frame,
+                             const std::vector<std::size_t> &atoms,
+                             const scene::Matrix4d &matrix_world)
+      -> operation::Result<std::vector<model::Vec3d>> {
+    std::vector<model::Vec3d> points;
+    points.reserve(atoms.size());
+    for (const auto atom : atoms) {
+      if (!frame.atom_present(atom))
+        return operation::Result<std::vector<model::Vec3d>>::failure(
+            invalid("atom " + std::to_string(atom + 1U) + " of " +
+                    object.system->name() + " has no position in the current frame"));
+      const auto local = std::visit(
+          [atom](const auto &values) {
+            return model::Vec3d{static_cast<double>(values[atom].x),
+                                static_cast<double>(values[atom].y),
+                                static_cast<double>(values[atom].z)};
+          },
+          frame.positions().values());
+      points.push_back(scene::transform_point(matrix_world, local));
+    }
+    return operation::Result<std::vector<model::Vec3d>>::success(std::move(points));
+  };
+  const auto mobile_points =
+      positions(mobile, *mobile_frame.value(), mobile_atoms, mobile_world.value());
+  if (!mobile_points.has_value()) return R::failure(mobile_points.error());
+  const auto target_points =
+      positions(target, *target_frame.value(), target_atoms, target_world.value());
+  if (!target_points.has_value()) return R::failure(target_points.error());
+
+  // Paired world-space frames: atom i of both frames is one fitted pair.
+  model::FrameMetadata metadata;
+  metadata.coordinate_unit = mobile_frame.value()->metadata().coordinate_unit;
+  const std::vector<std::uint8_t> present(mobile_points.value().size(), 1U);
+  const auto reference_frame = model::CoordinateFrame::create(
+      model::CoordinateBuffer{target_points.value()}, std::nullopt, present, metadata);
+  if (!reference_frame.has_value()) return R::failure(reference_frame.error());
+  const auto moving_frame = model::CoordinateFrame::create(
+      model::CoordinateBuffer{mobile_points.value()}, std::nullopt, present, metadata);
+  if (!moving_frame.has_value()) return R::failure(moving_frame.error());
+  std::vector<double> weights;
+  if (!request.uniform_weights) {
+    // Mass weights per pair: the mobile atom's mass.
+    auto masses = analysis::masses_from_property(*mobile.system->topology());
+    if (!masses.has_value() && masses.error().code == operation::ErrorCode::not_found)
+      masses = analysis::estimated_element_masses(*mobile.system->topology());
+    if (!masses.has_value()) return R::failure(masses.error());
+    for (const auto atom : mobile_atoms) weights.push_back(masses.value().values[atom]);
+  }
+  analysis::FitRequest fit_request;
+  fit_request.reference = reference_frame.value().get();
+  fit_request.mobile = moving_frame.value().get();
+  fit_request.weights = weights;
+  const auto fit = analysis::fit_rigid(fit_request);
+  if (!fit.has_value()) return R::failure(fit.error());
+
+  const auto &rotation = fit.value().transform.rotation;  // row-major 3x3
+  const auto &translation = fit.value().transform.translation;
+  AlignmentResult result;
+  result.mobile_object_id = mobile.id;
+  result.target_object_id = target.id;
+  result.paired_atom_count = mobile_atoms.size();
+  result.coordinate_unit = metadata.coordinate_unit;
+  result.rmsd_before = fit.value().before.rmsd;
+  result.rmsd_after = fit.value().after.rmsd;
+  result.matrix = {rotation[0], rotation[1], rotation[2], translation.x,
+                   rotation[3], rotation[4], rotation[5], translation.y,
+                   rotation[6], rotation[7], rotation[8], translation.z,
+                   0.0,         0.0,         0.0,         1.0};
+  if (!request.apply) return R::success(std::move(result));
+
+  // New world matrix F * M; the object's node keeps pivot 0 and a decomposed
+  // translation / rotation / scale so that `view reset --object` restores it.
+  scene::Matrix4d fit_matrix;  // column-major
+  for (std::size_t row = 0; row < 3U; ++row)
+    for (std::size_t column = 0; column < 3U; ++column)
+      fit_matrix.values[column * 4U + row] = rotation[row * 3U + column];
+  fit_matrix.values[12] = translation.x;
+  fit_matrix.values[13] = translation.y;
+  fit_matrix.values[14] = translation.z;
+  const auto *node = scene_->find(mobile.scene_node);
+  if (node == nullptr || !node->parent().has_value() || *node->parent() != scene_->root())
+    return R::failure(operation::Error{operation::ErrorCode::internal,
+                                       "the mobile object is not a root scene child", {}});
+  const auto combined = fit_matrix * scene::matrix(node->local_transform());
+  const auto column = [&](std::size_t index) {
+    return model::Vec3d{combined(0U, index), combined(1U, index), combined(2U, index)};
+  };
+  const auto length = [](model::Vec3d v) { return std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z); };
+  const auto scale_x = length(column(0)), scale_y = length(column(1)), scale_z = length(column(2));
+  if (scale_x <= 0.0 || scale_y <= 0.0 || scale_z <= 0.0)
+    return R::failure(operation::Error{operation::ErrorCode::internal,
+                                       "the combined transform is degenerate", {}});
+  scene::Transform next;
+  next.translation = {combined(0U, 3U), combined(1U, 3U), combined(2U, 3U)};
+  next.scale = {scale_x, scale_y, scale_z};
+  const auto c0 = column(0), c1 = column(1), c2 = column(2);
+  next.rotation = scene::quaternion_from_basis(
+      {c0.x / scale_x, c0.y / scale_x, c0.z / scale_x},
+      {c1.x / scale_y, c1.y / scale_y, c1.z / scale_y},
+      {c2.x / scale_z, c2.y / scale_z, c2.z / scale_z});
+  auto builder = scene::SceneBuilder::from(*scene_);
+  if (const auto error = builder.set_transform(mobile.scene_node, next); error.has_value())
+    return R::failure(*error);
+  const auto next_scene = builder.build();
+  if (!next_scene.has_value()) return R::failure(next_scene.error());
+  scene_ = next_scene.value();
+  result.applied = true;
+  result.transform = next;
+  result.scene_version = scene_->version();
+  return R::success(std::move(result));
+}
+
+operation::Result<StateAppendResult>
+Workspace::append_states(std::string_view object_reference,
+                         const io::StructureDocument &document) {
+  using R = operation::Result<StateAppendResult>;
+  const auto index = object_index_by_reference(object_reference);
+  if (!index.has_value()) return R::failure(index.error());
+  const auto &object = objects_[index.value()];
+  if (object.pbc.has_value())
+    return R::failure(invalid("the object is shown with PBC processing",
+                              "run pbc mode --mode none before appending states"));
+  // Multi-model files load as an "embedded" trajectory over their own states;
+  // those and single-state objects accept more states, attached trajectories
+  // (`traj load`) do not.
+  const bool embedded = object.trajectory.has_value() &&
+                        object.trajectory->mapping.identity_strength ==
+                            "embedded-structure-order";
+  if (object.trajectory.has_value() && !embedded)
+    return R::failure(operation::Error{
+        operation::ErrorCode::unsupported,
+        "states cannot be appended to an object with an attached trajectory",
+        "use traj load for trajectories, or append before attaching", {}});
+  const auto &topology = *object.system->topology();
+  const auto previous_count = object.system->coordinates()->frame_count();
+  constexpr std::size_t kMaximumStates = 100000U;
+  if (!previous_count.has_value() || *previous_count == 0U)
+    return R::failure(invalid("the object's state count is unknown",
+                              "append states only to objects loaded from a structure file"));
+  if (document.structures.empty())
+    return R::failure(invalid("the file contains no structures"));
+
+  // Identity check of every incoming structure against the object topology.
+  const auto same_atoms = [&](const model::Topology &other) -> std::optional<std::string> {
+    if (other.atom_count() != topology.atom_count())
+      return "atom count " + std::to_string(other.atom_count()) + " differs from " +
+             std::to_string(topology.atom_count());
+    for (std::size_t atom = 0; atom < topology.atom_count(); ++atom) {
+      const auto &a = topology.atoms()[atom];
+      const auto &b = other.atoms()[atom];
+      const auto &ra = topology.residues()[a.residue.value];
+      const auto &rb = other.residues()[b.residue.value];
+      if (a.name != b.name || a.atomic_number != b.atomic_number || ra.name != rb.name ||
+          ra.sequence_number != rb.sequence_number || ra.chain_id != rb.chain_id ||
+          ra.insertion_code != rb.insertion_code)
+        return "atom " + std::to_string(atom + 1U) + " (" + ra.name + " " +
+               std::to_string(ra.sequence_number) + " " + a.name + ") differs from (" + rb.name +
+               " " + std::to_string(rb.sequence_number) + " " + b.name + ")";
+    }
+    return std::nullopt;
+  };
+  std::vector<std::shared_ptr<const model::CoordinateFrame>> frames;
+  for (std::size_t state = 0; state < *previous_count; ++state) {
+    const auto frame = object.system->coordinates()->read_frame(state);
+    if (!frame.has_value()) return R::failure(frame.error());
+    frames.push_back(frame.value());
+  }
+  std::size_t appended = 0;
+  for (const auto &structure : document.structures) {
+    if (structure.topology == nullptr || structure.coordinates == nullptr)
+      return R::failure(invalid("a structure in the file has no coordinates"));
+    if (const auto difference = same_atoms(*structure.topology); difference.has_value())
+      return R::failure(invalid("the file does not match the object: " + *difference,
+                                "append only files with the same atoms in the same order"));
+    const auto count = structure.coordinates->frame_count();
+    if (!count.has_value())
+      return R::failure(invalid("a structure in the file has an unknown state count"));
+    for (std::size_t state = 0; state < *count; ++state) {
+      if (frames.size() >= kMaximumStates)
+        return R::failure(operation::Error{
+            operation::ErrorCode::resource_exhausted,
+            "an object is limited to 100000 states", {}});
+      const auto frame = structure.coordinates->read_frame(state);
+      if (!frame.has_value()) return R::failure(frame.error());
+      if (frame.value()->metadata().coordinate_unit !=
+          frames.front()->metadata().coordinate_unit)
+        return R::failure(invalid("the file uses a different coordinate unit than the object"));
+      frames.push_back(frame.value());
+      ++appended;
+    }
+  }
+  if (appended == 0U) return R::failure(invalid("the file contains no states"));
+  const auto replaced = replace_object_frames(
+      index.value(), std::move(frames),
+      embedded ? object.trajectory->timeline.snapshot().frame : 0U);
+  if (!replaced.has_value()) return R::failure(replaced.error());
+  return R::success({objects_[index.value()].id, objects_[index.value()].system->name(),
+                     *previous_count, appended, replaced.value()});
+}
+
+operation::Result<std::size_t> Workspace::replace_object_frames(
+    std::size_t index, std::vector<std::shared_ptr<const model::CoordinateFrame>> frames,
+    std::size_t current_frame) {
+  using R = operation::Result<std::size_t>;
+  if (frames.empty()) return R::failure(invalid("an object needs at least one state"));
+  const auto &object = objects_[index];
+  const auto &topology = *object.system->topology();
+  const bool embedded = object.trajectory.has_value() &&
+                        object.trajectory->mapping.identity_strength ==
+                            "embedded-structure-order";
+  const auto source = model::InMemoryCoordinateSource::create(topology.atom_count(), frames);
+  if (!source.has_value()) return R::failure(source.error());
+  const auto system = model::MolecularSystem::create(
+      object.system->id(), object.system->name(), object.system->topology(), source.value());
+  if (!system.has_value()) return R::failure(system.error());
+
+  WorkspaceObject candidate = object;
+  const std::size_t previous_frame = std::min(current_frame, frames.size() - 1U);
+  std::shared_ptr<const model::CoordinateSource> coordinates = source.value();
+  candidate.trajectory.reset();
+  if (frames.size() > 1U) {
+    // Same embedded-trajectory construction as a multi-model load.
+    constexpr std::size_t kEmbeddedCacheBudgetBytes = 256U * 1024U * 1024U;
+    const auto cache = trajectory::FrameCache::create(source.value(), kEmbeddedCacheBudgetBytes);
+    if (!cache.has_value()) return R::failure(cache.error());
+    auto timeline = trajectory::PlaybackTimeline::create(frames.size());
+    if (!timeline.has_value()) return R::failure(timeline.error());
+    if (const auto error = timeline.value().seek(previous_frame); error.has_value())
+      return R::failure(*error);
+    auto clock = trajectory::PlaybackClock::create();
+    if (!clock.has_value()) return R::failure(clock.error());
+    auto prefetch = trajectory::PrefetchScheduler::create(cache.value());
+    if (!prefetch.has_value()) return R::failure(prefetch.error());
+    coordinates = cache.value();
+    candidate.trajectory = TrajectoryState{
+        embedded ? object.trajectory->path : std::filesystem::path{},
+        io::TrajectoryFormat::auto_detect,
+        cache.value(),
+        std::move(timeline.value()),
+        std::move(clock.value()),
+        prefetch.value(),
+        4U,
+        trajectory::AtomMappingReport{trajectory::AtomMappingPolicy::index_order,
+                                      "embedded-structure-order",
+                                      {},
+                                      {"structure-record-order"},
+                                      topology.version()},
+        {}};
+  }
+  const auto final_system = model::MolecularSystem::create(
+      object.system->id(), object.system->name(), object.system->topology(), coordinates);
+  if (!final_system.has_value()) return R::failure(final_system.error());
+  candidate.system = final_system.value();
+  if (candidate.coordinate_source_revision == std::numeric_limits<std::uint64_t>::max())
+    return R::failure(operation::Error{operation::ErrorCode::resource_exhausted,
+                                       "coordinate source revision space is exhausted", {}});
+  ++candidate.coordinate_source_revision;
+  candidate.molecular_surface.reset();
+  const auto current = candidate.system->coordinates()->read_frame(previous_frame);
+  if (!current.has_value()) return R::failure(current.error());
+  const auto rebuilt = rebuild_representations(candidate, candidate.system, *current.value(),
+                                               previous_frame, render_settings_, color_table_);
+  if (!rebuilt.has_value()) return R::failure(rebuilt.error());
+  candidate.representations = rebuilt.value();
+  auto builder = scene::SceneBuilder::from(*scene_);
+  if (const auto error = builder.replace_system(candidate.scene_node, candidate.system);
+      error.has_value())
+    return R::failure(*error);
+  const auto next_scene = builder.build();
+  if (!next_scene.has_value()) return R::failure(next_scene.error());
+  objects_[index] = std::move(candidate);
+  scene_ = next_scene.value();
+  return R::success(frames.size());
+}
+
+operation::Result<PbcModeResult>
+Workspace::set_pbc_mode(std::string_view object_reference, std::string_view mode) {
+  using R = operation::Result<PbcModeResult>;
+  if (mode != "none" && mode != "wrap" && mode != "unwrap" && mode != "status")
+    return R::failure(invalid("pbc mode must be none, wrap, unwrap or status"));
+  const auto index = object_index_by_reference(object_reference);
+  if (!index.has_value()) return R::failure(index.error());
+  auto &current = objects_[index.value()];
+  const auto name_of = [](const WorkspaceObject &object) {
+    return !object.pbc.has_value()                              ? std::string{"none"}
+           : object.pbc->mode == trajectory::PbcMode::wrap ? std::string{"wrap"}
+                                                              : std::string{"unwrap"};
+  };
+  PbcModeResult result;
+  result.object_id = current.id;
+  result.object_name = current.system->name();
+  result.previous_mode = name_of(current);
+  result.mode = result.previous_mode;
+  result.frame_count = current.system->coordinates()->frame_count();
+  if (mode == "status" || mode == result.previous_mode) return R::success(std::move(result));
+
+  // The underlying (as loaded) coordinates and trajectory.
+  const auto original_coordinates =
+      current.pbc.has_value() ? current.pbc->original_coordinates : current.system->coordinates();
+  std::optional<TrajectoryState> original_trajectory =
+      current.pbc.has_value() ? current.pbc->original_trajectory : current.trajectory;
+  WorkspaceObject candidate = current;
+  std::shared_ptr<const model::CoordinateSource> coordinates = original_coordinates;
+  std::optional<TrajectoryState> next_trajectory = original_trajectory;
+  if (mode == "none") {
+    candidate.pbc.reset();
+    if (next_trajectory.has_value() && current.trajectory.has_value()) {
+      next_trajectory->timeline = current.trajectory->timeline;
+      next_trajectory->clock = current.trajectory->clock;
+    }
+  } else {
+    const auto first = original_coordinates->read_frame(0U);
+    if (!first.has_value()) return R::failure(first.error());
+    if (!first.value()->metadata().unit_cell.has_value())
+      return R::failure(invalid("the object has no periodic unit cell",
+                                "PBC wrap and unwrap need frames with unit-cell metadata"));
+    const auto processed = trajectory::PbcProcessedSource::create(
+        original_coordinates,
+        mode == "wrap" ? trajectory::PbcMode::wrap : trajectory::PbcMode::unwrap);
+    if (!processed.has_value()) return R::failure(processed.error());
+    coordinates = processed.value();
+    candidate.pbc = PbcProcessing{
+        mode == "wrap" ? trajectory::PbcMode::wrap : trajectory::PbcMode::unwrap,
+        original_coordinates, original_trajectory};
+    if (original_trajectory.has_value()) {
+      const auto budget = original_trajectory->cache->stats().payload_budget_bytes;
+      const auto cache = trajectory::FrameCache::create(processed.value(), budget);
+      if (!cache.has_value()) return R::failure(cache.error());
+      const auto prefetch = trajectory::PrefetchScheduler::create(cache.value());
+      if (!prefetch.has_value()) return R::failure(prefetch.error());
+      next_trajectory = *original_trajectory;
+      next_trajectory->cache = cache.value();
+      next_trajectory->prefetch = prefetch.value();
+      if (current.trajectory.has_value()) {
+        next_trajectory->timeline = current.trajectory->timeline;
+        next_trajectory->clock = current.trajectory->clock;
+      }
+      coordinates = cache.value();
+    }
+  }
+  candidate.trajectory = std::move(next_trajectory);
+  const auto system = model::MolecularSystem::create(
+      current.system->id(), current.system->name(), current.system->topology(), coordinates);
+  if (!system.has_value()) return R::failure(system.error());
+  candidate.system = system.value();
+  if (candidate.coordinate_revision == std::numeric_limits<std::uint64_t>::max() ||
+      candidate.coordinate_source_revision == std::numeric_limits<std::uint64_t>::max())
+    return R::failure(operation::Error{operation::ErrorCode::resource_exhausted,
+                                       "coordinate revision space is exhausted", {}});
+  ++candidate.coordinate_revision;
+  ++candidate.coordinate_source_revision;
+  candidate.molecular_surface.reset();
+  const std::size_t frame_index =
+      candidate.trajectory.has_value() ? candidate.trajectory->timeline.snapshot().frame : 0U;
+  const auto frame = candidate.system->coordinates()->read_frame(frame_index);
+  if (!frame.has_value()) return R::failure(frame.error());
+  const auto rebuilt = rebuild_representations(candidate, candidate.system, *frame.value(),
+                                               frame_index, render_settings_, color_table_);
+  if (!rebuilt.has_value()) return R::failure(rebuilt.error());
+  candidate.representations = rebuilt.value();
+  auto builder = scene::SceneBuilder::from(*scene_);
+  if (const auto error = builder.replace_system(candidate.scene_node, candidate.system);
+      error.has_value())
+    return R::failure(*error);
+  const auto next_scene = builder.build();
+  if (!next_scene.has_value()) return R::failure(next_scene.error());
+  if (candidate.trajectory.has_value()) static_cast<void>(schedule_prefetch(*candidate.trajectory));
+  current = std::move(candidate);
+  scene_ = next_scene.value();
+  result.mode = std::string{mode};
+  result.changed = true;
+  result.frame_count = current.system->coordinates()->frame_count();
+  return R::success(std::move(result));
+}
+
 operation::Result<SelectionCountResult>
 Workspace::count_selection(std::string_view object_reference,
                            std::string selection_expression) const {
@@ -1848,6 +3235,544 @@ std::vector<model::AtomId> atom_ids_from(const std::vector<std::uint64_t> &ids) 
 }
 
 } // namespace
+
+operation::Result<ObjectSplitResult>
+Workspace::split_object_by_chain(std::string_view object_reference, std::string prefix) {
+  using R = operation::Result<ObjectSplitResult>;
+  const auto index = object_index_by_reference(object_reference);
+  if (!index.has_value()) return R::failure(index.error());
+  const auto source_id = objects_[index.value()].id;
+  const auto source_name = objects_[index.value()].system->name();
+  const auto &topology = *objects_[index.value()].system->topology();
+  std::vector<std::string> chains;
+  for (const auto &atom : topology.atoms()) {
+    const auto &chain = topology.residues()[atom.residue.value].chain_id;
+    if (chain.empty())
+      return R::failure(invalid("an atom has no chain identifier",
+                                "assign chain identifiers before splitting"));
+    if (std::find(chains.begin(), chains.end(), chain) == chains.end()) chains.push_back(chain);
+  }
+  if (chains.size() < 2U)
+    return R::failure(invalid("the object has a single chain", "there is nothing to split"));
+  if (prefix.empty()) prefix = source_name + "_";
+  // Every target name must be free before anything is created.
+  for (const auto &chain : chains) {
+    const auto name = prefix + chain;
+    const bool taken =
+        std::any_of(objects_.begin(), objects_.end(),
+                    [&](const auto &object) { return object.system->name() == name; }) ||
+        std::any_of(volumes_.begin(), volumes_.end(),
+                    [&](const auto &volume) { return volume.name == name; }) ||
+        group_name_exists(name);
+    if (taken)
+      return R::failure(invalid("object name already exists: " + name, "choose another --prefix"));
+  }
+  // Atoms by chain in atom order, expressed as atom-ID subsets.
+  const auto previous_active = active_index_;
+  ObjectSplitResult result;
+  result.source_object_id = source_id;
+  result.source_object_name = source_name;
+  for (const auto &chain : chains) {
+    std::vector<model::AtomId> ids;
+    for (std::size_t atom = 0; atom < topology.atom_count(); ++atom) {
+      if (topology.residues()[topology.atoms()[atom].residue.value].chain_id != chain) continue;
+      const auto id = topology.atom_id(model::AtomIndex{atom});
+      if (!id.has_value()) return R::failure(invalid("topology atom identity is missing"));
+      ids.push_back(*id);
+    }
+    const auto current_index = object_index_by_reference(std::to_string(source_id));
+    if (!current_index.has_value()) return R::failure(current_index.error());
+    const auto subset = make_atom_subset(*objects_[current_index.value()].system, ids);
+    const auto rollback = [&]() {
+      for (const auto &made : result.created)
+        static_cast<void>(delete_object(std::to_string(made.object_id)));
+      if (previous_active.has_value() && *previous_active < objects_.size())
+        static_cast<void>(activate_object(objects_[*previous_active].id));
+    };
+    if (!subset.has_value()) {
+      rollback();
+      return R::failure(subset.error());
+    }
+    io::StructureDocument document;
+    document.format = io::StructureFormat::auto_detect;
+    document.source_name = "<object-" + std::to_string(source_id) + ">";
+    const auto name = prefix + chain;
+    document.structures.push_back({name, subset.value().topology, subset.value().coordinates,
+                                   {{"derived_from_object", std::to_string(source_id)},
+                                    {"chain", chain}}});
+    const auto loaded = load_structure_document(std::move(document), {}, name);
+    if (!loaded.has_value()) {
+      rollback();
+      return R::failure(loaded.error());
+    }
+    const auto created_index = object_index_by_reference(std::to_string(loaded.value().object_id));
+    if (!created_index.has_value()) {
+      rollback();
+      return R::failure(created_index.error());
+    }
+    const auto &created = objects_[created_index.value()];
+    result.created.push_back({source_id, source_name, loaded.value().object_id, name,
+                              "chain " + chain, created.system->topology()->atom_count(),
+                              created.system->topology()->bonds().size(),
+                              created.system->coordinates()->frame_count(), 0U});
+  }
+  return R::success(std::move(result));
+}
+
+operation::Result<ObjectLifecycleResult> Workspace::sort_objects_by_name() {
+  using R = operation::Result<ObjectLifecycleResult>;
+  if (objects_.empty()) return R::failure(missing_active());
+  std::vector<std::pair<std::string, std::uint64_t>> order;
+  for (const auto &object : objects_) order.emplace_back(object.system->name(), object.id);
+  std::stable_sort(order.begin(), order.end(), [](const auto &left, const auto &right) {
+    return natural_less(left.first, right.first);
+  });
+  ObjectLifecycleResult last;
+  for (std::size_t position = 0; position < order.size(); ++position) {
+    if (objects_[position].id == order[position].second) continue;
+    const auto moved = reorder_object(std::to_string(order[position].second), position);
+    if (!moved.has_value()) return R::failure(moved.error());
+    last = moved.value();
+  }
+  if (last.ordered_object_ids.empty())
+    for (const auto &object : objects_) last.ordered_object_ids.push_back(object.id);
+  last.object_count = objects_.size();
+  return R::success(std::move(last));
+}
+
+operation::Result<ObjectLifecycleResult>
+Workspace::set_object_fixed(std::string_view object_reference, bool fixed) {
+  using R = operation::Result<ObjectLifecycleResult>;
+  const auto index = object_index_by_reference(object_reference);
+  if (!index.has_value()) return R::failure(index.error());
+  objects_[index.value()].fixed = fixed;
+  ObjectLifecycleResult result;
+  result.object_count = objects_.size();
+  for (const auto &object : objects_) result.ordered_object_ids.push_back(object.id);
+  result.object_id = objects_[index.value()].id;
+  result.name = objects_[index.value()].system->name();
+  result.scene_node_id = objects_[index.value()].scene_node.value;
+  return R::success(std::move(result));
+}
+
+operation::Result<ObjectTransformResetResult>
+Workspace::copy_object_transform(std::string_view source_reference,
+                                 std::string_view target_reference) {
+  using R = operation::Result<ObjectTransformResetResult>;
+  const auto source = object_index_by_reference(source_reference);
+  if (!source.has_value()) return R::failure(source.error());
+  const auto target = object_index_by_reference(target_reference);
+  if (!target.has_value()) return R::failure(target.error());
+  if (source.value() == target.value())
+    return R::failure(invalid("the source and target objects must differ"));
+  if (objects_[target.value()].fixed)
+    return R::failure(invalid("the target object is fixed: " + objects_[target.value()].system->name(),
+                              "run object free first"));
+  const auto *node = scene_->find(objects_[source.value()].scene_node);
+  if (node == nullptr)
+    return R::failure(operation::Error{operation::ErrorCode::internal,
+                                       "object scene node is missing", {}});
+  auto builder = scene::SceneBuilder::from(*scene_);
+  if (const auto error = builder.set_transform(objects_[target.value()].scene_node,
+                                               node->local_transform());
+      error.has_value())
+    return R::failure(*error);
+  const auto next_scene = builder.build();
+  if (!next_scene.has_value()) return R::failure(next_scene.error());
+  scene_ = next_scene.value();
+  ObjectTransformResetResult result;
+  result.object_reference = std::string{target_reference};
+  result.object_ids = {objects_[target.value()].id};
+  result.scene_version = scene_->version();
+  return R::success(std::move(result));
+}
+
+bool Workspace::object_name_in_use(std::string_view name) const {
+  return std::any_of(objects_.begin(), objects_.end(),
+                     [&](const auto &object) { return object.system->name() == name; }) ||
+         std::any_of(volumes_.begin(), volumes_.end(),
+                     [&](const auto &volume) { return volume.name == name; }) ||
+         group_name_exists(name);
+}
+
+namespace {
+
+constexpr std::size_t kMaximumObjectStates = 100000U;
+
+std::string zero_padded_state(std::size_t state) {
+  auto text = std::to_string(state);
+  if (text.size() < 4U) text.insert(0U, 4U - text.size(), '0');
+  return text;
+}
+
+// Only static objects and multi-model (embedded) objects have editable states.
+std::optional<operation::Error> states_editable(const WorkspaceObject &object) {
+  if (object.pbc.has_value())
+    return invalid("the object is shown with PBC processing",
+                   "run pbc mode --mode none before changing states");
+  const bool embedded = object.trajectory.has_value() &&
+                        object.trajectory->mapping.identity_strength ==
+                            "embedded-structure-order";
+  if (object.trajectory.has_value() && !embedded)
+    return operation::Error{operation::ErrorCode::unsupported,
+                            "the object has an attached trajectory",
+                            "use traj load for trajectories; states are for multi-model objects", {}};
+  return std::nullopt;
+}
+
+operation::Result<std::vector<std::shared_ptr<const model::CoordinateFrame>>>
+read_all_states(const WorkspaceObject &object) {
+  using R = operation::Result<std::vector<std::shared_ptr<const model::CoordinateFrame>>>;
+  const auto count = object.system->coordinates()->frame_count();
+  if (!count.has_value() || *count == 0U) return R::failure(invalid("the object's state count is unknown"));
+  if (*count > kMaximumObjectStates)
+    return R::failure(operation::Error{operation::ErrorCode::resource_exhausted,
+                                       "an object is limited to 100000 states", {}});
+  std::vector<std::shared_ptr<const model::CoordinateFrame>> frames;
+  frames.reserve(*count);
+  for (std::size_t state = 0; state < *count; ++state) {
+    const auto frame = object.system->coordinates()->read_frame(state);
+    if (!frame.has_value()) return R::failure(frame.error());
+    frames.push_back(frame.value());
+  }
+  return R::success(std::move(frames));
+}
+
+} // namespace
+
+operation::Result<ObjectSplitResult>
+Workspace::split_states(std::string_view object_reference, std::size_t first,
+                        std::size_t last, std::string prefix) {
+  using R = operation::Result<ObjectSplitResult>;
+  const auto index = object_index_by_reference(object_reference);
+  if (!index.has_value()) return R::failure(index.error());
+  const auto &object = objects_[index.value()];
+  if (const auto error = states_editable(object); error.has_value()) return R::failure(*error);
+  const auto frames = read_all_states(object);
+  if (!frames.has_value()) return R::failure(frames.error());
+  if (first == 0U) first = 1U;
+  const auto total = frames.value().size();
+  const auto end = (last == 0U || last > total) ? total : last;
+  if (first > end)
+    return R::failure(invalid("no states in the requested range",
+                              "the object has " + std::to_string(total) + " state(s)"));
+  const auto source_id = object.id;
+  const auto source_name = object.system->name();
+  if (prefix.empty()) prefix = source_name + "_";
+  std::vector<std::string> names;
+  for (auto state = first; state <= end; ++state) {
+    names.push_back(prefix + zero_padded_state(state));
+    if (object_name_in_use(names.back()))
+      return R::failure(invalid("object name already exists: " + names.back(),
+                                "choose another --prefix"));
+  }
+  const auto previous_active = active_index_;
+  ObjectSplitResult result;
+  result.source_object_id = source_id;
+  result.source_object_name = source_name;
+  const auto topology = object.system->topology();
+  const auto rollback = [&]() {
+    for (const auto &made : result.created)
+      static_cast<void>(delete_object(std::to_string(made.object_id)));
+    if (previous_active.has_value() && *previous_active < objects_.size())
+      static_cast<void>(activate_object(objects_[*previous_active].id));
+  };
+  for (auto state = first; state <= end; ++state) {
+    const auto source = model::InMemoryCoordinateSource::create(
+        topology->atom_count(), {frames.value()[state - 1U]});
+    if (!source.has_value()) { rollback(); return R::failure(source.error()); }
+    io::StructureDocument document;
+    document.format = io::StructureFormat::auto_detect;
+    document.source_name = "<object-" + std::to_string(source_id) + ">";
+    const auto &name = names[state - first];
+    document.structures.push_back({name, topology, source.value(),
+                                   {{"derived_from_object", std::to_string(source_id)},
+                                    {"state", std::to_string(state)}}});
+    const auto loaded = load_structure_document(std::move(document), {}, name);
+    if (!loaded.has_value()) { rollback(); return R::failure(loaded.error()); }
+    const auto created_index = object_index_by_reference(std::to_string(loaded.value().object_id));
+    if (!created_index.has_value()) { rollback(); return R::failure(created_index.error()); }
+    const auto &created = objects_[created_index.value()];
+    result.created.push_back({source_id, source_name, loaded.value().object_id, name,
+                              "state " + std::to_string(state), topology->atom_count(),
+                              topology->bonds().size(), created.system->coordinates()->frame_count(),
+                              0U});
+  }
+  return R::success(std::move(result));
+}
+
+operation::Result<StateDeleteResult>
+Workspace::delete_states(std::string_view object_reference, std::string_view states) {
+  using R = operation::Result<StateDeleteResult>;
+  const auto index = object_index_by_reference(object_reference);
+  if (!index.has_value()) return R::failure(index.error());
+  const auto &object = objects_[index.value()];
+  if (const auto error = states_editable(object); error.has_value()) return R::failure(*error);
+  const auto frames = read_all_states(object);
+  if (!frames.has_value()) return R::failure(frames.error());
+  const auto total = frames.value().size();
+
+  // "1-3 10" / "1-3,10": numbers and inclusive ranges (either direction).
+  std::set<std::size_t> doomed;
+  std::string normalized{states};
+  for (auto &ch : normalized) if (ch == ',' || ch == '\t') ch = ' ';
+  std::size_t position = 0;
+  const auto parse_number = [&](std::size_t &value) -> bool {
+    while (position < normalized.size() && normalized[position] == ' ') ++position;
+    const auto begin = position;
+    while (position < normalized.size() && std::isdigit(static_cast<unsigned char>(normalized[position])))
+      ++position;
+    if (begin == position || position - begin > 9U) return false;
+    value = static_cast<std::size_t>(std::stoul(normalized.substr(begin, position - begin)));
+    return true;
+  };
+  bool any = false;
+  while (true) {
+    while (position < normalized.size() && normalized[position] == ' ') ++position;
+    if (position >= normalized.size()) break;
+    std::size_t lo = 0;
+    if (!parse_number(lo))
+      return R::failure(invalid("states must be numbers or ranges such as \"1-3 10\""));
+    std::size_t hi = lo;
+    if (position < normalized.size() && normalized[position] == '-') {
+      ++position;
+      if (!parse_number(hi)) return R::failure(invalid("a state range is missing its end"));
+    }
+    if (lo == 0U || hi == 0U) return R::failure(invalid("states are numbered from 1"));
+    if (lo > hi) std::swap(lo, hi);
+    for (auto state = lo; state <= hi && state <= total; ++state) doomed.insert(state);
+    any = true;
+  }
+  if (!any) return R::failure(invalid("provide the states to delete, e.g. \"1-3 10\""));
+  if (doomed.size() >= total)
+    return R::failure(invalid("deleting every state would leave an object without coordinates",
+                              "use object delete to remove the whole object"));
+  StateDeleteResult result{object.id, object.system->name(), total, doomed.size(), total - doomed.size()};
+  if (doomed.empty()) return R::success(std::move(result));
+
+  std::vector<std::shared_ptr<const model::CoordinateFrame>> kept;
+  const bool embedded = object.trajectory.has_value();
+  const std::size_t current = embedded ? object.trajectory->timeline.snapshot().frame : 0U;
+  std::size_t new_current = 0;
+  for (std::size_t state = 1; state <= total; ++state) {
+    if (doomed.contains(state)) continue;
+    if (state - 1U <= current) new_current = kept.size();
+    kept.push_back(frames.value()[state - 1U]);
+  }
+  const auto replaced = replace_object_frames(index.value(), std::move(kept), new_current);
+  if (!replaced.has_value()) return R::failure(replaced.error());
+  result.state_count = replaced.value();
+  return R::success(std::move(result));
+}
+
+operation::Result<StateDeleteResult>
+Workspace::delete_frames(std::string_view object_reference, long long beg, long long end,
+                         long long skip) {
+  using R = operation::Result<StateDeleteResult>;
+  const auto index = object_index_by_reference(object_reference);
+  if (!index.has_value()) return R::failure(index.error());
+  const auto &object = objects_[index.value()];
+  if (const auto error = states_editable(object); error.has_value()) return R::failure(*error);
+  const auto frames = read_all_states(object);
+  if (!frames.has_value()) return R::failure(frames.error());
+  const auto total = static_cast<long long>(frames.value().size());
+  if (beg < 0) beg = 0;
+  if (end < 0 || end >= total) end = total - 1;
+  if (skip < 0) skip = 0;
+  if (beg > end)
+    return R::failure(invalid("the frame range is empty",
+                              "the object has " + std::to_string(total) + " frame(s), numbered from 0"));
+  std::vector<std::shared_ptr<const model::CoordinateFrame>> kept;
+  std::size_t removed = 0;
+  const std::size_t current =
+      object.trajectory.has_value() ? object.trajectory->timeline.snapshot().frame : 0U;
+  std::size_t new_current = 0;
+  for (long long frame = 0; frame < total; ++frame) {
+    const bool in_range = frame >= beg && frame <= end;
+    const bool keep = !in_range || (skip >= 1 && (frame - beg) % skip == 0);
+    if (!keep) { ++removed; continue; }
+    if (static_cast<std::size_t>(frame) <= current) new_current = kept.size();
+    kept.push_back(frames.value()[static_cast<std::size_t>(frame)]);
+  }
+  StateDeleteResult result{object.id, object.system->name(), static_cast<std::size_t>(total),
+                           removed, static_cast<std::size_t>(total) - removed};
+  if (removed == 0U) return R::success(std::move(result));
+  if (kept.empty())
+    return R::failure(invalid("deleting every frame would leave an object without coordinates",
+                              "use object delete to remove the whole object"));
+  const auto replaced = replace_object_frames(index.value(), std::move(kept), new_current);
+  if (!replaced.has_value()) return R::failure(replaced.error());
+  result.state_count = replaced.value();
+  return R::success(std::move(result));
+}
+
+operation::Result<StateAppendResult>
+Workspace::duplicate_frame(std::string_view object_reference, std::optional<std::size_t> frame) {
+  using R = operation::Result<StateAppendResult>;
+  const auto index = object_index_by_reference(object_reference);
+  if (!index.has_value()) return R::failure(index.error());
+  const auto &object = objects_[index.value()];
+  if (const auto error = states_editable(object); error.has_value()) return R::failure(*error);
+  auto frames = read_all_states(object);
+  if (!frames.has_value()) return R::failure(frames.error());
+  if (frames.value().size() >= kMaximumObjectStates)
+    return R::failure(operation::Error{operation::ErrorCode::resource_exhausted,
+                                       "an object is limited to 100000 states", {}});
+  const std::size_t current =
+      object.trajectory.has_value() ? object.trajectory->timeline.snapshot().frame : 0U;
+  const auto source = frame.value_or(current);
+  if (source >= frames.value().size())
+    return R::failure(invalid("frame " + std::to_string(source) + " does not exist",
+                              "the object has " + std::to_string(frames.value().size()) +
+                                  " frame(s), numbered from 0"));
+  const auto previous = frames.value().size();
+  frames.value().push_back(frames.value()[source]);
+  const auto replaced = replace_object_frames(index.value(), std::move(frames.value()), current);
+  if (!replaced.has_value()) return R::failure(replaced.error());
+  return R::success({objects_[index.value()].id, objects_[index.value()].system->name(), previous,
+                     1U, replaced.value()});
+}
+
+operation::Result<ObjectCreateResult>
+Workspace::join_states(std::string name, const std::vector<std::string> &object_references,
+                       std::string selection_expression, StateJoinMode mode) {
+  using R = operation::Result<ObjectCreateResult>;
+  if (name.empty()) return R::failure(invalid("new object name must not be empty"));
+  if (object_name_in_use(name))
+    return R::failure(invalid("object name already exists: " + name, "choose another name"));
+  if (object_references.empty()) return R::failure(invalid("provide at least one object to join"));
+  std::vector<std::size_t> indices;
+  for (const auto &reference : object_references) {
+    const auto index = object_index_by_reference(reference);
+    if (!index.has_value()) return R::failure(index.error());
+    if (std::find(indices.begin(), indices.end(), index.value()) == indices.end())
+      indices.push_back(index.value());
+  }
+  struct Part {
+    std::vector<std::size_t> atoms;   // selected atom indices in topology order
+    std::vector<std::string> keys;    // identity key per selected atom
+    std::vector<std::shared_ptr<const model::CoordinateFrame>> frames;
+  };
+  const auto key_of = [](const model::Topology &topology, std::size_t atom) {
+    const auto &record = topology.atoms()[atom];
+    const auto &residue = topology.residues()[record.residue.value];
+    return residue.chain_id + "|" + residue.name + "|" + std::to_string(residue.sequence_number) +
+           "|" + residue.insertion_code + "|" + record.name;
+  };
+  std::vector<Part> parts;
+  for (const auto index : indices) {
+    const auto &object = objects_[index];
+    if (const auto error = states_editable(object); error.has_value()) return R::failure(*error);
+    const auto mask = selection_mask(object, selection_expression);
+    if (!mask.has_value()) return R::failure(mask.error());
+    Part part;
+    const auto &topology = *object.system->topology();
+    for (std::size_t atom = 0; atom < mask.value().size(); ++atom)
+      if (mask.value()[atom] != 0U) {
+        part.atoms.push_back(atom);
+        part.keys.push_back(key_of(topology, atom));
+      }
+    if (part.atoms.empty())
+      return R::failure(invalid("the selection matches no atoms in " + object.system->name()));
+    std::set<std::string> unique(part.keys.begin(), part.keys.end());
+    if (unique.size() != part.keys.size())
+      return R::failure(invalid("atoms in " + object.system->name() +
+                                    " are not uniquely identified by chain, residue and atom name",
+                                "restrict the selection to one alternate location"));
+    const auto frames = read_all_states(object);
+    if (!frames.has_value()) return R::failure(frames.error());
+    part.frames = frames.value();
+    parts.push_back(std::move(part));
+  }
+
+  // Common atoms in the order of the first object.
+  std::vector<std::size_t> reference_atoms;  // atom indices in the first object
+  std::vector<std::vector<std::optional<std::size_t>>> mappings(parts.size());
+  if (mode == StateJoinMode::identical_topology) {
+    for (std::size_t k = 1; k < parts.size(); ++k)
+      if (parts[k].keys != parts[0].keys)
+        return R::failure(invalid(
+            "the objects do not have identical atoms: " + objects_[indices[k]].system->name() +
+                " differs from " + objects_[indices[0]].system->name(),
+            "use --mode intersection to join the atoms they share"));
+    reference_atoms = parts[0].atoms;
+    for (std::size_t k = 0; k < parts.size(); ++k) {
+      mappings[k].resize(parts[k].atoms.size());
+      for (std::size_t i = 0; i < parts[k].atoms.size(); ++i) mappings[k][i] = parts[k].atoms[i];
+    }
+  } else {
+    std::vector<std::map<std::string, std::size_t>> lookup(parts.size());
+    for (std::size_t k = 0; k < parts.size(); ++k)
+      for (std::size_t i = 0; i < parts[k].atoms.size(); ++i)
+        lookup[k].emplace(parts[k].keys[i], parts[k].atoms[i]);
+    std::vector<std::size_t> kept_first;
+    for (std::size_t i = 0; i < parts[0].atoms.size(); ++i) {
+      const bool everywhere = std::all_of(lookup.begin() + 1, lookup.end(), [&](const auto &table) {
+        return table.contains(parts[0].keys[i]);
+      });
+      if (everywhere) kept_first.push_back(i);
+    }
+    if (kept_first.empty())
+      return R::failure(invalid("the objects have no atoms in common"));
+    for (const auto i : kept_first) reference_atoms.push_back(parts[0].atoms[i]);
+    for (std::size_t k = 0; k < parts.size(); ++k) {
+      for (const auto i : kept_first) mappings[k].push_back(lookup[k].at(parts[0].keys[i]));
+    }
+  }
+
+  std::vector<std::shared_ptr<const model::CoordinateFrame>> joined;
+  std::optional<operation::LengthUnit> unit;
+  for (std::size_t k = 0; k < parts.size(); ++k) {
+    const auto source = model::InMemoryCoordinateSource::create(
+        objects_[indices[k]].system->topology()->atom_count(), parts[k].frames);
+    if (!source.has_value()) return R::failure(source.error());
+    const auto remapped = model::RemappedCoordinateSource::create(source.value(), mappings[k]);
+    if (!remapped.has_value()) return R::failure(remapped.error());
+    for (std::size_t state = 0; state < parts[k].frames.size(); ++state) {
+      if (joined.size() >= kMaximumObjectStates)
+        return R::failure(operation::Error{operation::ErrorCode::resource_exhausted,
+                                           "an object is limited to 100000 states", {}});
+      const auto frame = remapped.value()->read_frame(state);
+      if (!frame.has_value()) return R::failure(frame.error());
+      if (!unit.has_value()) unit = frame.value()->metadata().coordinate_unit;
+      else if (*unit != frame.value()->metadata().coordinate_unit)
+        return R::failure(invalid("the objects use different coordinate units"));
+      joined.push_back(frame.value());
+    }
+  }
+
+  std::vector<model::AtomId> ids;
+  const auto &first_topology = *objects_[indices[0]].system->topology();
+  for (const auto atom : reference_atoms) {
+    const auto id = first_topology.atom_id(model::AtomIndex{atom});
+    if (!id.has_value()) return R::failure(invalid("topology atom identity is missing"));
+    ids.push_back(*id);
+  }
+  const auto subset = make_atom_subset(*objects_[indices[0]].system, ids);
+  if (!subset.has_value()) return R::failure(subset.error());
+  const auto states = model::InMemoryCoordinateSource::create(ids.size(), joined);
+  if (!states.has_value()) return R::failure(states.error());
+
+  const auto source_id = objects_[indices[0]].id;
+  const auto source_name = objects_[indices[0]].system->name();
+  io::StructureDocument document;
+  document.format = io::StructureFormat::auto_detect;
+  document.source_name = "<join-states>";
+  document.structures.push_back({name, subset.value().topology, states.value(),
+                                 {{"derived_from_object", std::to_string(source_id)},
+                                  {"join_mode", mode == StateJoinMode::identical_topology
+                                                    ? "identical"
+                                                    : "intersection"}}});
+  const auto loaded = load_structure_document(std::move(document), {}, name);
+  if (!loaded.has_value()) return R::failure(loaded.error());
+  const auto created_index = object_index_by_reference(std::to_string(loaded.value().object_id));
+  if (!created_index.has_value()) return R::failure(created_index.error());
+  const auto &created = objects_[created_index.value()];
+  return R::success({source_id, source_name, loaded.value().object_id, created.system->name(),
+                     selection_expression, created.system->topology()->atom_count(),
+                     created.system->topology()->bonds().size(),
+                     created.system->coordinates()->frame_count(), 0U});
+}
 
 operation::Result<ObjectCreateResult> Workspace::create_object_from_selection(
     std::string_view source_reference, std::string name,
@@ -1960,6 +3885,10 @@ operation::Result<CoordinateEditResult> Workspace::set_active_atom_position(
   auto *object = mutable_active_object();
   if (object == nullptr)
     return operation::Result<CoordinateEditResult>::failure(missing_active());
+  if (object->pbc.has_value())
+    return operation::Result<CoordinateEditResult>::failure(invalid(
+        "the object is shown with PBC processing",
+        "run pbc mode --mode none before editing atoms or states"));
   if (object->trajectory.has_value())
     return operation::Result<CoordinateEditResult>::failure(operation::Error{
         operation::ErrorCode::unsupported,
@@ -2351,6 +4280,11 @@ operation::Result<std::size_t> Workspace::apply_edit_record(
 }
 
 operation::Result<EditHistoryResult> Workspace::undo_edit() {
+  if (std::any_of(objects_.begin(), objects_.end(),
+                  [](const auto &object) { return object.pbc.has_value(); }))
+    return operation::Result<EditHistoryResult>::failure(invalid(
+        "an object is shown with PBC processing",
+        "run pbc mode --mode none before undoing or redoing edits"));
   if (undo_history_.empty())
     return operation::Result<EditHistoryResult>::failure(operation::Error{
         operation::ErrorCode::not_found, "edit undo history is empty", {}});
@@ -2375,6 +4309,11 @@ operation::Result<EditHistoryResult> Workspace::undo_edit() {
 }
 
 operation::Result<EditHistoryResult> Workspace::redo_edit() {
+  if (std::any_of(objects_.begin(), objects_.end(),
+                  [](const auto &object) { return object.pbc.has_value(); }))
+    return operation::Result<EditHistoryResult>::failure(invalid(
+        "an object is shown with PBC processing",
+        "run pbc mode --mode none before undoing or redoing edits"));
   if (redo_history_.empty())
     return operation::Result<EditHistoryResult>::failure(operation::Error{
         operation::ErrorCode::not_found, "edit redo history is empty", {}});
@@ -2901,16 +4840,78 @@ Workspace::save_image(const ImageSaveRequest &request) const {
   if (request.dpi.has_value() &&
       (!std::isfinite(*request.dpi) || *request.dpi <= 0.0))
     return R::failure(invalid("image dpi must be positive"));
+  if (request.format != "guess" && request.format != "png" &&
+      request.format != "ppm")
+    return R::failure(invalid("image format must be guess, png or ppm"));
+  // Format and filename-extension policy: the extension selects the encoder in
+  // guess mode, and a path without an extension gets the format's extension.
+  auto path = request.path;
+  std::string format = request.format;
+  if (format == "guess") {
+    auto extension = path.extension().string();
+    for (auto &character : extension)
+      character = static_cast<char>(
+          std::tolower(static_cast<unsigned char>(character)));
+    if (extension.empty())
+      format = "png";
+    else if (extension == ".png")
+      format = "png";
+    else if (extension == ".ppm")
+      format = "ppm";
+    else
+      return R::failure(invalid(
+          "cannot guess the image format from extension '" + extension + "'",
+          "use a .png or .ppm path, or pass --image-format png|ppm"));
+  }
+  if (!path.has_extension())
+    path += format == "ppm" ? ".ppm" : ".png";
   constexpr std::size_t kMaximumEdge = 8192U;
   auto parameters = camera_->parameters();
-  const auto width = request.width == 0U ? std::size_t{640U} : request.width;
-  const auto height =
-      request.height != 0U
-          ? request.height
-          : std::max<std::size_t>(
-                1U, static_cast<std::size_t>(std::lround(
-                        static_cast<double>(width) /
-                        std::max(1.0e-6, parameters.aspect_ratio))));
+  std::size_t requested_width = request.width;
+  std::size_t requested_height = request.height;
+  std::optional<double> effective_dpi = request.dpi;
+  if (request.units != "pixels") {
+    double per_unit{};
+    if (request.units == "inches") per_unit = 1.0;
+    else if (request.units == "centimeters") per_unit = 1.0 / 2.54;
+    else if (request.units == "millimeters") per_unit = 1.0 / 25.4;
+    else
+      return R::failure(invalid(
+          "image units must be pixels, inches, centimeters or millimeters"));
+    if (!effective_dpi.has_value()) effective_dpi = 300.0;
+    const auto to_pixels = [&](const std::optional<double> &value)
+        -> operation::Result<std::size_t> {
+      if (!value.has_value()) return operation::Result<std::size_t>::success(0U);
+      if (!std::isfinite(*value) || *value <= 0.0)
+        return operation::Result<std::size_t>::failure(
+            invalid("physical image dimensions must be positive"));
+      const auto pixels = std::llround(*value * per_unit * *effective_dpi);
+      if (pixels < 1)
+        return operation::Result<std::size_t>::failure(
+            invalid("physical image dimension is smaller than one pixel"));
+      return operation::Result<std::size_t>::success(
+          static_cast<std::size_t>(pixels));
+    };
+    const auto w = to_pixels(request.width_value);
+    if (!w.has_value()) return R::failure(w.error());
+    const auto h = to_pixels(request.height_value);
+    if (!h.has_value()) return R::failure(h.error());
+    requested_width = w.value();
+    requested_height = h.value();
+  }
+  // Aspect-preserving size: a missing edge follows the camera aspect ratio.
+  const double aspect = std::max(1.0e-6, parameters.aspect_ratio);
+  std::size_t width = requested_width;
+  std::size_t height = requested_height;
+  if (width == 0U && height == 0U) width = 640U;
+  if (width == 0U)
+    width = std::max<std::size_t>(
+        1U, static_cast<std::size_t>(
+                std::lround(static_cast<double>(height) * aspect)));
+  if (height == 0U)
+    height = std::max<std::size_t>(
+        1U, static_cast<std::size_t>(
+                std::lround(static_cast<double>(width) / aspect)));
   if (width > kMaximumEdge || height > kMaximumEdge)
     return R::failure(operation::Error{
         operation::ErrorCode::resource_exhausted,
@@ -2983,18 +4984,24 @@ Workspace::save_image(const ImageSaveRequest &request) const {
   auto image = render::render_reference(scene, camera.value(), settings);
   if (!image.has_value())
     return R::failure(image.error());
-  if (const auto error = render::write_png_atomic(request.path, image.value(),
-                                                  request.dpi);
-      error.has_value())
+  if (format == "ppm") {
+    if (const auto error = render::write_ppm(path, image.value()); error.has_value())
+      return R::failure(*error);
+  } else if (const auto error = render::write_png_atomic(path, image.value(),
+                                                         effective_dpi);
+             error.has_value()) {
     return R::failure(*error);
+  }
 
   ImageSaveResult result;
-  result.path = request.path;
+  result.path = path;
+  result.format = format;
+  result.dpi = format == "png" ? effective_dpi : std::nullopt;
   result.width = width;
   result.height = height;
   std::error_code size_error;
   result.bytes = static_cast<std::size_t>(
-      std::filesystem::file_size(request.path, size_error));
+      std::filesystem::file_size(path, size_error));
   result.renderer = "molshredder-reference-raycast";
   result.opaque_background = effective_opaque;
   result.primitive_count = scene.lines.size() + scene.cylinders.size() +
@@ -3010,6 +5017,94 @@ Workspace::save_image(const ImageSaveRequest &request) const {
   if (!scene.labels.empty())
     result.warnings.push_back(std::to_string(scene.labels.size()) +
                               " text labels are not rasterized");
+  return R::success(std::move(result));
+}
+
+operation::Result<MovieExportResult>
+Workspace::export_movie_frames(const MovieExportRequest &request) {
+  using R = operation::Result<MovieExportResult>;
+  if (!movie_.has_value() || movie_->frame_count == 0U)
+    return R::failure(operation::Error{
+        operation::ErrorCode::not_found, "no movie timeline is configured",
+        "run movie configure first"});
+  if (movie_->playing)
+    return R::failure(invalid("movie export cannot run while the movie plays",
+                              "run movie pause first"));
+  if (request.prefix.empty())
+    return R::failure(invalid("movie export prefix must not be empty"));
+  const auto count = movie_->frame_count;
+  const auto first = request.first.value_or(1U);
+  const auto last = request.last.value_or(count);
+  if (first < 1U || last > count || first > last)
+    return R::failure(invalid("movie export range is outside the timeline",
+                              "use 1-based frames with first <= last <= " +
+                                  std::to_string(count)));
+  constexpr std::size_t kMaximumFrames = 100000U;
+  if (last - first + 1U > kMaximumFrames)
+    return R::failure(operation::Error{
+        operation::ErrorCode::resource_exhausted,
+        "movie export is limited to 100000 frames per call", {}});
+  // Pre-check the output names so an existing file is never replaced silently.
+  auto frame_path = [&](std::size_t frame, const std::string &extension) {
+    auto text = std::to_string(frame);
+    if (text.size() < 4U) text.insert(0U, 4U - text.size(), '0');
+    return std::filesystem::path{request.prefix.string() + text + extension};
+  };
+  std::string format = request.image.format;
+  if (format == "guess") format = "png";
+  const std::string extension = format == "ppm" ? ".ppm" : ".png";
+  if (format != "png" && format != "ppm")
+    return R::failure(invalid("movie export format must be png or ppm"));
+  if (!request.overwrite) {
+    for (auto frame = first; frame <= last; ++frame) {
+      std::error_code exists_error;
+      if (std::filesystem::exists(frame_path(frame, extension), exists_error))
+        return R::failure(invalid(
+            "movie export target exists: " + frame_path(frame, extension).string(),
+            "choose another prefix or pass --overwrite true"));
+    }
+  }
+  const auto original_frame = movie_->current_frame;
+  MovieExportResult result;
+  result.first_frame = first;
+  result.last_frame = last;
+  result.format = format;
+  std::vector<std::filesystem::path> created;
+  const auto cleanup = [&]() {
+    for (const auto &path : created) {
+      std::error_code remove_error;
+      std::filesystem::remove(path, remove_error);
+    }
+  };
+  for (auto frame = first; frame <= last; ++frame) {
+    const auto moved = seek_movie(frame);
+    if (!moved.has_value()) {
+      cleanup();
+      static_cast<void>(seek_movie(original_frame));
+      return R::failure(moved.error());
+    }
+    auto image = request.image;
+    image.format = format;
+    image.path = frame_path(frame, extension);
+    const auto saved = save_image(image);
+    if (!saved.has_value()) {
+      cleanup();
+      static_cast<void>(seek_movie(original_frame));
+      return R::failure(saved.error());
+    }
+    created.push_back(saved.value().path);
+    result.paths.push_back(saved.value().path);
+    result.width = saved.value().width;
+    result.height = saved.value().height;
+    result.total_bytes += saved.value().bytes;
+    if (frame == first) result.warnings = saved.value().warnings;
+  }
+  const auto restored = seek_movie(original_frame);
+  if (!restored.has_value()) {
+    cleanup();
+    return R::failure(restored.error());
+  }
+  result.frame_count = last - first + 1U;
   return R::success(std::move(result));
 }
 
@@ -3651,7 +5746,7 @@ operation::Result<BatchLoadResult> Workspace::load_structure_documents(
       const auto duplicate_in_batch =
           std::find(object_names.begin(), object_names.end(), object_name) !=
           object_names.end();
-      if (existing || duplicate_in_batch) {
+      if (existing || duplicate_in_batch || group_name_exists(object_name)) {
         return operation::Result<BatchLoadResult>::failure(
             invalid("workspace object name already exists: " + object_name,
                     "choose a unique name"));
@@ -3731,7 +5826,7 @@ operation::Result<BatchLoadResult> Workspace::load_structure_documents(
         RepresentationVisibilityState::create(data.topology->atom_count())
             .value(),
         {}, std::move(embedded_trajectory), std::nullopt,
-        render::kColorDefault, nullptr, nullptr, nullptr});
+        render::kColorDefault, nullptr, nullptr, nullptr, std::nullopt, false});
     loaded_objects.push_back(LoadedObjectResult{
         object_id, candidate.name, data.topology->atom_count(),
         data.coordinates->frame_count().value_or(0U), candidate.record_index});
@@ -3855,7 +5950,7 @@ Workspace::load_volume_document(io::VolumeDocument document,
   const auto duplicate_volume =
       std::any_of(volumes_.begin(), volumes_.end(),
                   [&](const auto &volume) { return volume.name == data.name; });
-  if (duplicate_molecule || duplicate_volume) {
+  if (duplicate_molecule || duplicate_volume || group_name_exists(data.name)) {
     return operation::Result<VolumeLoadResult>::failure(
         invalid("workspace object name already exists: " + data.name,
                 "choose a unique --name"));
@@ -4285,10 +6380,34 @@ operation::Result<VolumeSaveResult> Workspace::save_active_volume(
 operation::Result<SaveResult> Workspace::save_active_structure(
     const std::filesystem::path &path, io::StructureFormat format,
     bool all_frames, unsigned int decimal_places, std::string comment,
-    bool overwrite, operation::TaskContext &context) const {
+    bool overwrite, operation::TaskContext &context,
+    std::string_view selection_expression) const {
   const auto *object = active_object();
   if (object == nullptr) {
     return operation::Result<SaveResult>::failure(missing_active());
+  }
+  // A selection is written as the subset topology (stable atom IDs, bonds
+  // among the selected atoms) with the matching coordinate columns in every
+  // state; "all" keeps the whole object untouched.
+  std::shared_ptr<const model::Topology> topology = object->system->topology();
+  std::shared_ptr<const model::CoordinateSource> coordinates =
+      object->system->coordinates();
+  if (selection_expression != "all") {
+    const auto selected = selected_atom_ids(object->id, selection_expression);
+    if (!selected.has_value())
+      return operation::Result<SaveResult>::failure(selected.error());
+    if (selected.value().empty())
+      return operation::Result<SaveResult>::failure(
+          invalid("selection matches no atoms",
+                  "check the selection expression"));
+    if (selected.value().size() != topology->atom_count()) {
+      const auto subset =
+          make_atom_subset(*object->system, atom_ids_from(selected.value()));
+      if (!subset.has_value())
+        return operation::Result<SaveResult>::failure(subset.error());
+      topology = subset.value().topology;
+      coordinates = subset.value().coordinates;
+    }
   }
   io::StructureWriteOptions options;
   options.format = format;
@@ -4301,8 +6420,7 @@ operation::Result<SaveResult> Workspace::save_active_structure(
             : 0U);
   }
   const auto written = io::write_structure_file(
-      path, *object->system->topology(), *object->system->coordinates(),
-      std::move(options), overwrite, context);
+      path, *topology, *coordinates, std::move(options), overwrite, context);
   if (!written.has_value()) {
     return operation::Result<SaveResult>::failure(written.error());
   }
@@ -4339,23 +6457,76 @@ Workspace::save_active_trajectory_frame(const std::filesystem::path &path,
 
 std::optional<operation::Error>
 Workspace::set_named_selection(std::string name, std::string expression,
-                               bool dynamic) {
+                               bool dynamic, bool merge, std::string state) {
   auto *object = mutable_active_object();
   if (object == nullptr)
     return missing_active();
   const auto parsed = selection::Expression::parse(expression);
   if (!parsed.has_value())
     return parsed.error();
-  const auto frame_index = object->trajectory.has_value()
-                               ? object->trajectory->timeline.snapshot().frame
-                               : 0U;
-  const auto frame = object->system->coordinates()->read_frame(frame_index);
+  const auto current_frame = object->trajectory.has_value()
+                                 ? object->trajectory->timeline.snapshot().frame
+                                 : 0U;
+  const auto context_for = [&](std::size_t frame_index)
+      -> operation::Result<selection::EvaluationContext> {
+    const auto frame = object->system->coordinates()->read_frame(frame_index);
+    if (!frame.has_value())
+      return operation::Result<selection::EvaluationContext>::failure(frame.error());
+    return operation::Result<selection::EvaluationContext>::success(
+        selection::EvaluationContext{frame.value().get(), frame_index,
+                                     object->system->coordinates().get(),
+                                     object->system->name()});
+  };
+  const auto& topology = *object->system->topology();
+  if (state != "current") {
+    if (dynamic)
+      return invalid("a dynamic selection follows the current state",
+                     "use --state current, or define a static selection");
+    if (merge)
+      return invalid("--merge cannot be combined with an explicit --state",
+                     "merge into the current state, or replace the selection");
+    if (state == "all") {
+      const auto count = object->system->coordinates()->frame_count();
+      if (!count.has_value() || *count == 0U)
+        return invalid("the state count is unknown",
+                       "choose one state explicitly");
+      std::vector<selection::EvaluationContext> contexts;
+      std::vector<std::shared_ptr<const model::CoordinateFrame>> keep;
+      for (std::size_t index = 0; index < *count; ++index) {
+        const auto frame = object->system->coordinates()->read_frame(index);
+        if (!frame.has_value()) return frame.error();
+        keep.push_back(frame.value());
+        contexts.push_back(selection::EvaluationContext{
+            frame.value().get(), index, object->system->coordinates().get(),
+            object->system->name()});
+      }
+      return object->selections.set_state_union(std::move(name), parsed.value(),
+                                                topology, contexts);
+    }
+    std::size_t number{};
+    const auto parsed_number = molshredder::core::from_chars(
+        state.data(), state.data() + state.size(), number);
+    if (parsed_number.ec != std::errc{} ||
+        parsed_number.ptr != state.data() + state.size() || number == 0U)
+      return invalid("--state must be current, all or a 1-based state number");
+    const auto count = object->system->coordinates()->frame_count();
+    if (count.has_value() && number > *count)
+      return invalid("--state is out of range");
+    const auto context = context_for(number - 1U);
+    if (!context.has_value()) return context.error();
+    return object->selections.set(std::move(name), parsed.value(), false, topology,
+                                  context.value());
+  }
+  const auto frame = object->system->coordinates()->read_frame(current_frame);
   if (!frame.has_value()) return frame.error();
-  return object->selections.set(
-      std::move(name), parsed.value(), dynamic, *object->system->topology(),
-      selection::EvaluationContext{frame.value().get(), frame_index,
-                                   object->system->coordinates().get(),
-                                   object->system->name()});
+  const selection::EvaluationContext context{frame.value().get(), current_frame,
+                                             object->system->coordinates().get(),
+                                             object->system->name()};
+  if (merge)
+    return object->selections.merge(std::move(name), parsed.value(), dynamic,
+                                    topology, context);
+  return object->selections.set(std::move(name), parsed.value(), dynamic, topology,
+                                context);
 }
 
 std::optional<operation::Error> Workspace::set_render_setting(
@@ -5486,12 +7657,18 @@ Workspace::reset_object_transforms(std::string object_reference) {
         missing_active());
   }
 
+  const bool everything = object_reference == "all";
+  if (!everything && objects_[indices.front()].fixed)
+    return operation::Result<ObjectTransformResetResult>::failure(
+        invalid("the object is fixed: " + objects_[indices.front()].system->name(),
+                "run object free first"));
   auto builder = scene::SceneBuilder::from(*scene_);
   ObjectTransformResetResult result;
   result.object_reference = std::move(object_reference);
   result.object_ids.reserve(indices.size());
   for (const auto index : indices) {
     const auto &object = objects_[index];
+    if (everything && object.fixed) continue;
     if (const auto error =
             builder.set_transform(object.scene_node, scene::Transform{});
         error.has_value()) {

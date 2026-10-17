@@ -140,7 +140,7 @@ bool string_value_matches(std::string_view expected, std::string_view actual,
       pattern = lowercase(std::move(pattern));
       candidate = lowercase(std::move(candidate));
     }
-    const auto dash = pattern.find('-');
+    const auto dash = pattern.find_first_of("-:");
     if (!literal && dash != std::string::npos && dash > 0U &&
         dash + 1U < pattern.size() && pattern.find('*') == std::string::npos &&
         pattern.find('?') == std::string::npos) {
@@ -476,9 +476,20 @@ operation::Result<Mask> predicate_mask(const Predicate& predicate,
   return operation::Result<Mask>::success(std::move(result));
 }
 
+operation::Result<std::vector<double>> vdw_radii(const model::Topology& topology);
+
+// Per-call caches for topology-wide numeric fields (bond counts, radii).
+struct NumericCache {
+  std::vector<std::uint32_t> bond_counts;
+  std::vector<double> radii;
+  bool has_bond_counts{};
+  bool has_radii{};
+};
+
 operation::Result<std::optional<double>> numeric_property(
     const NumericNode& node, const model::Topology& topology,
-    std::size_t atom_index, const EvaluationContext& context) {
+    std::size_t atom_index, const EvaluationContext& context,
+    NumericCache& cache) {
   if (node.kind == NumericNodeKind::literal) {
     return operation::Result<std::optional<double>>::success(node.literal);
   }
@@ -493,6 +504,32 @@ operation::Result<std::optional<double>> numeric_property(
         return operation::Result<std::optional<double>>::success(std::nullopt);
       return operation::Result<std::optional<double>>::success(
           static_cast<double>(atom.source_serial.value()));
+    }
+    if (node.field == NumericField::atomic_number) {
+      return operation::Result<std::optional<double>>::success(
+          static_cast<double>(atom.atomic_number));
+    }
+    if (node.field == NumericField::bond_count) {
+      if (!cache.has_bond_counts) {
+        cache.bond_counts.assign(topology.atom_count(), 0U);
+        for (const auto& bond : topology.bonds()) {
+          ++cache.bond_counts[bond.first.value];
+          ++cache.bond_counts[bond.second.value];
+        }
+        cache.has_bond_counts = true;
+      }
+      return operation::Result<std::optional<double>>::success(
+          static_cast<double>(cache.bond_counts[atom_index]));
+    }
+    if (node.field == NumericField::van_der_waals_radius) {
+      if (!cache.has_radii) {
+        auto radii = vdw_radii(topology);
+        if (!radii.has_value())
+          return operation::Result<std::optional<double>>::failure(radii.error());
+        cache.radii = std::move(radii.value());
+        cache.has_radii = true;
+      }
+      return operation::Result<std::optional<double>>::success(cache.radii[atom_index]);
     }
     if (node.field == NumericField::formal_charge) {
       return operation::Result<std::optional<double>>::success(
@@ -605,12 +642,41 @@ operation::Result<std::optional<double>> numeric_property(
           static_cast<double>(static_cast<float>(value.value())));
     return operation::Result<std::optional<double>>::success(value);
   }
-  auto left = numeric_property(*node.left, topology, atom_index, context);
+  auto left = numeric_property(*node.left, topology, atom_index, context, cache);
   if (!left.has_value() || !left.value().has_value()) return left;
   if (node.kind == NumericNodeKind::negation) {
     return operation::Result<std::optional<double>>::success(-left.value().value());
   }
-  auto right = numeric_property(*node.right, topology, atom_index, context);
+  if (node.kind == NumericNodeKind::function) {
+    const double x = left.value().value();
+    double result{};
+    switch (node.function) {
+      case NumericFunction::abs: result = std::abs(x); break;
+      case NumericFunction::acos: result = std::acos(x); break;
+      case NumericFunction::asin: result = std::asin(x); break;
+      case NumericFunction::atan: result = std::atan(x); break;
+      case NumericFunction::ceil: result = std::ceil(x); break;
+      case NumericFunction::cos: result = std::cos(x); break;
+      case NumericFunction::cosh: result = std::cosh(x); break;
+      case NumericFunction::exp: result = std::exp(x); break;
+      case NumericFunction::floor: result = std::floor(x); break;
+      case NumericFunction::log: result = std::log(x); break;
+      case NumericFunction::log10: result = std::log10(x); break;
+      case NumericFunction::sin: result = std::sin(x); break;
+      case NumericFunction::sinh: result = std::sinh(x); break;
+      case NumericFunction::sqr: result = x * x; break;
+      case NumericFunction::sqrt: result = std::sqrt(x); break;
+      case NumericFunction::tan: result = std::tan(x); break;
+      case NumericFunction::tanh: result = std::tanh(x); break;
+    }
+    if (!std::isfinite(result)) {
+      return operation::Result<std::optional<double>>::failure(invalid(
+          "numeric selection function is outside its domain or overflowed",
+          "restrict the selection so the argument is valid"));
+    }
+    return operation::Result<std::optional<double>>::success(result);
+  }
+  auto right = numeric_property(*node.right, topology, atom_index, context, cache);
   if (!right.has_value() || !right.value().has_value()) return right;
   double value{};
   if (node.kind == NumericNodeKind::addition)
@@ -637,9 +703,10 @@ operation::Result<Mask> numeric_comparison_mask(
     const NumericComparison& comparison, const model::Topology& topology,
     const EvaluationContext& context) {
   Mask result(topology.atom_count(), 0U);
+  NumericCache cache;
   for (std::size_t index = 0; index < topology.atom_count(); ++index) {
     const auto left =
-        numeric_property(*comparison.left, topology, index, context);
+        numeric_property(*comparison.left, topology, index, context, cache);
     if (!left.has_value()) return operation::Result<Mask>::failure(left.error());
     if (!left.value().has_value()) continue;
     bool matches{};
@@ -652,7 +719,7 @@ operation::Result<Mask> numeric_comparison_mask(
           });
     } else {
       const auto right =
-          numeric_property(*comparison.right, topology, index, context);
+          numeric_property(*comparison.right, topology, index, context, cache);
       if (!right.has_value())
         return operation::Result<Mask>::failure(right.error());
       if (!right.value().has_value()) continue;
@@ -1329,6 +1396,22 @@ operation::Result<Mask> evaluate_node(const std::shared_ptr<const Node>& node,
     }
     return operation::Result<Mask>::success(std::move(bonded));
   }
+  if (node->kind == NodeKind::amino_residue) {
+    // A residue that has atoms named C, N, CA and O (VMD "amino").
+    std::vector<std::uint8_t> flags(topology.residues().size(), 0U);
+    for (const auto& atom : topology.atoms()) {
+      const auto bit = atom.name == "N"    ? 1U
+                       : atom.name == "CA" ? 2U
+                       : atom.name == "C"  ? 4U
+                       : atom.name == "O"  ? 8U
+                                           : 0U;
+      if (bit != 0U) flags[atom.residue.value] |= static_cast<std::uint8_t>(bit);
+    }
+    Mask amino(topology.atom_count(), 0U);
+    for (std::size_t index = 0; index < topology.atom_count(); ++index)
+      amino[index] = flags[topology.atoms()[index].residue.value] == 15U ? 1U : 0U;
+    return operation::Result<Mask>::success(std::move(amino));
+  }
   if (node->kind == NodeKind::boolean_property) {
     Predicate predicate{Field::property, "true", false, node->name};
     return predicate_mask(predicate, topology, context);
@@ -1477,8 +1560,9 @@ operation::Result<std::vector<std::optional<double>>> evaluate_numeric(
     const EvaluationContext& context) {
   std::vector<std::optional<double>> values;
   values.reserve(topology.atom_count());
+  NumericCache cache;
   for (std::size_t index = 0; index < topology.atom_count(); ++index) {
-    auto value = numeric_property(expression, topology, index, context);
+    auto value = numeric_property(expression, topology, index, context, cache);
     if (!value.has_value())
       return operation::Result<std::vector<std::optional<double>>>::failure(
           value.error());

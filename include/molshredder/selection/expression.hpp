@@ -42,6 +42,9 @@ enum class NumericField {
   coordinate_x,
   coordinate_y,
   coordinate_z,
+  atomic_number,
+  bond_count,
+  van_der_waals_radius,
   property,
 };
 
@@ -53,12 +56,35 @@ enum class NumericNodeKind {
   multiplication,
   division,
   negation,
+  function,
+};
+
+// One-argument functions of the numeric selection grammar. sqr is x * x.
+enum class NumericFunction {
+  abs,
+  acos,
+  asin,
+  atan,
+  ceil,
+  cos,
+  cosh,
+  exp,
+  floor,
+  log,
+  log10,
+  sin,
+  sinh,
+  sqr,
+  sqrt,
+  tan,
+  tanh,
 };
 
 struct NumericNode {
   NumericNodeKind kind{NumericNodeKind::literal};
   double literal{};
   NumericField field{NumericField::index};
+  NumericFunction function{NumericFunction::abs};
   std::string property;
   std::shared_ptr<const NumericNode> left;
   std::shared_ptr<const NumericNode> right;
@@ -143,6 +169,7 @@ enum class NodeKind {
   none,
   present,
   bonded,
+  amino_residue,
   boolean_property,
   scene_center,
   rotation_origin,

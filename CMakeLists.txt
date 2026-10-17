@@ -371,6 +371,7 @@ target_sources(
   molshredder_core
   PRIVATE
     src/analysis/alignment.cpp
+    src/analysis/backbone.cpp
     src/analysis/basic.cpp
     src/analysis/contacts.cpp
     src/analysis/principal_axes.cpp
@@ -474,6 +475,7 @@ target_sources(
     BASE_DIRS include
     FILES
       include/molshredder/analysis/alignment.hpp
+      include/molshredder/analysis/backbone.hpp
       include/molshredder/analysis/basic.hpp
       include/molshredder/analysis/contacts.hpp
       include/molshredder/analysis/principal_axes.hpp
@@ -2458,6 +2460,15 @@ if(BUILD_TESTING)
   add_test(NAME selection.expression COMMAND molshredder_selection_tests)
 
   add_executable(
+    molshredder_backbone_analysis_tests
+    tests/analysis/backbone_test.cpp
+  )
+  target_compile_features(molshredder_backbone_analysis_tests PRIVATE cxx_std_20)
+  target_link_libraries(molshredder_backbone_analysis_tests PRIVATE MolShredder::Core)
+  molshredder_enable_warnings(molshredder_backbone_analysis_tests)
+  add_test(NAME analysis.backbone COMMAND molshredder_backbone_analysis_tests)
+
+  add_executable(
     molshredder_shape_analysis_tests
     tests/analysis/shape_test.cpp
   )
@@ -3423,6 +3434,14 @@ if(BUILD_TESTING)
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/closure_gap_test.py"
       "$<TARGET_FILE:molshredder_python>"
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures"
+  )
+
+  add_test(
+    NAME frontend.state_edit
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/state_edit_test.py"
+      "$<TARGET_FILE:molshredder_python>"
   )
 
   add_test(

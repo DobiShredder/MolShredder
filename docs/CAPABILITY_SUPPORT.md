@@ -15,88 +15,88 @@ Baseline: `pymol-oss-3.1.0` commit `f51e58f6b08308c41c85b9d12a23231f49ca325a`; �
 | 상태 | 개수 | 의미 |
 |---|---:|---|
 | 검증됨 | 137 | implementation이 compatible/robust이며 fixture, evidence, module과 public interface가 모두 연결됨 |
-| 진행 중(미검증) | 351 | partial 구현이며 compatibility 완료 주장이 아님 |
-| 인벤토리/계획 | 194 | inventory 또는 acceptance 설계 단계이며 사용자가 실행할 수 없음 |
-| 사용 불가/보류 | 1260 | 보류, 제외, 접근 제한 또는 license 격리 상태 |
+| 진행 중(미검증) | 467 | partial 구현이며 compatibility 완료 주장이 아님 |
+| 인벤토리/계획 | 0 | inventory 또는 acceptance 설계 단계이며 사용자가 실행할 수 없음 |
+| 사용 불가/보류 | 1338 | 보류, 제외, 접근 제한 또는 license 격리 상태 |
 
 ## Domain 요약
 
 | Domain | 검증됨 | 진행 중 | 계획 | 사용 불가 | 전체 |
 |---|---:|---:|---:|---:|---:|
-| `analysis` | 0 | 15 | 32 | 38 | 85 |
-| `automation` | 2 | 12 | 20 | 20 | 54 |
+| `analysis` | 0 | 29 | 0 | 56 | 85 |
+| `automation` | 2 | 28 | 0 | 24 | 54 |
 | `data` | 0 | 0 | 0 | 18 | 18 |
 | `editing` | 0 | 0 | 0 | 100 | 100 |
-| `io` | 0 | 39 | 36 | 111 | 186 |
-| `object_state` | 0 | 24 | 18 | 12 | 54 |
-| `pbc` | 0 | 0 | 2 | 4 | 6 |
+| `io` | 0 | 49 | 0 | 137 | 186 |
+| `object_state` | 0 | 41 | 0 | 13 | 54 |
+| `pbc` | 0 | 2 | 0 | 4 | 6 |
 | `performance` | 0 | 0 | 0 | 51 | 51 |
 | `plugin` | 0 | 2 | 0 | 9 | 11 |
-| `rendering` | 3 | 34 | 32 | 221 | 290 |
+| `rendering` | 3 | 54 | 0 | 233 | 290 |
 | `representation` | 101 | 70 | 0 | 469 | 640 |
-| `scene` | 31 | 33 | 23 | 36 | 123 |
-| `selection` | 0 | 101 | 28 | 23 | 152 |
-| `trajectory` | 0 | 21 | 3 | 59 | 83 |
+| `scene` | 31 | 50 | 0 | 42 | 123 |
+| `selection` | 0 | 120 | 0 | 32 | 152 |
+| `trajectory` | 0 | 22 | 0 | 61 | 83 |
 | `ui` | 0 | 0 | 0 | 89 | 89 |
 
 ## Capability 행
 
 | Capability | 제목 | 우선순위 | 상태 | GUI | CLI | Python | Acceptance | Platform | Evidence |
 |---|---|---:|---|:---:|:---:|:---:|---|---|---:|
-| `analysis.alignment.all_to_target` | Align all objects to a target | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `analysis.alignment.ce` | Combinatorial Extension alignment | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `analysis.alignment.multi_object` | Align multiple objects to one reference | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `analysis.alignment.residue_structural` | Residue/structure-guided refined alignment | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `analysis.alignment.all_to_target` | Align all objects to a target | P1 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
+| `analysis.alignment.ce` | Combinatorial Extension alignment | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `analysis.alignment.multi_object` | Align multiple objects to one reference | P1 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
+| `analysis.alignment.residue_structural` | Residue/structure-guided refined alignment | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `analysis.alignment.sequence_refined` | Sequence-guided refined alignment | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `analysis.atom_property.iterate` | Iterate atom properties read-only | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `analysis.atom_property.iterate` | Iterate atom properties read-only | P1 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
 | `analysis.center.mass` | Selection center of mass | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 2 |
-| `analysis.charge.sum_formal` | Sum formal charges | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `analysis.charge.sum_partial` | Sum partial charges | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `analysis.contacts.find_pairs` | Find atom pairs API | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `analysis.contacts.interchain` | Inter-chain contact distances | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `analysis.coordinates.iterate_state` | Iterate atom coordinates read-only | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `analysis.charge.sum_formal` | Sum formal charges | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `analysis.charge.sum_partial` | Sum partial charges | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `analysis.contacts.find_pairs` | Find atom pairs API | P1 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
+| `analysis.contacts.interchain` | Inter-chain contact distances | P1 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
+| `analysis.coordinates.iterate_state` | Iterate atom coordinates read-only | P1 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
 | `analysis.electrostatics.vacuum_esp` | Protein contact potential (vacuum) | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `analysis.fit.explicit_pairs` | Explicit-pair rigid fit | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `analysis.fit.explicit_pairs` | Explicit-pair rigid fit | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `analysis.fit.identifier_matched` | Identifier-matched rigid fit | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 2 |
 | `analysis.geometry.angle` | Scalar atom angle query | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | macos | 2 |
 | `analysis.geometry.dihedral` | Scalar atom dihedral query | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | macos | 2 |
 | `analysis.geometry.distance` | Scalar atom distance query | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `unwritten` | — | 2 |
-| `analysis.mass.compute` | Compute molecular mass | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `analysis.mass.compute` | Compute molecular mass | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `analysis.measurement_object.angle` | Angle measurement object | P0 | 진행 중(미검증) (`partial`) | — | — | — | `unwritten` | — | 2 |
 | `analysis.measurement_object.dihedral` | Dihedral measurement object | P0 | 진행 중(미검증) (`partial`) | — | — | — | `unwritten` | — | 2 |
 | `analysis.measurement_object.distance` | Distance measurement object | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `unwritten` | — | 2 |
 | `analysis.measurement_object.distance.all_pairs` | All interatomic distances | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `analysis.measurement_object.distance.bonded` | Bond distances | P1 | 인벤토리/계획 (`specified`) | — | — | — | `specified` | — | 0 |
+| `analysis.measurement_object.distance.bonded` | Bond distances | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `analysis.measurement_object.distance.centroid` | Centroid distance | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
-| `analysis.measurement_object.distance.exclusion_filtered` | Exclusion-filtered distances | P1 | 인벤토리/계획 (`specified`) | — | — | — | `specified` | — | 0 |
+| `analysis.measurement_object.distance.exclusion_filtered` | Exclusion-filtered distances | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `analysis.measurement_object.distance.pi_cation` | Pi-cation interactions | P1 | 사용 불가/보류 (`blocked_access`) | — | — | — | `specified` | — | 0 |
 | `analysis.measurement_object.distance.pi_interactions` | Pi and pi-cation interactions | P1 | 사용 불가/보류 (`blocked_access`) | — | — | — | `specified` | — | 0 |
 | `analysis.measurement_object.distance.pi_pi` | Pi-pi interactions | P1 | 사용 불가/보류 (`blocked_access`) | — | — | — | `specified` | — | 0 |
 | `analysis.measurement_object.distance.polar_contacts` | Polar-contact distances | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
-| `analysis.measurement_object.distance.vdw_ratio` | VDW-ratio contact distances | P1 | 인벤토리/계획 (`specified`) | — | — | — | `specified` | — | 0 |
-| `analysis.query.atom_ids` | Query atom ID list | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `analysis.query.atom_indices` | Query object atom indices | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `analysis.measurement_object.distance.vdw_ratio` | VDW-ratio contact distances | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `analysis.query.atom_ids` | Query atom ID list | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `analysis.query.atom_indices` | Query object atom indices | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `analysis.query.atom_source_id` | Query single-atom source ID | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `analysis.query.chains` | Query chain identifiers | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `analysis.query.chains` | Query chain identifiers | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `analysis.query.extent` | Query selection extent | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
 | `analysis.query.overlap` | Sum VDW overlap | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `analysis.query.phi_psi` | Query backbone phi/psi | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `analysis.query.phi_psi` | Query backbone phi/psi | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 2 |
 | `analysis.rms.current` | Current-coordinate RMS | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 2 |
 | `analysis.rms.fitted` | Fitted RMS without coordinate mutation | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 2 |
 | `analysis.secondary_structure.dss` | Assign secondary structure (dss) | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 1 |
 | `analysis.secondary_structure.legacy_ss` | Legacy secondary structure routine | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `analysis.secondary_structure.setting.ss_helix_phi_exclude` | Setting ss_helix_phi_exclude | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `analysis.secondary_structure.setting.ss_helix_phi_include` | Setting ss_helix_phi_include | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `analysis.secondary_structure.setting.ss_helix_phi_target` | Setting ss_helix_phi_target | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `analysis.secondary_structure.setting.ss_helix_psi_exclude` | Setting ss_helix_psi_exclude | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `analysis.secondary_structure.setting.ss_helix_psi_include` | Setting ss_helix_psi_include | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `analysis.secondary_structure.setting.ss_helix_psi_target` | Setting ss_helix_psi_target | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `analysis.secondary_structure.setting.ss_strand_phi_exclude` | Setting ss_strand_phi_exclude | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `analysis.secondary_structure.setting.ss_strand_phi_include` | Setting ss_strand_phi_include | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `analysis.secondary_structure.setting.ss_strand_phi_target` | Setting ss_strand_phi_target | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `analysis.secondary_structure.setting.ss_strand_psi_exclude` | Setting ss_strand_psi_exclude | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `analysis.secondary_structure.setting.ss_strand_psi_include` | Setting ss_strand_psi_include | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `analysis.secondary_structure.setting.ss_strand_psi_target` | Setting ss_strand_psi_target | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `analysis.secondary_structure.setting.ss_helix_phi_exclude` | Setting ss_helix_phi_exclude | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `analysis.secondary_structure.setting.ss_helix_phi_include` | Setting ss_helix_phi_include | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `analysis.secondary_structure.setting.ss_helix_phi_target` | Setting ss_helix_phi_target | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `analysis.secondary_structure.setting.ss_helix_psi_exclude` | Setting ss_helix_psi_exclude | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `analysis.secondary_structure.setting.ss_helix_psi_include` | Setting ss_helix_psi_include | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `analysis.secondary_structure.setting.ss_helix_psi_target` | Setting ss_helix_psi_target | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `analysis.secondary_structure.setting.ss_strand_phi_exclude` | Setting ss_strand_phi_exclude | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `analysis.secondary_structure.setting.ss_strand_phi_include` | Setting ss_strand_phi_include | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `analysis.secondary_structure.setting.ss_strand_phi_target` | Setting ss_strand_phi_target | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `analysis.secondary_structure.setting.ss_strand_psi_exclude` | Setting ss_strand_psi_exclude | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `analysis.secondary_structure.setting.ss_strand_psi_include` | Setting ss_strand_psi_include | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `analysis.secondary_structure.setting.ss_strand_psi_target` | Setting ss_strand_psi_target | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `analysis.setting.coulomb_cutoff` | Setting coulomb_cutoff | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `analysis.setting.coulomb_dielectric` | Setting coulomb_dielectric | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `analysis.setting.coulomb_units_factor` | Setting coulomb_units_factor | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
@@ -125,46 +125,46 @@ Baseline: `pymol-oss-3.1.0` commit `f51e58f6b08308c41c85b9d12a23231f49ca325a`; �
 | `analysis.setting.polar_neighbor_cutoff` | Setting polar_neighbor_cutoff | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `analysis.setting.salt_bridge_distance` | Setting salt_bridge_distance | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `analysis.stereochemistry.assign` | Assign R/S stereo property | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `analysis.surface_area.relative_per_residue` | Relative per-residue SASA | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `analysis.surface_area.relative_per_residue` | Relative per-residue SASA | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `analysis.surface_area.sasa` | Solvent-accessible surface area | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | macos | 2 |
 | `plugin.bundled.apbs_electrostatics` | APBS electrostatics plugin | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `app.query.version` | Query application version | P2 | 사용 불가/보류 (`excluded`) | — | — | — | `specified` | — | 0 |
-| `automation.command.alias` | Register a literal command alias | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `automation.command.alias` | Register a literal command alias | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `automation.command.dispatch` | Dispatch command text from Python | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `automation.command.introspect` | Inspect command-to-API binding | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `automation.command.register` | Register a Python function as a command | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `automation.command.register` | Register a Python function as a command | P1 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
 | `automation.command.register_autocomplete` | Register command argument completion | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `automation.command.session_ephemeral` | Do not persist dynamic commands in sessions | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
-| `automation.embedding.context_manager` | Context-managed embedded lifecycle | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `automation.embedding.context_manager` | Context-managed embedded lifecycle | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `automation.embedding.finish_launching` | Threaded finish-launching helper | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `automation.embedding.headless` | Headless embedded launch loop | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 1 |
-| `automation.embedding.manage` | Embedded application lifecycle | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `automation.embedding.multi_instance` | Multiple embedded instances | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `automation.embedding.singleton` | Embedded singleton instance | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `automation.embedding.manage` | Embedded application lifecycle | P1 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
+| `automation.embedding.multi_instance` | Multiple embedded instances | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `automation.embedding.singleton` | Embedded singleton instance | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `automation.script.execute` | Execute an external script | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `automation.script.literal_python_block` | Literal Python block in command script | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | macos | 4 |
-| `automation.script.namespace.global` | Run in the global PyMOL namespace | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `automation.script.namespace.local` | Run with local variable isolation | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `automation.script.namespace.main` | Run in the main Python namespace | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `automation.script.namespace.module` | Run as a synthetic Python module | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `automation.script.namespace.private` | Run with private local variables | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `automation.script.namespace.global` | Run in the global PyMOL namespace | P1 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
+| `automation.script.namespace.local` | Run with local variable isolation | P1 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
+| `automation.script.namespace.main` | Run in the main Python namespace | P1 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
+| `automation.script.namespace.module` | Run as a synthetic Python module | P1 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
+| `automation.script.namespace.private` | Run with private local variables | P1 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
 | `automation.script.pml_file` | Execute a PML command script file | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | macos | 4 |
 | `automation.script.python_file` | Execute a Python script file | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
-| `automation.script.threaded_spawn` | Spawn a Python script thread | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `automation.script.threaded_spawn` | Spawn a Python script thread | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `automation.script.trust_policy` | External script trust and security policy | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `automation.startup.command` | Execute startup command argument | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
-| `automation.startup.config_discovery` | Discover startup configuration scripts | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `automation.startup.deferred_order` | Deterministic deferred startup order | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `automation.startup.config_discovery` | Discover startup configuration scripts | P1 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
+| `automation.startup.deferred_order` | Deterministic deferred startup order | P1 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
 | `automation.startup.disable_automatic` | Disable startup scripts and plugins | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
-| `automation.startup.manage` | Startup automation lifecycle | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `automation.startup.python_foreground` | Execute startup Python script in foreground | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `automation.startup.manage` | Startup automation lifecycle | P1 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
+| `automation.startup.python_foreground` | Execute startup Python script in foreground | P1 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
 | `automation.startup.python_threaded` | Execute startup Python script in a thread | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `automation.startup.stdin` | Read command stream from standard input | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `script.api.sync` | Synchronize command queue | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `automation.startup.stdin` | Read command stream from standard input | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `script.api.sync` | Synchronize command queue | P1 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
 | `script.command.declare_typed` | Declare typed command | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | macos | 6 |
 | `script.feedback.control` | Output feedback control | P2 | 사용 불가/보류 (`excluded`) | — | — | — | `specified` | — | 0 |
-| `script.log.close` | Close command log | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `script.log.open` | Open command log | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `script.log.close` | Close command log | P1 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
+| `script.log.open` | Open command log | P1 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
 | `script.log.resume` | Resume command log | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `script.log.write` | Write log entry | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `script.pml.abort` | Abort script execution | P1 | 검증됨 (`compatible`) | — | 예 | 예 | `compatible` | macos | 4 |
@@ -313,28 +313,28 @@ Baseline: `pymol-oss-3.1.0` commit `f51e58f6b08308c41c85b9d12a23231f49ca325a`; �
 | `io.fetch.type.pdb1` | Fetch type pdb1 | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.fetch.type.sid` | Fetch type sid | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.format.acnt.read` | ACNT read | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `io.format.aln.read` | ALN read | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `io.format.aln.write` | ALN write | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `io.format.aln.read` | ALN read | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `io.format.aln.write` | ALN write | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.format.bcif.read` | BCIF read | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `io.format.brix.read` | BRIX read | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.format.cc1.read` | CC1 read | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.format.ccp4.read` | CCP4 read | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
-| `io.format.ccp4.write` | CCP4 write | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `io.format.ccp4.write` | CCP4 write | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `io.format.cif.read` | CIF read | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `io.format.cif.write` | CIF write | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `io.format.cml.read` | CML read | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.format.crd.read` | CRD read | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.format.dae.read` | DAE read | P1 | 사용 불가/보류 (`blocked_access`) | — | — | — | `specified` | — | 0 |
 | `io.format.dx.read` | DX read | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
-| `io.format.fasta.read` | FASTA read | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `io.format.fasta.write` | FASTA write | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `io.format.fasta.read` | FASTA read | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `io.format.fasta.write` | FASTA write | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.format.fld.read` | FLD read | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.format.grd.read` | GRD read | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.format.idx.read` | IDX read | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.format.mae.read` | MAE read | P0 | 사용 불가/보류 (`blocked_access`) | — | — | — | `specified` | — | 0 |
 | `io.format.mae.write` | MAE write | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.format.map.read` | MAP read | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
-| `io.format.map.write` | MAP write | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `io.format.map.write` | MAP write | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `io.format.mmod.read` | MMOD read | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.format.mmod.write` | MMOD write | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.format.mmtf.read` | MMTF read | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
@@ -347,23 +347,23 @@ Baseline: `pymol-oss-3.1.0` commit `f51e58f6b08308c41c85b9d12a23231f49ca325a`; �
 | `io.format.mrc.read` | MRC read | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `io.format.mrc.write` | MRC write | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 2 |
 | `io.format.mtz.read` | MTZ read | P1 | 사용 불가/보류 (`blocked_access`) | — | — | — | `specified` | — | 0 |
-| `io.format.p1m.read` | P1M read | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `io.format.p1m.read` | P1M read | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.format.pdb.read` | PDB read | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `io.format.pdb.write` | PDB write | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `io.format.pdbml.read` | PDBML read | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.format.pdbqt.read` | PDBQT read | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.format.phi.read` | PHI read | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.format.phypo.read` | PHYPO read | P1 | 사용 불가/보류 (`blocked_access`) | — | — | — | `specified` | — | 0 |
-| `io.format.pkl.write` | PKL write | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `io.format.pkla.write` | PKLA write | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `io.format.ply.read` | PLY read | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `io.format.pkl.write` | PKL write | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `io.format.pkla.write` | PKLA write | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `io.format.ply.read` | PLY read | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.format.pml.read` | PML read | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | macos | 4 |
 | `io.format.pmo.read` | PMO read | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.format.pqr.read` | PQR read | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `io.format.pqr.write` | PQR write | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
-| `io.format.pwg.read` | PWG read | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `io.format.py.read` | PY read | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `io.format.r3d.read` | R3D read | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `io.format.pwg.read` | PWG read | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `io.format.py.read` | PY read | P1 | 사용 불가/보류 (`excluded`) | — | — | — | `specified` | — | 0 |
+| `io.format.r3d.read` | R3D read | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.format.rst.read` | RST read | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `io.format.sdf.read` | SDF read | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `io.format.sdf.write` | SDF write | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
@@ -377,36 +377,36 @@ Baseline: `pymol-oss-3.1.0` commit `f51e58f6b08308c41c85b9d12a23231f49ca325a`; �
 | `io.format.xyz.write` | XYZ write | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `io.geometry.dump_text` | Dump surface/map geometry as text | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.load.auto_detect` | Load format auto-detection | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 1 |
-| `io.load.batch_glob` | Batch glob load | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `io.load.compression` | Compressed input | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `io.load.discrete` | Discrete multi-model load | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `io.load.batch_glob` | Batch glob load | P1 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
+| `io.load.compression` | Compressed input | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `io.load.discrete` | Discrete multi-model load | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.load.dynamic_molfile_plugin` | Dynamic molfile fallback | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 3 |
-| `io.load.extension_alias` | Load extension alias normalization | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `io.load.extension_alias` | Load extension alias normalization | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `io.load.file` | Load file or URL | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `io.load.finish_deferred` | Deferred object finalization | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `io.load.memory` | Load in-memory content | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `io.load.multiplex` | Multiplex multi-model load | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `io.load.memory` | Load in-memory content | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `io.load.multiplex` | Multiplex multi-model load | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.load.object_api` | Load developer object | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.load.object_api.brick` | ChemPy brick volume object | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.load.object_api.callback` | Python render callback object | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.load.object_api.cgo` | compiled graphics object | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.load.object_api.chempymap` | ChemPy map object | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.load.object_api.model` | ChemPy model object | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `io.load.remote_url` | Remote URL input | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `io.load.state_append` | Load into object state | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `io.load.remote_url` | Remote URL input | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `io.load.state_append` | Load into object state | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 1 |
 | `io.load.trajectory.attach` | Attach trajectory | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
-| `io.load.trajectory.image_shift` | AMBER trajectory image and shift | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `io.load.trajectory.image_shift` | AMBER trajectory image and shift | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.load.trajectory.range` | Trajectory frame range and stride | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 1 |
-| `io.load.trajectory.selection` | Trajectory coordinate subset | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `io.model.export` | Export in-memory model | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `io.model.import` | Import in-memory model | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `io.load.trajectory.selection` | Trajectory coordinate subset | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `io.model.export` | Export in-memory model | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `io.model.import` | Import in-memory model | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.mtz.load_maps` | Load MTZ as maps | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.save.auto_detect` | Save format auto-detection | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 1 |
-| `io.save.compression` | Compressed output | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `io.save.compression` | Compressed output | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.save.file` | Save file | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `io.save.multi_entry` | Append multi-entry output | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `io.save.multifile_template` | Object/state filename template export | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `io.save.selection` | Save selection | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `io.save.multifile_template` | Object/state filename template export | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `io.save.selection` | Save selection | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 1 |
 | `io.save.state.all` | Save all states | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `io.save.state.current` | Save current state | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `io.script.load_embedded` | Load embedded data block | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
@@ -465,87 +465,87 @@ Baseline: `pymol-oss-3.1.0` commit `f51e58f6b08308c41c85b9d12a23231f49ca325a`; �
 | `io.setting.sdf_write_zero_order_bonds` | Setting sdf_write_zero_order_bonds | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.setting.swap_dsn6_bytes` | Setting swap_dsn6_bytes | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.setting.validate_object_names` | Setting validate_object_names | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `io.string.read_mol` | Read MOL text | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `io.string.read_pdb` | Read PDB text | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `io.string.read_sdf` | Read SDF text | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `io.string.write_pdb` | Write PDB text | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `io.string.read_mol` | Read MOL text | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `io.string.read_pdb` | Read PDB text | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `io.string.read_sdf` | Read SDF text | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `io.string.write_pdb` | Write PDB text | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `session.cache.optimize` | Optimize caches before session serialization | P2 | 사용 불가/보류 (`excluded`) | — | — | — | `specified` | — | 0 |
-| `session.dirty_state` | Session dirty-state tracking | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `session.dirty_state` | Session dirty-state tracking | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `session.embed.data` | Session embedded-data policy | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `session.export.compatibility` | Export sessions for older PyMOL versions | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `session.extension.hooks` | Extension session save and restore hooks | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `session.export.compatibility` | Export sessions for older PyMOL versions | P1 | 사용 불가/보류 (`excluded`) | — | — | — | `specified` | — | 0 |
+| `session.extension.hooks` | Extension session save and restore hooks | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `session.file.load.pse` | Load a PSE session file | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `session.file.save.pse` | Save a PSE session file | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `session.migration` | Session version check and migration | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | macos | 2 |
-| `session.partial` | Partial session export and restore | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `session.path.current` | Current session-file path tracking | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `session.partial` | Partial session export and restore | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `session.path.current` | Current session-file path tracking | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `session.presentation.chain` | Chain numbered presentation sessions | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `session.presentation.load.psw` | Load and auto-start a PSW presentation session | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `session.presentation.save.psw` | Save a PSW presentation session | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `session.restore.memory` | Restore application state from memory | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | macos | 2 |
 | `session.security.movie_commands` | Lock commands restored from untrusted sessions | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | macos | 2 |
-| `session.serialization.encoding` | Session binary and compression encoding | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `session.serialization.encoding` | Session binary and compression encoding | P1 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
 | `session.serialize.memory` | Serialize application state in memory | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | macos | 2 |
 | `object.copy.exact` | Exact molecular-object copy | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
-| `object.copy.merge_renamed` | Copy selection into object with identifier conflict repair | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `object.copy.merge_renamed` | Copy selection into object with identifier conflict repair | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `object.create.copy_properties` | Copy object properties while creating from a selection | P1 | 사용 불가/보류 (`blocked_access`) | — | — | — | `specified` | — | 0 |
 | `object.create.from_selection` | Create object or state from selection | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `object.delete.named` | Delete named objects or selections | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `object.edit.remove_atoms` | Remove selected atoms | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
-| `object.edit.sort_atoms` | Canonical atom reorder | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `object.edit.uniquify_identifier` | Repair identifier collisions | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `object.edit.sort_atoms` | Canonical atom reorder | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `object.edit.uniquify_identifier` | Repair identifier collisions | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `object.extract.selection` | Move selected atoms into a new object | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
-| `object.hierarchy.auto_name` | Dot-prefix automatic grouping | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `object.hierarchy.group.add` | Add objects to a group | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
-| `object.hierarchy.group.auto` | Context-sensitive group add or toggle | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `object.hierarchy.group.close` | Collapse a group in the object panel | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `object.hierarchy.group.empty` | Empty a group without deleting members | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
-| `object.hierarchy.group.excise` | Delete a group while retaining its members | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `object.hierarchy.group.manage` | Hierarchical group-object lifecycle | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
-| `object.hierarchy.group.open` | Expand a group in the object panel | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `object.hierarchy.group.purge_members` | Delete all members of a group | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `object.hierarchy.auto_name` | Dot-prefix automatic grouping | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `object.hierarchy.group.add` | Add objects to a group | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `object.hierarchy.group.auto` | Context-sensitive group add or toggle | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `object.hierarchy.group.close` | Collapse a group in the object panel | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `object.hierarchy.group.empty` | Empty a group without deleting members | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `object.hierarchy.group.excise` | Delete a group while retaining its members | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `object.hierarchy.group.manage` | Hierarchical group-object lifecycle | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `object.hierarchy.group.open` | Expand a group in the object panel | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `object.hierarchy.group.purge_members` | Delete all members of a group | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `object.hierarchy.group.raise` | Raise a nested group to the top level | P1 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 2 |
-| `object.hierarchy.group.remove` | Remove members from a group | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
-| `object.hierarchy.group.toggle` | Toggle group expansion in the object panel | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `object.hierarchy.group.ungroup` | Return objects to the top level | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
-| `object.matrix.copy` | Copy object transformation matrix | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `object.hierarchy.group.remove` | Remove members from a group | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `object.hierarchy.group.toggle` | Toggle group expansion in the object panel | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `object.hierarchy.group.ungroup` | Return objects to the top level | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `object.matrix.copy` | Copy object transformation matrix | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `object.matrix.look_at` | Orient object toward target | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `object.matrix.query` | Query object matrix | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `object.matrix.reset` | Reset object transformation matrix | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `object.matrix.reset` | Reset object transformation matrix | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `object.order.manage` | Object and selection panel ordering | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `object.order.move_bottom` | Move object-panel names to the bottom | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `object.order.move_top` | Move object-panel names to the top | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
-| `object.order.natural_sort` | Natural-sort object-panel names | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `object.order.natural_sort` | Natural-sort object-panel names | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `object.order.relative` | Reorder names at their current location | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `object.query.atom_count` | Selection atom count | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 1 |
-| `object.query.covering_objects` | Objects covered by a selection | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
-| `object.query.discrete_count` | Discrete-object count | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `object.query.covering_objects` | Objects covered by a selection | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 1 |
+| `object.query.discrete_count` | Discrete-object count | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `object.query.names` | Object and selection name query | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `object.query.state_count` | Selection state count | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 1 |
-| `object.query.type` | Named entity type query | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
+| `object.query.type` | Named entity type query | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 1 |
 | `object.rename` | Rename object or named selection | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
-| `object.split.chains` | Split objects by chain | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `object.state.delete` | Delete coordinate states | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `object.state.join` | Join objects into one multi-state object | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `object.split.chains` | Split objects by chain | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `object.state.delete` | Delete coordinate states | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `object.state.join` | Join objects into one multi-state object | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `object.state.join.discrete` | Join heterogeneous objects as discrete states | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `object.state.join.identical_topology` | Join states assuming identical topology | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `object.state.join.identifier_intersection` | Join states by identifier intersection | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `object.state.join.identical_topology` | Join states assuming identical topology | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `object.state.join.identifier_intersection` | Join states by identifier intersection | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `object.state.join.sequence_alignment` | Join states by sequence alignment | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `object.state.split` | Split states into single-state objects | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `object.state.split` | Split states into single-state objects | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `object.title.get` | Query state title | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `object.title.set` | Set state title | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `object.visibility.disable.named` | Disable names matched by a pattern | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
-| `object.visibility.disable.selection` | Disable objects covered by an atom selection | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `object.visibility.enable.named` | Enable names matched by a pattern | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 0 |
-| `object.visibility.enable.parents` | Enable an object's parent groups | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `object.visibility.enable.selection` | Enable objects covered by an atom selection | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `object.visibility.disable.named` | Disable names matched by a pattern | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 1 |
+| `object.visibility.disable.selection` | Disable objects covered by an atom selection | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `object.visibility.enable.named` | Enable names matched by a pattern | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 1 |
+| `object.visibility.enable.parents` | Enable an object's parent groups | P1 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
+| `object.visibility.enable.selection` | Enable objects covered by an atom selection | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `object.visibility.manage` | Object and named-selection enabled state | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `pbc.symmetry.copy` | Copy crystal symmetry | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `pbc.symmetry.expand` | Generate symmetry mates | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `pbc.symmetry.query` | Query crystal symmetry | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `pbc.symmetry.set` | Set crystal symmetry | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `pbc.unwrap` | Unwrap periodic jumps | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `pbc.wrap` | Wrap into periodic box | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `pbc.unwrap` | Unwrap periodic jumps | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 2 |
+| `pbc.wrap` | Wrap into periodic box | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 2 |
 | `performance.setting.async_builds` | Setting async_builds | P2 | 사용 불가/보류 (`excluded`) | — | — | — | `specified` | — | 0 |
 | `performance.setting.ati_bugs` | Setting ati_bugs | P2 | 사용 불가/보류 (`excluded`) | — | — | — | `specified` | — | 0 |
 | `performance.setting.auto_defer_atom_count` | Setting auto_defer_atom_count | P2 | 사용 불가/보류 (`excluded`) | — | — | — | `specified` | — | 0 |
@@ -620,34 +620,34 @@ Baseline: `pymol-oss-3.1.0` commit `f51e58f6b08308c41c85b9d12a23231f49ca325a`; �
 | `color.space.manage` | Display color space | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `color.space.pymol` | Color space pymol | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `color.space.rgb` | Color space rgb | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `export.image.dimension_units` | Physical image dimensions | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `export.image.dimension_units.mode.centimeters` | Image dimensions in centimeters | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `export.image.dimension_units.mode.inches` | Image dimensions in inches | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `export.image.dimension_units.mode.millimeters` | Image dimensions in millimeters | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `export.image.dimension_units.mode.pixels` | Image dimensions in pixels | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `export.image.filename_extension` | Image filename extension policy | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `export.image.format` | Image encoding selection | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `export.image.format.mode.guess` | Image format guess | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `export.image.format.mode.png` | Image format png | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `export.image.dimension_units` | Physical image dimensions | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `export.image.dimension_units.mode.centimeters` | Image dimensions in centimeters | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `export.image.dimension_units.mode.inches` | Image dimensions in inches | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `export.image.dimension_units.mode.millimeters` | Image dimensions in millimeters | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `export.image.dimension_units.mode.pixels` | Image dimensions in pixels | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `export.image.filename_extension` | Image filename extension policy | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `export.image.format` | Image encoding selection | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `export.image.format.mode.guess` | Image format guess | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `export.image.format.mode.png` | Image format png | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `export.image.format.mode.ppm` | Image format ppm | P1 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 1 |
 | `export.image.memory_buffer` | Return encoded image buffer | P1 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 1 |
-| `export.image.prior_buffer` | Prior image-buffer policy | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `export.image.prior_buffer.mode.render_current` | Image prior-buffer mode render_current | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `export.image.prior_buffer.mode.require_prior` | Image prior-buffer mode require_prior | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `export.image.prior_buffer.mode.try_prior` | Image prior-buffer mode try_prior | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `export.image.prior_buffer` | Prior image-buffer policy | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `export.image.prior_buffer.mode.render_current` | Image prior-buffer mode render_current | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `export.image.prior_buffer.mode.require_prior` | Image prior-buffer mode require_prior | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `export.image.prior_buffer.mode.try_prior` | Image prior-buffer mode try_prior | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `export.image.source` | Image render-source selection | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 1 |
-| `export.image.source.mode.ray` | Image source ray | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `export.image.source.mode.viewport_or_draw` | Image source viewport_or_draw | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `export.image.source.mode.ray` | Image source ray | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `export.image.source.mode.viewport_or_draw` | Image source viewport_or_draw | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `export.image.write` | Write rendered image | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 1 |
-| `export.movie.frame_sequence` | Export movie frame sequence | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `export.movie.frame_sequence` | Export movie frame sequence | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `export.movie.frame_sequence.dimensions` | Frame-sequence dimensions | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `export.movie.frame_sequence.format` | Frame-sequence image format | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `export.movie.frame_sequence.format.mode.png` | Frame-sequence format png | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `export.movie.frame_sequence.format.mode.ppm` | Frame-sequence format ppm | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `export.movie.frame_sequence.modal` | Frame-sequence modal execution | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `export.movie.frame_sequence.preserve` | Frame-sequence preserve policy | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `export.movie.frame_sequence.range` | Frame-sequence inclusive range | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `export.movie.frame_sequence.render_mode` | Frame-sequence render mode | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `export.movie.frame_sequence.range` | Frame-sequence inclusive range | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `export.movie.frame_sequence.render_mode` | Frame-sequence render mode | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `export.movie.frame_sequence.render_mode.mode.default_setting` | Frame-sequence render mode default_setting | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `export.movie.frame_sequence.render_mode.mode.draw` | Frame-sequence render mode draw | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `export.movie.frame_sequence.render_mode.mode.normal` | Frame-sequence render mode normal | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
@@ -745,22 +745,22 @@ Baseline: `pymol-oss-3.1.0` commit `f51e58f6b08308c41c85b9d12a23231f49ca325a`; �
 | `render.fog.setting.ray_trace_fog` | Ray Trace Fog | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `render.fog.setting.ray_trace_fog_start` | Ray Trace Fog Start | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `render.image.capture.window` | Capture complete application window | P1 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 1 |
-| `render.image.draw.aspect_preserving_size` | Draw aspect-preserving dimensions | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `render.image.draw.aspect_preserving_size` | Draw aspect-preserving dimensions | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `render.image.draw.opengl` | Draw OpenGL image | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | macos | 4 |
-| `render.image.draw.requires_graphics_context` | Draw graphics-context requirement | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `render.image.draw.requires_graphics_context` | Draw graphics-context requirement | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `render.image.focal_blur` | Focal blur image | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `render.image.ray` | Ray-traced image | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | macos | 4 |
-| `render.image.ray.antialias` | Ray antialias override | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `render.image.ray.aspect_preserving_size` | Ray aspect-preserving dimensions | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `render.image.ray.execution.async` | Asynchronous ray execution | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `render.image.ray.antialias` | Ray antialias override | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `render.image.ray.aspect_preserving_size` | Ray aspect-preserving dimensions | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `render.image.ray.execution.async` | Asynchronous ray execution | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `render.image.ray.execution.synchronous` | Synchronous ray execution | P0 | 검증됨 (`compatible`) | 예 | 예 | 예 | `compatible` | macos | 4 |
 | `render.image.ray.renderer` | Ray renderer selection | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | macos | 4 |
 | `render.image.ray.renderer.mode.builtin` | Ray renderer builtin | P1 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 1 |
-| `render.image.ray.renderer.mode.default_setting` | Ray renderer default_setting | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `render.image.ray.renderer.mode.geometry_count` | Ray renderer geometry_count | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `render.image.ray.renderer.mode.povray` | Ray renderer povray | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `render.image.ray.stereo_pair` | Ray stereo angle and shift | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `render.image.ray.stops_animation` | Ray animation stop policy | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `render.image.ray.renderer.mode.default_setting` | Ray renderer default_setting | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `render.image.ray.renderer.mode.geometry_count` | Ray renderer geometry_count | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `render.image.ray.renderer.mode.povray` | Ray renderer povray | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `render.image.ray.stereo_pair` | Ray stereo angle and shift | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `render.image.ray.stops_animation` | Ray animation stop policy | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `render.lighting.manage` | Shared lighting state | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | macos | 4 |
 | `render.lighting.panel` | Interactive lighting settings panel | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | macos | 4 |
 | `render.lighting.ray_shadow_preset.black` | Ray-shadow preset black | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
@@ -886,9 +886,9 @@ Baseline: `pymol-oss-3.1.0` commit `f51e58f6b08308c41c85b9d12a23231f49ca325a`; �
 | `render.transparency.setting.transparency_picking_mode.mode.pickable` | Transparency Picking Mode mode pickable | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `render.viewport.refresh` | Refresh interactive viewport | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | macos | 4 |
 | `representation.surface.setting.transparency` | Transparency | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | macos | 3 |
-| `setting.service.bond.get` | Get per-bond setting | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `setting.service.bond.set` | Set per-bond setting | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `setting.service.bond.unset` | Unset per-bond setting | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `setting.service.bond.get` | Get per-bond setting | P1 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
+| `setting.service.bond.set` | Set per-bond setting | P1 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
+| `setting.service.bond.unset` | Unset per-bond setting | P1 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
 | `setting.service.get` | Get setting value | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 1 |
 | `setting.service.manage` | Setting service | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 1 |
 | `setting.service.scope.atom` | Atom setting scope | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 1 |
@@ -897,7 +897,7 @@ Baseline: `pymol-oss-3.1.0` commit `f51e58f6b08308c41c85b9d12a23231f49ca325a`; �
 | `setting.service.scope.state` | State setting scope | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 1 |
 | `setting.service.set` | Set setting value | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 1 |
 | `setting.service.unset` | Unset setting value | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 1 |
-| `setting.service.unset_deep` | Deep unset of scoped settings | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `setting.service.unset_deep` | Deep unset of scoped settings | P1 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
 | `annotation.label_chains` | Label chains | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `annotation.label_segments` | Label segments | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `color.assignment.atom_selection` | Atom-selection color assignment | P0 | 검증됨 (`compatible`) | 예 | 예 | 예 | `compatible` | macos | 7 |
@@ -1561,13 +1561,13 @@ Baseline: `pymol-oss-3.1.0` commit `f51e58f6b08308c41c85b9d12a23231f49ca325a`; �
 | `camera.frame.zoom.buffer` | Zoom framing buffer | P0 | 검증됨 (`compatible`) | 예 | 예 | 예 | `compatible` | macos | 4 |
 | `camera.frame.zoom.complete` | Complete no-center-clipping zoom | P0 | 검증됨 (`compatible`) | 예 | 예 | 예 | `compatible` | macos | 4 |
 | `camera.frame.zoom.state_scope` | Zoom coordinate-state scope | P0 | 검증됨 (`compatible`) | 예 | 예 | 예 | `compatible` | macos | 3 |
-| `camera.named_view.clear_all` | Clear or list all named camera views | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `camera.named_view.delete` | Delete a named camera view | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `camera.named_view.manage` | Named camera-view lifecycle | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `camera.named_view.recall` | Recall a named camera view | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `camera.named_view.store` | Store a named camera view | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `camera.named_view.clear_all` | Clear or list all named camera views | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `camera.named_view.delete` | Delete a named camera view | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `camera.named_view.manage` | Named camera-view lifecycle | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `camera.named_view.recall` | Recall a named camera view | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `camera.named_view.store` | Store a named camera view | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `camera.navigation.move_axis` | Translate camera along a primary axis | P0 | 검증됨 (`compatible`) | 예 | 예 | 예 | `compatible` | macos | 4 |
-| `camera.navigation.rock` | Continuous Y-axis camera rocking | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `camera.navigation.rock` | Continuous Y-axis camera rocking | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `camera.navigation.turn_axis` | Rotate camera about a primary axis | P0 | 검증됨 (`compatible`) | 예 | 예 | 예 | `compatible` | macos | 4 |
 | `camera.origin.from_selection` | Rotation origin from selection | P0 | 검증됨 (`compatible`) | 예 | 예 | 예 | `compatible` | macos | 4 |
 | `camera.origin.manage` | Rotation-origin management | P0 | 검증됨 (`compatible`) | 예 | 예 | 예 | `compatible` | macos | 4 |
@@ -1602,7 +1602,7 @@ Baseline: `pymol-oss-3.1.0` commit `f51e58f6b08308c41c85b9d12a23231f49ca325a`; �
 | `camera.stereo.geowall` | GeoWall stereo mode | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `camera.stereo.manage` | Stereoscopic display-mode management | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `camera.stereo.openvr` | OpenVR stereo mode | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `camera.stereo.quadbuffer` | Quad-buffered stereo mode | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `camera.stereo.quadbuffer` | Quad-buffered stereo mode | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `camera.stereo.row_interleaved` | Row-interleaved stereo mode | P2 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `camera.stereo.shift` | Stereo camera separation | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `camera.stereo.side_by_side` | Side-by-side stereo mode | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
@@ -1612,31 +1612,31 @@ Baseline: `pymol-oss-3.1.0` commit `f51e58f6b08308c41c85b9d12a23231f49ca325a`; �
 | `camera.viewport.set` | Set graphics viewport dimensions | P1 | 진행 중(미검증) (`partial`) | 예 | — | — | `specified` | — | 2 |
 | `scene.message.get` | Query a scene message | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `scene.message.set` | Set a scene message | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `scene.navigate.first` | Recall the first ordered scene | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `scene.navigate.next` | Recall the next ordered scene | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `scene.navigate.previous` | Recall the previous ordered scene | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `scene.order.manage` | Ordered scene collection management | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `scene.order.move_top` | Move scenes to the top | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `scene.order.natural_sort` | Natural-sort scene names | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `scene.order.relative` | Move scenes at their current relative location | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `scene.navigate.first` | Recall the first ordered scene | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `scene.navigate.next` | Recall the next ordered scene | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `scene.navigate.previous` | Recall the previous ordered scene | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `scene.order.manage` | Ordered scene collection management | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `scene.order.move_top` | Move scenes to the top | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `scene.order.natural_sort` | Natural-sort scene names | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `scene.order.relative` | Move scenes at their current relative location | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `scene.query.list` | Query ordered scene names | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 1 |
-| `scene.query.thumbnail` | Query a scene thumbnail | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `scene.query.thumbnail` | Query a scene thumbnail | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `scene.snapshot.component.activity` | Scene object-activity channel | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 1 |
-| `scene.snapshot.component.color` | Scene color channel | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `scene.snapshot.component.color` | Scene color channel | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `scene.snapshot.component.frame` | Scene global-frame channel | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 1 |
-| `scene.snapshot.component.message` | Scene playback-message channel | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `scene.snapshot.component.message` | Scene playback-message channel | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `scene.snapshot.component.representation` | Scene representation-visibility channel | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 1 |
-| `scene.snapshot.component.selection_scope` | Scene atom-channel selection scope | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `scene.snapshot.component.thumbnail` | Scene thumbnail channel | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `scene.snapshot.component.selection_scope` | Scene atom-channel selection scope | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `scene.snapshot.component.thumbnail` | Scene thumbnail channel | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `scene.snapshot.component.view` | Scene camera-view channel | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 1 |
 | `scene.snapshot.delete` | Delete one or all scene snapshots | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 1 |
-| `scene.snapshot.insert_after` | Store current state after the current scene | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `scene.snapshot.insert_before` | Store current state before the current scene | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `scene.snapshot.insert_after` | Store current state after the current scene | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `scene.snapshot.insert_before` | Store current state before the current scene | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `scene.snapshot.manage` | Named scene snapshot lifecycle | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 1 |
 | `scene.snapshot.recall` | Recall a named scene snapshot | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | macos | 2 |
-| `scene.snapshot.rename` | Rename a scene snapshot | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `scene.snapshot.rename` | Rename a scene snapshot | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `scene.snapshot.store` | Store a named scene snapshot | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | macos | 2 |
-| `scene.snapshot.update` | Update the current scene while preserving its message | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `scene.snapshot.update` | Update the current scene while preserving its message | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `view.query.position` | Query view center position | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `view.setting.all_states` | Setting all_states | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `view.setting.animation` | Setting animation | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
@@ -1724,36 +1724,36 @@ Baseline: `pymol-oss-3.1.0` commit `f51e58f6b08308c41c85b9d12a23231f49ca325a`; �
 | `selection.logical.not` | Logical negation | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `selection.logical.or` | Logical disjunction | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `selection.logical.subtract` | Selection subtraction | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
-| `selection.macro.slash` | Slash selection macro | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.macro.slash.absolute` | Leading-slash absolute macro | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.macro.slash.all_empty` | All-empty slash macro | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.macro.slash.name_alt_backtick` | Name-backtick altloc qualifier | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.macro.slash.numeric_resn_as_resi` | Numeric residue-name field as residue identifier | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.macro.slash.object_index_backtick` | Object-backtick atom index | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.macro.slash.relative` | Right-aligned relative macro | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.macro.slash.resn_resi_backtick` | Resn-backtick residue identifier | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.macro.slash.skip_empty_star` | Empty and wildcard macro fields | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.macro.slash.slash_limit` | Slash-count limit | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `selection.macro.slash` | Slash selection macro | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 2 |
+| `selection.macro.slash.absolute` | Leading-slash absolute macro | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 2 |
+| `selection.macro.slash.all_empty` | All-empty slash macro | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `selection.macro.slash.name_alt_backtick` | Name-backtick altloc qualifier | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 2 |
+| `selection.macro.slash.numeric_resn_as_resi` | Numeric residue-name field as residue identifier | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `selection.macro.slash.object_index_backtick` | Object-backtick atom index | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 2 |
+| `selection.macro.slash.relative` | Right-aligned relative macro | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 2 |
+| `selection.macro.slash.resn_resi_backtick` | Resn-backtick residue identifier | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 2 |
+| `selection.macro.slash.skip_empty_star` | Empty and wildcard macro fields | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 2 |
+| `selection.macro.slash.slash_limit` | Slash-count limit | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 2 |
 | `selection.match.identifiers` | Identifier-set matching | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `selection.match.name_residue` | Name/residue matching | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `selection.named.create_replace` | Create or replace a named selection | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
-| `selection.named.default_name` | Default selection-name shortcut | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `selection.named.default_name` | Default selection-name shortcut | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 2 |
 | `selection.named.delete` | Delete named selections | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `selection.named.deselect_all` | Disable every visible selection indicator | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `selection.named.domain_scope` | Domain-scoped named selection | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.named.indicate` | Transient indicated selection | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.named.indicator_policy` | Creation-time selection indicator policy | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `selection.named.domain_scope` | Domain-scoped named selection | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `selection.named.indicate` | Transient indicated selection | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `selection.named.indicator_policy` | Creation-time selection indicator policy | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `selection.named.list_query` | List named selections | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `selection.named.manage` | Named-selection lifecycle | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
-| `selection.named.merge` | Merge into an existing named selection | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.named.pop` | Destructive atom-by-atom selection iteration | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `selection.named.merge` | Merge into an existing named selection | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 2 |
+| `selection.named.pop` | Destructive atom-by-atom selection iteration | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `selection.named.reference` | Explicit named-selection/object reference | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
-| `selection.named.select_list` | Direct identifier-list selection API | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.named.select_list.id` | Select-list by source atom ID | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.named.select_list.index` | Select-list by current atom index | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.named.select_list.rank` | Select-list by load-order atom rank | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.named.select_list.state_scope` | State-scoped select-list API | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.named.state_scope` | State-scoped named selection | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `selection.named.select_list` | Direct identifier-list selection API | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 2 |
+| `selection.named.select_list.id` | Select-list by source atom ID | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 2 |
+| `selection.named.select_list.index` | Select-list by current atom index | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 2 |
+| `selection.named.select_list.rank` | Select-list by load-order atom rank | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 2 |
+| `selection.named.select_list.state_scope` | State-scoped select-list API | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 2 |
+| `selection.named.state_scope` | State-scoped named selection | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 2 |
 | `selection.numeric.b_factor` | B-factor selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `selection.numeric.coordinate_x` | Model-space X selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `selection.numeric.coordinate_y` | Model-space Y selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
@@ -1801,21 +1801,21 @@ Baseline: `pymol-oss-3.1.0` commit `f51e58f6b08308c41c85b9d12a23231f49ca325a`; �
 | `selection.status.protected` | Protected-atom selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `selection.status.restrained` | Restrained-atom selector | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `selection.surface_atoms.find` | Find surface atoms | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `selection.value.atom_name_wildcard` | Atom-name wildcard override | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.value.case_chain_segment` | Chain and segment case policy | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.value.case_general` | General selection case policy | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
-| `selection.value.escape` | Selection value escape handling | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `selection.value.atom_name_wildcard` | Atom-name wildcard override | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `selection.value.case_chain_segment` | Chain and segment case policy | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `selection.value.case_general` | General selection case policy | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `selection.value.escape` | Selection value escape handling | P1 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 2 |
 | `selection.value.list.alpha` | Alphabetic value lists | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 2 |
 | `selection.value.list.numeric` | Numeric value lists | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 2 |
 | `selection.value.manage` | Selection value matching policy | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
-| `selection.value.mixed_residue` | Mixed residue identifier matching | P0 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `selection.value.mixed_residue` | Mixed residue identifier matching | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 2 |
 | `selection.value.quote` | Quoted selection values | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
-| `selection.value.range.alpha` | Alphabetic ranges | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `selection.value.range.alpha` | Alphabetic ranges | P1 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 2 |
 | `selection.value.range.numeric` | Numeric and open-ended ranges | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `selection.value.wildcard` | Configurable alphabetic wildcard matching | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 2 |
-| `trajectory.coordinates.smooth` | Window-average coordinate states | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `trajectory.coordinates.smooth` | Window-average coordinate states | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `trajectory.coordinates.spheroid` | Spheroid motion average | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `trajectory.fit.intra_states` | Fit all states to a reference state | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `trajectory.fit.intra_states` | Fit all states to a reference state | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `trajectory.morph.linear` | Linear morph | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `trajectory.morph.manage` | Conformational morph trajectory | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `trajectory.morph.rigimol` | RigiMOL morph | P2 | 사용 불가/보류 (`blocked_access`) | — | — | — | `specified` | — | 0 |
@@ -1895,7 +1895,7 @@ Baseline: `pymol-oss-3.1.0` commit `f51e58f6b08308c41c85b9d12a23231f49ca325a`; �
 | `trajectory.movie_generator.zoom` | Zoom movie | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `trajectory.rms.current_states` | Per-state current-coordinate RMS | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `trajectory.rms.fitted_states` | Per-state fitted RMS | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 2 |
-| `trajectory.timeline.frame_count_query` | Query movie frame count | P1 | 인벤토리/계획 (`inventoried`) | — | — | — | `specified` | — | 0 |
+| `trajectory.timeline.frame_count_query` | Query movie frame count | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `ui.application.quit` | Quit application | P1 | 사용 불가/보류 (`excluded`) | — | — | — | `specified` | — | 0 |
 | `ui.application.reinitialize` | Reinitialize application state | P1 | 사용 불가/보류 (`excluded`) | — | — | — | `specified` | — | 0 |
 | `ui.application.splash` | Show splash information | P2 | 사용 불가/보류 (`excluded`) | — | — | — | `specified` | — | 0 |

@@ -8,6 +8,8 @@
 #include <charconv>
 #include "molshredder/core/parse_number.hpp"
 #include <chrono>
+#include <atomic>
+#include <fstream>
 #include <cmath>
 #include <cstdint>
 #include <iterator>
@@ -2595,7 +2597,12 @@ command::Registry make_default_registry(
       };
     } else if (canonical_name == "scene store") {
       handler = [workspace](const Arguments &arguments, TaskContext &) {
-        const auto stored = workspace->store_named_scene(arguments.at("name"));
+        const auto insert = arguments.at("insert");
+        const auto stored = workspace->store_named_scene(
+            arguments.at("name"),
+            insert == "before"  ? SceneInsert::before
+            : insert == "after" ? SceneInsert::after
+                                : SceneInsert::end);
         if (!stored.has_value())
           return Result<Response>::failure(stored.error());
         return Result<Response>::success(
@@ -2604,6 +2611,92 @@ command::Registry make_default_registry(
              {{"count", static_cast<std::uint64_t>(stored.value().scene_count)},
               {"replaced", stored.value().replaced},
               {"scene", named_scene_value(stored.value().scene)}}});
+      };
+    } else if (canonical_name == "scene rename") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const auto renamed = workspace->rename_named_scene(arguments.at("name"),
+                                                           arguments.at("new-name"));
+        if (!renamed.has_value()) return Result<Response>::failure(renamed.error());
+        return Result<Response>::success(
+            {"Named scene renamed",
+             {{"previous_name", arguments.at("name")},
+              {"scene", named_scene_value(renamed.value())}}});
+      };
+    } else if (canonical_name == "scene update") {
+      handler = [workspace](const Arguments &, TaskContext &) {
+        const auto stored = workspace->update_named_scene();
+        if (!stored.has_value()) return Result<Response>::failure(stored.error());
+        return Result<Response>::success(
+            {"Named scene updated",
+             {{"count", static_cast<std::uint64_t>(stored.value().scene_count)},
+              {"replaced", stored.value().replaced},
+              {"scene", named_scene_value(stored.value().scene)}}});
+      };
+    } else if (canonical_name == "scene first" || canonical_name == "scene last" ||
+               canonical_name == "scene next" || canonical_name == "scene previous") {
+      const auto step = canonical_name == "scene first"  ? SceneStep::first
+                        : canonical_name == "scene last" ? SceneStep::last
+                        : canonical_name == "scene next" ? SceneStep::next
+                                                          : SceneStep::previous;
+      handler = [workspace, step](const Arguments &arguments, TaskContext &) {
+        const auto wrap_found = arguments.find("wrap");
+        const bool wrap = wrap_found == arguments.end() || wrap_found->second == "true";
+        const auto recalled = workspace->step_named_scene(step, wrap);
+        if (!recalled.has_value()) return Result<Response>::failure(recalled.error());
+        return Result<Response>::success(
+            {"Named scene recalled",
+             {{"scene", named_scene_value(recalled.value())}}});
+      };
+    } else if (canonical_name == "scene order") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        std::vector<std::string> names;
+        if (const auto found = arguments.find("names"); found != arguments.end()) {
+          std::string current;
+          for (const auto character : found->second) {
+            if (character == ',' ||
+                std::isspace(static_cast<unsigned char>(character)) != 0) {
+              if (!current.empty()) names.push_back(std::move(current));
+              current.clear();
+            } else {
+              current.push_back(character);
+            }
+          }
+          if (!current.empty()) names.push_back(std::move(current));
+        }
+        const auto order = workspace->order_named_scenes(
+            names, arguments.at("sort") == "true", arguments.at("location"));
+        if (!order.has_value()) return Result<Response>::failure(order.error());
+        command::Value::Array listing;
+        for (const auto &name : order.value()) listing.emplace_back(name);
+        return Result<Response>::success(
+            {"Scene order updated",
+             {{"count", static_cast<std::uint64_t>(order.value().size())},
+              {"order", std::move(listing)}}});
+      };
+    } else if (canonical_name == "color usage") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const auto usage = workspace->color_usage(arguments.at("selection"));
+        if (!usage.has_value()) return Result<Response>::failure(usage.error());
+        command::Table table;
+        table.columns = {"color_index", "color_name", "atom_count"};
+        command::Value::Array colors;
+        std::uint64_t total{};
+        for (const auto &item : usage.value()) {
+          table.rows.push_back({static_cast<std::int64_t>(item.index), item.name,
+                                static_cast<std::uint64_t>(item.atom_count)});
+          colors.emplace_back(command::Value::Object{
+              {"atom_count", static_cast<std::uint64_t>(item.atom_count)},
+              {"color_index", static_cast<std::int64_t>(item.index)},
+              {"color_name", item.name}});
+          total += item.atom_count;
+        }
+        return Result<Response>::success(
+            {"counted atoms per color",
+             {{"atom_count", total},
+              {"color_count", static_cast<std::uint64_t>(colors.size())},
+              {"colors", std::move(colors)},
+              {"selection", arguments.at("selection")}},
+             std::move(table)});
       };
     } else if (canonical_name == "scene recall") {
       handler = [workspace](const Arguments &arguments, TaskContext &) {
@@ -3352,7 +3445,8 @@ command::Registry make_default_registry(
                          "frame_count",
                          "representation_count",
                          "has_trajectory",
-                         "scene_node_id"};
+                         "scene_node_id",
+                         "fixed"};
         table.rows.reserve(objects.size());
         command::Value active_object_id{nullptr};
         for (const auto &object : objects) {
@@ -3361,7 +3455,8 @@ command::Registry make_default_registry(
                                 object.atom_count,
                                 optional_frame_count(object.frame_count),
                                 object.representation_count,
-                                object.has_trajectory, object.scene_node_id});
+                                object.has_trajectory, object.scene_node_id,
+                                object.fixed});
           if (object.active)
             active_object_id = object.id;
         }
@@ -3719,6 +3814,332 @@ command::Registry make_default_registry(
         return Result<Response>::success(
             {"reordered object " + changed.value().name,
              object_lifecycle_fields(changed.value())});
+      };
+    } else if (canonical_name.starts_with("group ")) {
+      handler = [workspace, canonical_name = std::string{canonical_name}](
+                    const Arguments &arguments, TaskContext &) {
+        const auto split = [](std::string_view text) {
+          std::vector<std::string> items;
+          std::string current;
+          for (const auto character : text) {
+            if (character == ',' ||
+                std::isspace(static_cast<unsigned char>(character)) != 0) {
+              if (!current.empty()) items.push_back(std::move(current));
+              current.clear();
+            } else {
+              current.push_back(character);
+            }
+          }
+          if (!current.empty()) items.push_back(std::move(current));
+          return items;
+        };
+        const auto group_value = [](const GroupInfo &info) {
+          command::Value::Array members;
+          for (const auto &member : info.members) members.emplace_back(member);
+          return command::Value::Object{
+              {"enabled", info.enabled},
+              {"members", std::move(members)},
+              {"name", info.name},
+              {"object_count", static_cast<std::uint64_t>(info.object_count)},
+              {"open", info.open},
+              {"parent", info.parent.has_value() ? command::Value{*info.parent}
+                                                  : command::Value{nullptr}}};
+        };
+        const auto change_value = [](const GroupChangeResult &change) {
+          command::Value::Array affected;
+          for (const auto &name : change.affected) affected.emplace_back(name);
+          return command::Value::Object{
+              {"affected", std::move(affected)},
+              {"created", change.created},
+              {"deleted", change.deleted},
+              {"member_count", static_cast<std::uint64_t>(change.member_count)},
+              {"name", change.name}};
+        };
+        const auto finish = [&](operation::Result<GroupChangeResult> result,
+                                const std::string &verb) {
+          if (!result.has_value()) return Result<Response>::failure(result.error());
+          return Result<Response>::success(
+              {"group " + result.value().name + " " + verb, change_value(result.value())});
+        };
+        if (canonical_name == "group add")
+          return finish(workspace->group_add(arguments.at("name"),
+                                             split(arguments.at("members"))),
+                        "updated");
+        if (canonical_name == "group remove")
+          return finish(workspace->group_remove(arguments.at("name"),
+                                                split(arguments.at("members"))),
+                        "updated");
+        if (canonical_name == "group empty")
+          return finish(workspace->group_empty(arguments.at("name")), "emptied");
+        if (canonical_name == "group ungroup")
+          return finish(workspace->group_ungroup(split(arguments.at("members"))),
+                        "ungrouped");
+        if (canonical_name == "group excise")
+          return finish(workspace->group_excise(arguments.at("name")), "excised");
+        if (canonical_name == "group purge")
+          return finish(workspace->group_purge(arguments.at("name")), "purged");
+        if (canonical_name == "group list") {
+          command::Table table;
+          table.columns = {"name", "parent", "open", "enabled", "object_count",
+                           "members"};
+          command::Value::Array groups;
+          for (const auto &info : workspace->list_groups()) {
+            std::string joined;
+            for (const auto &member : info.members)
+              joined += (joined.empty() ? "" : ",") + member;
+            table.rows.push_back(
+                {info.name,
+                 info.parent.has_value() ? command::Value{*info.parent}
+                                         : command::Value{nullptr},
+                 info.open, info.enabled,
+                 static_cast<std::uint64_t>(info.object_count), joined});
+            groups.emplace_back(group_value(info));
+          }
+          return Result<Response>::success(
+              {"found " + std::to_string(groups.size()) + " group(s)",
+               {{"group_count", static_cast<std::uint64_t>(groups.size())},
+                {"groups", std::move(groups)}},
+               std::move(table)});
+        }
+        const auto expansion = canonical_name == "group open"    ? Workspace::GroupExpansion::open
+                               : canonical_name == "group close" ? Workspace::GroupExpansion::close
+                                                                  : Workspace::GroupExpansion::toggle;
+        const auto changed = workspace->group_set_expansion(arguments.at("name"), expansion);
+        if (!changed.has_value()) return Result<Response>::failure(changed.error());
+        return Result<Response>::success({"group " + changed.value().name +
+                                              (changed.value().open ? " opened" : " closed"),
+                                          group_value(changed.value())});
+      };
+    } else if (canonical_name == "pbc mode") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const auto result = workspace->set_pbc_mode(arguments.at("object"), arguments.at("mode"));
+        if (!result.has_value()) return Result<Response>::failure(result.error());
+        const auto &value = result.value();
+        return Result<Response>::success(
+            {value.changed ? "pbc mode set to " + value.mode : "pbc mode is " + value.mode,
+             {{"changed", value.changed},
+              {"frame_count", optional_frame_count(value.frame_count)},
+              {"mode", value.mode},
+              {"object_id", value.object_id},
+              {"object_name", value.object_name},
+              {"previous_mode", value.previous_mode}}});
+      };
+    } else if (canonical_name == "object split") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        std::string prefix;
+        if (const auto found = arguments.find("prefix"); found != arguments.end())
+          prefix = found->second;
+        const auto split = workspace->split_object_by_chain(arguments.at("object"), prefix);
+        if (!split.has_value()) return Result<Response>::failure(split.error());
+        command::Table table;
+        table.columns = {"object_id", "name", "chain", "atom_count"};
+        command::Value::Array ids;
+        for (const auto &item : split.value().created) {
+          table.rows.push_back({item.object_id, item.object_name, item.selection_expression,
+                                static_cast<std::uint64_t>(item.atom_count)});
+          ids.emplace_back(item.object_id);
+        }
+        return Result<Response>::success(
+            {"split " + split.value().source_object_name + " into " +
+                 std::to_string(split.value().created.size()) + " object(s)",
+             {{"object_count", static_cast<std::uint64_t>(split.value().created.size())},
+              {"object_ids", std::move(ids)},
+              {"source_object_id", split.value().source_object_id},
+              {"source_object_name", split.value().source_object_name}},
+             std::move(table)});
+      };
+    } else if (canonical_name == "object split-states") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const auto first = size_argument(arguments, "first");
+        if (!first.has_value()) return Result<Response>::failure(first.error());
+        const auto last = size_argument(arguments, "last");
+        if (!last.has_value()) return Result<Response>::failure(last.error());
+        std::string prefix;
+        if (const auto found = arguments.find("prefix"); found != arguments.end())
+          prefix = found->second;
+        const auto split = workspace->split_states(arguments.at("object"), first.value(),
+                                                   last.value(), prefix);
+        if (!split.has_value()) return Result<Response>::failure(split.error());
+        command::Table table;
+        table.columns = {"object_id", "name", "state", "atom_count"};
+        command::Value::Array ids;
+        for (const auto &item : split.value().created) {
+          table.rows.push_back({item.object_id, item.object_name, item.selection_expression,
+                                static_cast<std::uint64_t>(item.atom_count)});
+          ids.emplace_back(item.object_id);
+        }
+        return Result<Response>::success(
+            {"split " + split.value().source_object_name + " into " +
+                 std::to_string(split.value().created.size()) + " state object(s)",
+             {{"object_count", static_cast<std::uint64_t>(split.value().created.size())},
+              {"object_ids", std::move(ids)},
+              {"source_object_id", split.value().source_object_id},
+              {"source_object_name", split.value().source_object_name}},
+             std::move(table)});
+      };
+    } else if (canonical_name == "traj delete-frames") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const auto parse = [&](const char *key) { return std::stoll(arguments.at(key)); };
+        const auto removed = workspace->delete_frames(arguments.at("object"), parse("beg"),
+                                                      parse("end"), parse("skip"));
+        if (!removed.has_value()) return Result<Response>::failure(removed.error());
+        const auto &value = removed.value();
+        return Result<Response>::success(
+            {"deleted " + std::to_string(value.removed_state_count) + " frame(s) of " + value.object_name,
+             {{"object_id", value.object_id},
+              {"object_name", value.object_name},
+              {"previous_state_count", static_cast<std::uint64_t>(value.previous_state_count)},
+              {"removed_state_count", static_cast<std::uint64_t>(value.removed_state_count)},
+              {"state_count", static_cast<std::uint64_t>(value.state_count)}}});
+      };
+    } else if (canonical_name == "traj dup-frame") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        std::optional<std::size_t> frame;
+        if (const auto found = arguments.find("frame");
+            found != arguments.end() && found->second != "now") {
+          const auto parsed = size_argument(arguments, "frame");
+          if (!parsed.has_value()) return Result<Response>::failure(parsed.error());
+          frame = parsed.value();
+        }
+        const auto result = workspace->duplicate_frame(arguments.at("object"), frame);
+        if (!result.has_value()) return Result<Response>::failure(result.error());
+        const auto &value = result.value();
+        return Result<Response>::success(
+            {"duplicated a frame of " + value.object_name,
+             {{"object_id", value.object_id},
+              {"object_name", value.object_name},
+              {"previous_state_count", static_cast<std::uint64_t>(value.previous_state_count)},
+              {"state_count", static_cast<std::uint64_t>(value.state_count)}}});
+      };
+    } else if (canonical_name == "object fix" || canonical_name == "object free") {
+      const bool fix = canonical_name == "object fix";
+      handler = [workspace, fix](const Arguments &arguments, TaskContext &) {
+        const auto changed = workspace->set_object_fixed(arguments.at("object"), fix);
+        if (!changed.has_value()) return Result<Response>::failure(changed.error());
+        return Result<Response>::success(
+            {std::string{fix ? "fixed " : "freed "} + changed.value().name,
+             {{"fixed", fix},
+              {"object_id", changed.value().object_id},
+              {"object_name", changed.value().name}}});
+      };
+    } else if (canonical_name == "object delete-states") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const auto removed = workspace->delete_states(arguments.at("object"), arguments.at("states"));
+        if (!removed.has_value()) return Result<Response>::failure(removed.error());
+        const auto &value = removed.value();
+        return Result<Response>::success(
+            {"deleted " + std::to_string(value.removed_state_count) + " state(s) of " + value.object_name,
+             {{"object_id", value.object_id},
+              {"object_name", value.object_name},
+              {"previous_state_count", static_cast<std::uint64_t>(value.previous_state_count)},
+              {"removed_state_count", static_cast<std::uint64_t>(value.removed_state_count)},
+              {"state_count", static_cast<std::uint64_t>(value.state_count)}}});
+      };
+    } else if (canonical_name == "object join-states") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        std::vector<std::string> references;
+        std::string current;
+        for (const auto character : arguments.at("objects") + ",") {
+          if (character == ',' || std::isspace(static_cast<unsigned char>(character)) != 0) {
+            if (!current.empty()) references.push_back(std::move(current));
+            current.clear();
+          } else {
+            current.push_back(character);
+          }
+        }
+        const auto mode = arguments.at("mode") == "identical"
+                              ? Workspace::StateJoinMode::identical_topology
+                              : Workspace::StateJoinMode::identifier_intersection;
+        const auto joined = workspace->join_states(arguments.at("name"), references,
+                                                   arguments.at("selection"), mode);
+        if (!joined.has_value()) return Result<Response>::failure(joined.error());
+        const auto &value = joined.value();
+        return Result<Response>::success(
+            {"joined " + std::to_string(references.size()) + " object(s) into " + value.object_name,
+             {{"atom_count", value.atom_count},
+              {"bond_count", value.bond_count},
+              {"object_id", value.object_id},
+              {"object_name", value.object_name},
+              {"source_object_id", value.source_object_id},
+              {"state_count", optional_frame_count(value.state_count)}}});
+      };
+    } else if (canonical_name == "object sort") {
+      handler = [workspace](const Arguments &, TaskContext &) {
+        const auto sorted = workspace->sort_objects_by_name();
+        if (!sorted.has_value()) return Result<Response>::failure(sorted.error());
+        return Result<Response>::success(
+            {"objects sorted by name", object_lifecycle_fields(sorted.value())});
+      };
+    } else if (canonical_name == "object matrix-copy") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const auto copied = workspace->copy_object_transform(arguments.at("source"),
+                                                             arguments.at("target"));
+        if (!copied.has_value()) return Result<Response>::failure(copied.error());
+        command::Value::Array ids;
+        for (const auto id : copied.value().object_ids) ids.emplace_back(id);
+        return Result<Response>::success(
+            {"object placement copied",
+             {{"object_ids", std::move(ids)},
+              {"scene_version", copied.value().scene_version},
+              {"source", arguments.at("source")},
+              {"target", arguments.at("target")}}});
+      };
+    } else if (canonical_name == "object enable" ||
+               canonical_name == "object disable") {
+      const bool visible = canonical_name == "object enable";
+      handler = [workspace, visible](const Arguments &arguments, TaskContext &) {
+        const auto pattern = arguments.find("pattern");
+        const auto selection = arguments.find("selection");
+        const bool has_pattern = pattern != arguments.end() && !pattern->second.empty();
+        const bool has_selection =
+            selection != arguments.end() && !selection->second.empty();
+        if (has_pattern == has_selection)
+          return Result<Response>::failure(operation::Error{
+              operation::ErrorCode::invalid_argument,
+              "give exactly one of --pattern and --selection",
+              "for example --pattern \"ubq*\" or --selection \"resn HOH\"", {}});
+        const auto changed =
+            has_pattern ? workspace->set_visibility_by_pattern(pattern->second, visible)
+                        : workspace->set_visibility_by_selection(selection->second, visible);
+        if (!changed.has_value()) return Result<Response>::failure(changed.error());
+        command::Value::Array objects;
+        for (const auto &info : changed.value())
+          objects.emplace_back(object_fields(info));
+        return Result<Response>::success(
+            {std::string{visible ? "enabled " : "disabled "} +
+                 std::to_string(changed.value().size()) + " object(s)",
+             {{"object_count", static_cast<std::uint64_t>(changed.value().size())},
+              {"objects", std::move(objects)},
+              {"visible", visible}}});
+      };
+    } else if (canonical_name == "object covering") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const auto covered = workspace->covering_objects(arguments.at("selection"));
+        if (!covered.has_value()) return Result<Response>::failure(covered.error());
+        command::Table table;
+        table.columns = {"object_id", "name", "atom_count"};
+        command::Value::Array ids;
+        for (const auto &item : covered.value()) {
+          table.rows.push_back({item.object_id, item.object_name,
+                                static_cast<std::uint64_t>(item.atom_count)});
+          ids.emplace_back(item.object_id);
+        }
+        return Result<Response>::success(
+            {"found " + std::to_string(covered.value().size()) + " covering object(s)",
+             {{"object_count", static_cast<std::uint64_t>(covered.value().size())},
+              {"object_ids", std::move(ids)},
+              {"selection", arguments.at("selection")}},
+             std::move(table)});
+      };
+    } else if (canonical_name == "object type") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const auto found = workspace->entity_type(arguments.at("name"));
+        if (!found.has_value()) return Result<Response>::failure(found.error());
+        return Result<Response>::success(
+            {arguments.at("name") + " is " + found.value().type,
+             {{"name", found.value().name},
+              {"object_id", found.value().object_id},
+              {"type", found.value().type}}});
       };
     } else if (canonical_name == "object count") {
       handler = [workspace](const Arguments &arguments, TaskContext &) {
@@ -4484,7 +4905,8 @@ command::Registry make_default_registry(
             arguments.at("path"), structure_format(arguments),
             arguments.at("frames") == "all",
             static_cast<unsigned int>(precision.value()), std::move(comment),
-            arguments.at("overwrite") == "true", context);
+            arguments.at("overwrite") == "true", context,
+            arguments.at("selection"));
         if (!saved.has_value()) {
           return Result<Response>::failure(saved.error());
         }
@@ -4509,21 +4931,170 @@ command::Registry make_default_registry(
               {"loss_item_count", lost_item_count},
               {"object_id", saved.value().object_id},
               {"path", saved.value().path.string()},
-              {"provider", provider_value(provider.value())}},
+              {"provider", provider_value(provider.value())},
+              {"selection", arguments.at("selection")}},
              std::move(table)});
+      };
+    } else if (canonical_name == "save text") {
+      handler = [workspace](const Arguments &arguments, TaskContext &context) {
+        // The structure writers target files, so the text is produced through a
+        // private temporary file that is always removed.
+        std::error_code error;
+        const auto directory = std::filesystem::temp_directory_path(error);
+        if (error)
+          return Result<Response>::failure(operation::Error{
+              operation::ErrorCode::resource_exhausted,
+              "no temporary directory is available for text export", {}});
+        static std::atomic<std::uint64_t> counter{0U};
+        const auto format = arguments.at("file-format");
+        const auto path =
+            directory / ("molshredder-text-" + std::to_string(counter.fetch_add(1U)) +
+                         "-" + std::to_string(reinterpret_cast<std::uintptr_t>(&counter)) +
+                         "." + format);
+        const auto precision = size_argument(arguments, "precision");
+        if (!precision.has_value())
+          return Result<Response>::failure(precision.error());
+        std::string comment;
+        if (const auto found = arguments.find("comment"); found != arguments.end())
+          comment = found->second;
+        const auto saved = workspace->save_active_structure(
+            path, structure_format(arguments), arguments.at("frames") == "all",
+            static_cast<unsigned int>(precision.value()), std::move(comment), true,
+            context, arguments.at("selection"));
+        struct Cleanup {
+          std::filesystem::path path;
+          ~Cleanup() {
+            std::error_code ignored;
+            std::filesystem::remove(path, ignored);
+          }
+        } cleanup{path};
+        if (!saved.has_value())
+          return Result<Response>::failure(saved.error());
+        constexpr std::uintmax_t kMaximumBytes = 64U * 1024U * 1024U;
+        std::error_code size_error;
+        const auto size = std::filesystem::file_size(path, size_error);
+        if (size_error || size > kMaximumBytes)
+          return Result<Response>::failure(operation::Error{
+              operation::ErrorCode::resource_exhausted,
+              "structure text is larger than 64 MiB",
+              "export a smaller selection or write a file with save", {}});
+        std::ifstream stream{path, std::ios::binary};
+        std::string content{std::istreambuf_iterator<char>{stream},
+                            std::istreambuf_iterator<char>{}};
+        command::Table table;
+        table.columns = {"channel", "count", "message"};
+        for (const auto &loss : saved.value().report.losses)
+          table.rows.push_back({loss.channel, loss.count, loss.message});
+        return Result<Response>::success(
+            {"structure text exported",
+             {{"atom_count",
+               static_cast<std::uint64_t>(saved.value().report.atom_count)},
+              {"byte_count", static_cast<std::uint64_t>(content.size())},
+              {"content", std::move(content)},
+              {"format", std::string{io::to_string(saved.value().report.format)}},
+              {"frame_count",
+               static_cast<std::uint64_t>(saved.value().report.frame_count)},
+              {"loss_channel_count",
+               static_cast<std::uint64_t>(saved.value().report.losses.size())},
+              {"object_id", saved.value().object_id},
+              {"selection", arguments.at("selection")}},
+             std::move(table)});
+      };
+    } else if (canonical_name == "load append") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        auto document = io::read_structure_file(arguments.at("path"), structure_format(arguments));
+        if (!document.has_value()) return Result<Response>::failure(document.error());
+        const auto appended = workspace->append_states(arguments.at("object"), document.value());
+        if (!appended.has_value()) return Result<Response>::failure(appended.error());
+        const auto &value = appended.value();
+        return Result<Response>::success(
+            {"appended " + std::to_string(value.appended_state_count) + " state(s) to " +
+                 value.object_name,
+             {{"appended_state_count", static_cast<std::uint64_t>(value.appended_state_count)},
+              {"object_id", value.object_id},
+              {"object_name", value.object_name},
+              {"previous_state_count", static_cast<std::uint64_t>(value.previous_state_count)},
+              {"state_count", static_cast<std::uint64_t>(value.state_count)}}});
+      };
+    } else if (canonical_name == "load text") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        constexpr std::size_t kMaximumBytes = 64U * 1024U * 1024U;
+        const auto &content = arguments.at("content");
+        if (content.empty() || content.size() > kMaximumBytes)
+          return Result<Response>::failure(operation::Error{
+              operation::ErrorCode::invalid_argument,
+              "structure text must be between 1 byte and 64 MiB", {}});
+        io::StructureReadOptions options;
+        options.format = structure_format(arguments);
+        options.source_name = "<text>";
+        auto document = io::read_structure(content, options);
+        if (!document.has_value())
+          return Result<Response>::failure(document.error());
+        std::optional<std::string> name;
+        if (const auto found = arguments.find("name"); found != arguments.end())
+          name = found->second;
+        const auto loaded = workspace->load_structure_document(
+            std::move(document.value()), "<text>", std::move(name));
+        if (!loaded.has_value())
+          return Result<Response>::failure(loaded.error());
+        command::Value::Array object_ids;
+        for (const auto &object : loaded.value().objects)
+          object_ids.emplace_back(object.object_id);
+        return Result<Response>::success(
+            {"loaded structure text; active object " + loaded.value().object_name,
+             {{"atom_count", static_cast<std::uint64_t>(loaded.value().atom_count)},
+              {"format", std::string{io::to_string(loaded.value().format)}},
+              {"frame_count", static_cast<std::uint64_t>(loaded.value().frame_count)},
+              {"object_id", loaded.value().object_id},
+              {"object_ids", std::move(object_ids)},
+              {"object_name", loaded.value().object_name},
+              {"structure_count",
+               static_cast<std::uint64_t>(loaded.value().objects.size())}}});
+      };
+    } else if (canonical_name == "select list") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        // Comma-separated items become a selection value list; ranges such as
+        // 5-9 or 5:9 keep their numeric meaning.
+        std::string values = arguments.at("values");
+        for (auto &character : values)
+          if (character == ',') character = '+';
+        if (values.empty() || values.front() == '+' || values.back() == '+' ||
+            values.find("++") != std::string::npos)
+          return Result<Response>::failure(operation::Error{
+              operation::ErrorCode::invalid_argument,
+              "selection list has an empty item",
+              "provide comma-separated identifiers such as 1,5,9-12",
+              {}});
+        const auto expression = arguments.at("by") + " " + values;
+        const auto error = workspace->set_named_selection(
+            arguments.at("name"), expression, false,
+            arguments.at("merge") == "true", arguments.at("state"));
+        if (error.has_value())
+          return Result<Response>::failure(error.value());
+        return Result<Response>::success(
+            {"selection " + arguments.at("name") + " defined from list",
+             {{"by", arguments.at("by")},
+              {"expression", expression},
+              {"merge", arguments.at("merge") == "true"},
+              {"name", arguments.at("name")},
+              {"state", arguments.at("state")}}});
       };
     } else if (canonical_name == "select") {
       handler = [workspace](const Arguments &arguments, TaskContext &) {
         const auto error = workspace->set_named_selection(
             arguments.at("name"), arguments.at("expression"),
-            arguments.at("update") == "true");
+            arguments.at("update") == "true", arguments.at("merge") == "true",
+            arguments.at("state"));
         if (error.has_value())
           return Result<Response>::failure(error.value());
         return Result<Response>::success(
-            {"selection " + arguments.at("name") + " defined",
+            {"selection " + arguments.at("name") +
+                 (arguments.at("merge") == "true" ? " merged" : " defined"),
              {{"dynamic", arguments.at("update") == "true"},
               {"expression", arguments.at("expression")},
-              {"name", arguments.at("name")}}});
+              {"merge", arguments.at("merge") == "true"},
+              {"name", arguments.at("name")},
+              {"state", arguments.at("state")}}});
       };
     } else if (canonical_name == "setting list") {
       handler = [workspace](const Arguments &, TaskContext &) {
@@ -4815,21 +5386,40 @@ command::Registry make_default_registry(
               {"representation_count", value.representation_count},
               {"type", value.type}}});
       };
-    } else if (canonical_name == "image save") {
-      handler = [workspace](const Arguments &arguments, TaskContext &context) {
+    } else if (canonical_name == "image save" ||
+               canonical_name == "movie export") {
+      const bool movie_export = canonical_name == "movie export";
+      handler = [workspace, movie_export](const Arguments &arguments,
+                                          TaskContext &context) {
         if (context.cancellation.is_cancelled())
           return Result<Response>::failure(operation::Error{
-              operation::ErrorCode::cancelled, "image save cancelled", {}});
+              operation::ErrorCode::cancelled, "image export cancelled", {}});
         application::ImageSaveRequest request;
-        request.path = arguments.at("path");
-        const auto width = size_argument(arguments, "width");
-        const auto height = size_argument(arguments, "height");
-        if (!width.has_value())
-          return Result<Response>::failure(width.error());
-        if (!height.has_value())
-          return Result<Response>::failure(height.error());
-        request.width = width.value();
-        request.height = height.value();
+        if (!movie_export) request.path = arguments.at("path");
+        request.format = arguments.at("image-format");
+        request.units = arguments.at("units");
+        request.ray = arguments.at("ray") == "true";
+        const auto width = number_argument(arguments, "width");
+        const auto height = number_argument(arguments, "height");
+        if (!width.has_value()) return Result<Response>::failure(width.error());
+        if (!height.has_value()) return Result<Response>::failure(height.error());
+        if (width.value() < 0.0 || height.value() < 0.0)
+          return Result<Response>::failure(operation::Error{
+              operation::ErrorCode::invalid_argument,
+              "image dimensions must not be negative", {}});
+        if (request.units == "pixels") {
+          if (width.value() != std::floor(width.value()) ||
+              height.value() != std::floor(height.value()))
+            return Result<Response>::failure(operation::Error{
+                operation::ErrorCode::invalid_argument,
+                "pixel dimensions must be whole numbers",
+                "use --units inches|centimeters|millimeters for fractions", {}});
+          request.width = static_cast<std::size_t>(width.value());
+          request.height = static_cast<std::size_t>(height.value());
+        } else {
+          if (width.value() > 0.0) request.width_value = width.value();
+          if (height.value() > 0.0) request.height_value = height.value();
+        }
         if (const auto dpi = arguments.find("dpi");
             dpi != arguments.end() && !dpi->second.empty()) {
           const auto parsed = number_argument(arguments, "dpi");
@@ -4837,7 +5427,41 @@ command::Registry make_default_registry(
             return Result<Response>::failure(parsed.error());
           request.dpi = parsed.value();
         }
-        request.ray = arguments.at("ray") == "true";
+        if (movie_export) {
+          application::MovieExportRequest export_request;
+          export_request.prefix = arguments.at("prefix");
+          export_request.overwrite = arguments.at("overwrite") == "true";
+          export_request.image = request;
+          for (const auto &[name, target] :
+               {std::pair<const char *, std::optional<std::size_t> *>{
+                    "first", &export_request.first},
+                {"last", &export_request.last}}) {
+            const auto found = arguments.find(name);
+            if (found == arguments.end() || found->second.empty()) continue;
+            const auto parsed = size_argument(arguments, name);
+            if (!parsed.has_value())
+              return Result<Response>::failure(parsed.error());
+            *target = parsed.value();
+          }
+          const auto exported = workspace->export_movie_frames(export_request);
+          if (!exported.has_value())
+            return Result<Response>::failure(exported.error());
+          const auto &value = exported.value();
+          command::Value::Array warnings;
+          for (const auto &warning : value.warnings) warnings.emplace_back(warning);
+          return Result<Response>::success(
+              {"movie frames exported",
+               {{"first_frame", static_cast<std::uint64_t>(value.first_frame)},
+                {"format", value.format},
+                {"frame_count", static_cast<std::uint64_t>(value.frame_count)},
+                {"height", static_cast<std::uint64_t>(value.height)},
+                {"last_frame", static_cast<std::uint64_t>(value.last_frame)},
+                {"first_path", value.paths.front().string()},
+                {"last_path", value.paths.back().string()},
+                {"total_bytes", static_cast<std::uint64_t>(value.total_bytes)},
+                {"warnings", std::move(warnings)},
+                {"width", static_cast<std::uint64_t>(value.width)}}});
+        }
         const auto saved = workspace->save_image(request);
         if (!saved.has_value())
           return Result<Response>::failure(saved.error());
@@ -4848,6 +5472,9 @@ command::Registry make_default_registry(
         return Result<Response>::success(
             {"image saved",
              {{"bytes", static_cast<std::uint64_t>(value.bytes)},
+              {"dpi", value.dpi.has_value() ? command::Value{*value.dpi}
+                                            : command::Value{nullptr}},
+              {"format", value.format},
               {"height", static_cast<std::uint64_t>(value.height)},
               {"opaque_background", value.opaque_background},
               {"path", value.path.string()},
@@ -5142,6 +5769,164 @@ command::Registry make_default_registry(
               {"visible_membership_count",
                static_cast<std::uint64_t>(
                    changed.value().visible_atom_count)}}});
+      };
+    } else if (canonical_name == "measure fit" || canonical_name == "object align") {
+      const bool apply = canonical_name == "object align";
+      handler = [workspace, apply](const Arguments &arguments, TaskContext &) {
+        application::AlignmentRequest request;
+        request.mobile_object = arguments.at("mobile-object");
+        request.target_object = arguments.at("target-object");
+        request.mobile_selection = arguments.at("mobile-selection");
+        request.target_selection = arguments.at("target-selection");
+        request.match = arguments.at("match");
+        request.uniform_weights = arguments.at("weight") == "uniform";
+        request.apply = apply;
+        if (const auto found = arguments.find("pairs");
+            found != arguments.end() && !found->second.empty()) {
+          // "m:t,m:t" 1-based atom index pairs.
+          std::string text = found->second + ",";
+          std::string item;
+          for (const auto character : text) {
+            if (character != ',' && std::isspace(static_cast<unsigned char>(character)) == 0) {
+              item.push_back(character);
+              continue;
+            }
+            if (item.empty()) continue;
+            const auto colon = item.find(':');
+            std::size_t from{}, to{};
+            const auto left = colon == std::string::npos ? std::errc::invalid_argument
+                                                          : molshredder::core::from_chars(
+                                                                item.data(), item.data() + colon, from).ec;
+            const auto right = colon == std::string::npos ? std::errc::invalid_argument
+                                                           : molshredder::core::from_chars(
+                                                                 item.data() + colon + 1U,
+                                                                 item.data() + item.size(), to).ec;
+            if (left != std::errc{} || right != std::errc{})
+              return Result<Response>::failure(operation::Error{
+                  operation::ErrorCode::invalid_argument,
+                  "invalid atom pair '" + item + "'",
+                  "use --pairs 1:4,2:5,3:6 with 1-based atom indices", {}});
+            request.pairs.emplace_back(from, to);
+            item.clear();
+          }
+        }
+        const auto aligned = workspace->align_objects(request);
+        if (!aligned.has_value()) return Result<Response>::failure(aligned.error());
+        const auto precision =
+            static_cast<unsigned int>(std::stoul(arguments.at("precision")));
+        const auto &value = aligned.value();
+        command::Value::Array matrix;
+        for (const auto entry : value.matrix) matrix.emplace_back(rounded(entry, precision));
+        command::Value::Object fields{
+            {"applied", value.applied},
+            {"matrix", std::move(matrix)},
+            {"mobile_object_id", value.mobile_object_id},
+            {"paired_atom_count", static_cast<std::uint64_t>(value.paired_atom_count)},
+            {"precision", precision},
+            {"rmsd_after", rounded(value.rmsd_after, precision)},
+            {"rmsd_before", rounded(value.rmsd_before, precision)},
+            {"target_object_id", value.target_object_id},
+            {"unit", std::string{length_unit_name(value.coordinate_unit)}}};
+        if (value.applied) fields.emplace("scene_version", value.scene_version);
+        return Result<Response>::success(
+            {apply ? "object aligned" : "fit calculated", std::move(fields)});
+      };
+    } else if (canonical_name == "object atoms") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        std::vector<std::string> properties;
+        std::string current;
+        for (const auto character : arguments.at("properties") + ",") {
+          if (character == ',' || std::isspace(static_cast<unsigned char>(character)) != 0) {
+            if (!current.empty()) properties.push_back(std::move(current));
+            current.clear();
+          } else {
+            current.push_back(character);
+          }
+        }
+        const auto limit = size_argument(arguments, "limit");
+        if (!limit.has_value()) return Result<Response>::failure(limit.error());
+        const auto listing = workspace->list_atoms(arguments.at("selection"), properties,
+                                                   limit.value());
+        if (!listing.has_value()) return Result<Response>::failure(listing.error());
+        command::Table table;
+        table.columns = listing.value().columns;
+        for (const auto &row : listing.value().rows) table.rows.push_back(row);
+        return Result<Response>::success(
+            {"listed " + std::to_string(listing.value().rows.size()) + " atom(s)",
+             {{"returned_count", static_cast<std::uint64_t>(listing.value().rows.size())},
+              {"selected_atom_count",
+               static_cast<std::uint64_t>(listing.value().selected_atom_count)},
+              {"selection", arguments.at("selection")},
+              {"truncated", listing.value().truncated}},
+             std::move(table)});
+      };
+    } else if (canonical_name == "object chains") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const auto chains = workspace->list_chains(arguments.at("selection"));
+        if (!chains.has_value()) return Result<Response>::failure(chains.error());
+        command::Value::Array values;
+        for (const auto &chain : chains.value()) values.emplace_back(chain);
+        return Result<Response>::success(
+            {"found " + std::to_string(chains.value().size()) + " chain(s)",
+             {{"chain_count", static_cast<std::uint64_t>(chains.value().size())},
+              {"chains", std::move(values)},
+              {"selection", arguments.at("selection")}}});
+      };
+    } else if (canonical_name == "analyze charge") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const auto summed = workspace->sum_charge(arguments.at("selection"), arguments.at("kind"));
+        if (!summed.has_value()) return Result<Response>::failure(summed.error());
+        const auto precision =
+            static_cast<unsigned int>(std::stoul(arguments.at("precision")));
+        return Result<Response>::success(
+            {"charge summed",
+             {{"atom_count", static_cast<std::uint64_t>(summed.value().atom_count)},
+              {"charge", rounded(summed.value().sum, precision)},
+              {"kind", summed.value().kind},
+              {"precision", precision},
+              {"selection", arguments.at("selection")},
+              {"source", summed.value().source},
+              {"unit", std::string{"elementary charge"}}}});
+      };
+    } else if (canonical_name == "analyze mass") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const auto summed = workspace->sum_mass(arguments.at("selection"));
+        if (!summed.has_value()) return Result<Response>::failure(summed.error());
+        const auto precision =
+            static_cast<unsigned int>(std::stoul(arguments.at("precision")));
+        return Result<Response>::success(
+            {"mass summed",
+             {{"atom_count", static_cast<std::uint64_t>(summed.value().atom_count)},
+              {"mass", rounded(summed.value().mass, precision)},
+              {"mass_estimated", summed.value().estimated},
+              {"mass_source", summed.value().source},
+              {"precision", precision},
+              {"selection", arguments.at("selection")},
+              {"unit", summed.value().unit}}});
+      };
+    } else if (canonical_name == "analyze phi-psi") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const auto angles = workspace->backbone_angles(arguments.at("selection"));
+        if (!angles.has_value()) return Result<Response>::failure(angles.error());
+        const auto precision =
+            static_cast<unsigned int>(std::stoul(arguments.at("precision")));
+        command::Table table;
+        table.columns = {"chain", "residue_name", "residue_number", "insertion_code",
+                         "phi", "psi"};
+        for (const auto &item : angles.value())
+          table.rows.push_back(
+              {item.chain, item.residue_name, item.sequence_number, item.insertion_code,
+               item.phi_degrees.has_value() ? command::Value{rounded(*item.phi_degrees, precision)}
+                                            : command::Value{nullptr},
+               item.psi_degrees.has_value() ? command::Value{rounded(*item.psi_degrees, precision)}
+                                            : command::Value{nullptr}});
+        return Result<Response>::success(
+            {"backbone angles calculated",
+             {{"precision", precision},
+              {"residue_count", static_cast<std::uint64_t>(angles.value().size())},
+              {"selection", arguments.at("selection")},
+              {"unit", std::string{"degree"}}},
+             std::move(table)});
       };
     } else if (canonical_name == "analyze gyration" ||
                canonical_name == "analyze inertia") {

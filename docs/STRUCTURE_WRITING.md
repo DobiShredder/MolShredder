@@ -18,6 +18,12 @@ molshredder save --path OUTPUT.pdb|OUTPUT.cif|OUTPUT.mol|OUTPUT.sdf|OUTPUT.mol2|
 명시한 provider가 없거나 해당 write 방향을 지원하지 않으면 다른 구현으로 fallback하지 않는다. Save result에는
 선택된 provider의 version/origin/trust/license provenance가 포함된다.
 
+`--selection EXPR`(기본 `all`)은 선택한 atom만 쓴다. 새 topology는 선택 atom의 stable ID와 선택 atom 사이의 bond만 가지며
+모든 state의 좌표 column을 같이 잘라 쓴다. Object 자체는 바뀌지 않고, 빈 selection은 파일을 만들지 않는 오류다.
+`save text`는 같은 writer와 loss report를 쓰되 파일 대신 `content` 문자열(최대 64 MiB)을 결과로 돌려준다(내부적으로는 즉시 지워지는
+임시 파일을 거친다). `load text`는 문자열을 reader에 그대로 넘겨 새 object를 만들며 형식을 생략하면 내용에서 판별한다. 형식이 맞지 않거나
+내용이 비어 있으면 object를 만들지 않는다. CCP4와 MAP 볼륨은 `volume save`가 쓴다.
+
 One-shot CLI process는 Workspace를 공유하지 않으므로 `load` 뒤 `save`하는 workflow는 console이나 Python에서
 실행한다.
 

@@ -66,6 +66,46 @@ property를 match하고 `enabled`, `visible`/`v.`/`v;`는 boolean property를 �
 `masked`/`msk.`, `protected`, `restrained`/`rst.`도 boolean status property다. Property가 없으면
 해당 unary status membership은 empty다.
 
+### Slash macro
+
+PyMOL slash macro는 selection이 올 수 있는 어디에서나 쓸 수 있고 `object`, `segment`, `chain`, `resi`, `name`의
+다섯 field를 `/`로 구분한 conjunction으로 확장된다. 비어 있는 field는 제한하지 않는다.
+
+- 절대형(앞에 `/`): field가 왼쪽부터 대응한다. `/ubq//A/10/CA`는 object `ubq`, chain `A`, resi `10`, name `CA`이고
+  `/ubq////CA`는 object와 name만 제한한다.
+- 상대형: field가 오른쪽(name)부터 대응한다. `A/10/CA`는 chain·resi·name, `10/CA`는 resi·name이다. 두 field
+  `A/10`은 resi `A`와 name `10`이므로 chain과 resi를 함께 지정하려면 `A/10/`처럼 끝에 `/`를 둔다.
+- field 값은 일반 selection과 같은 list(`10+12`), range(`1-10`), wildcard(`C*`)를 쓰고 insertion code는 residue id에
+  포함된다(`10A`). Field가 다섯 개를 넘거나 값이 하나도 없으면 오류다.
+- backtick 한정자: object field `obj`5`는 object와 atom index, residue field `ALA`10`는 residue 이름과 번호, name field
+  `CA`A`는 atom 이름과 altloc을 함께 지정한다. 다른 field의 backtick, 값 없는 backtick, backtick 두 개는 오류다.
+- 숫자 field 이름 뒤의 `/`(`b/2 > 5`, `x /2`)와 괄호 뒤의 `/`는 계속 나눗셈이다. 숫자로 시작하는 상대형은
+  문자가 하나라도 있어야 macro로 읽는다(`10/CA`는 macro, `10/2`는 나눗셈).
+
+### VMD residue class와 numeric field
+
+VMD 공개 User's Guide의 정의를 따르는 residue class keyword를 지원한다(residue 이름 목록 기준, 대문자 이름):
+`acidic`(ASP GLU), `basic`(ARG HIS LYS), `neutral`(VAL PHE GLN TYR HIS CYS), `charged`(basic or acidic),
+`aliphatic`(ALA GLY ILE LEU VAL), `aromatic`(HIS PHE TRP TYR), `cyclic`(HIS PHE PRO TRP TYR),
+`acyclic`(polymer.protein and not cyclic), `small`(ALA GLY SER), `medium`(VAL THR ASP ASN PRO CYS),
+`large`(polymer.protein and not (small or medium)), `buried`(ALA LEU VAL ILE PHE CYS MET TRP),
+`surface`(polymer.protein and not buried), `polar`(polymer.protein and not ALA LEU VAL ILE PRO PHE MET TRP),
+`at`, `cg`, `purine`, `pyrimidine`(핵산 residue 이름), `alpha`(`ss H`), `amino`(N·CA·C·O atom을 모두 가진 residue).
+이 keyword들은 PyMOL의 같은 이름과 의미가 다를 수 있으므로 VMD 정의임을 문서화한다. 단백질 판별은 이 문법의
+`polymer.protein`(PyMOL 정의)을 쓴다.
+
+Numeric field로 `atomicnumber`, `numbonds`(topology bond 수), `radius`(van der Waals, Bondi 표 또는 PQR radius property),
+`mass`(topology `mass` property; 없으면 오류이며 element 추정 질량은 `analyze center --mode com`이 제공)를 쓸 수 있다.
+`bonded`는 bond가 하나라도 있는 atom이다.
+
+### Numeric 함수와 word 비교
+
+Numeric 식은 한 인자 함수를 쓸 수 있다: `abs`, `acos`, `asin`, `atan`, `ceil`, `cos`, `cosh`, `exp`, `floor`, `log`
+(자연로그), `log10`, `sin`, `sinh`, `sqr`(x*x), `sqrt`, `tan`, `tanh`. 각도는 radian이다. 함수는 field와 사칙연산을 인자로
+받는다(`abs(b - 25) < 6`, `sqrt(sqr(b)) = b`). 함수가 정의역을 벗어나거나 overflow하면(`sqrt(partial_charge)`가 음수
+atom에 적용되는 경우 등) 해당 atom을 조용히 제외하지 않고 selection 평가 전체를 오류로 처리한다(0으로 나누기와 같은 정책).
+비교 연산자는 기호(`= != < <= > >=`) 외에 PyMOL word 형태 `eq ne lt le gt ge`도 받는다(`b ge 30`, `(b + 10) ge 40`).
+
 ## Expansion과 spatial relation
 
 Prefix `byresidue`, `bychain`, `bysegment`, `byobject`, `bymolecule`/`byfragment`, `bycalpha`,
@@ -157,6 +197,16 @@ letter/digit/`_-.`를 사용할 수 있으며 `all`, `none`은 reserved다. List
   적용하는 것은 거부한다.
 - Dynamic selection은 호출 시 expression과 dependency를 다시 평가한다.
 - 참조 중인 entry는 dependent selection을 교체하거나 삭제하기 전에는 삭제할 수 없다.
+
+`select --merge true`는 같은 update mode의 기존 selection에 새 membership을 합집합으로 더한다(PyMOL `merge=1`).
+이름이 없으면 일반 생성과 같고, update mode가 다르거나 새 expression이 실패하면 기존 entry를 그대로 둔다.
+Static merge는 얼려 둔 기존 membership을 보존하고, dynamic merge는 `(기존) or (새)` expression이 된다.
+`select`의 `--name`을 생략하면 PyMOL처럼 `sele`가 된다. `select list --by index|id|rank --values 1,5,9-12`는 쉼표로 구분한
+atom 식별자 목록(범위 포함)을 static selection으로 만들며 `--merge`와 `--state`를 같은 규칙으로 받는다. 빈 항목이나 알 수 없는
+식별자 종류는 오류다. 문자 범위는 `chain A-C`와 `chain A:C`가 같고, `name C\*`처럼 이스케이프한 `*`는 literal이다.
+`select --state N|all`은 static selection의 state-sensitive 연산(`x/y/z`, 공간 관계, frame property)을 현재 frame 대신
+1-based state N에서, 또는 모든 state의 합집합으로 평가한다. Dynamic selection은 항상 현재 state를 따르므로
+`--state`와 함께 쓸 수 없고, merge와도 함께 쓸 수 없다.
 
 Dynamic entry는 `EvaluationContext`의 current immutable coordinate frame에서 `x/y/z`와 frame atom
 property를 매번 다시 평가한다. Static entry는 정의 당시 frame에서 계산한 mask를 보존하므로 seek 뒤에도

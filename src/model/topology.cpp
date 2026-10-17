@@ -5,6 +5,7 @@
 #include <set>
 #include <tuple>
 #include <type_traits>
+#include <unordered_map>
 #include <utility>
 
 namespace molshredder::model {
@@ -140,8 +141,14 @@ std::optional<AtomId> Topology::atom_id(AtomIndex index) const noexcept {
 }
 
 std::optional<AtomIndex> Topology::atom_index(AtomId id) const noexcept {
-  const auto found = std::find(atom_ids_.begin(), atom_ids_.end(), id);
-  return found == atom_ids_.end()
+  const auto found =
+      atom_ids_sorted_
+          ? std::lower_bound(atom_ids_.begin(), atom_ids_.end(), id,
+                             [](AtomId left, AtomId right) {
+                               return left.value < right.value;
+                             })
+          : std::find(atom_ids_.begin(), atom_ids_.end(), id);
+  return found == atom_ids_.end() || !(*found == id)
              ? std::nullopt
              : std::optional<AtomIndex>{AtomIndex{static_cast<std::size_t>(
                    found - atom_ids_.begin())}};
@@ -153,8 +160,14 @@ std::optional<BondId> Topology::bond_id(std::size_t index) const noexcept {
 }
 
 std::optional<std::size_t> Topology::bond_index(BondId id) const noexcept {
-  const auto found = std::find(bond_ids_.begin(), bond_ids_.end(), id);
-  return found == bond_ids_.end()
+  const auto found =
+      bond_ids_sorted_
+          ? std::lower_bound(bond_ids_.begin(), bond_ids_.end(), id,
+                             [](BondId left, BondId right) {
+                               return left.value < right.value;
+                             })
+          : std::find(bond_ids_.begin(), bond_ids_.end(), id);
+  return found == bond_ids_.end() || !(*found == id)
              ? std::nullopt
              : std::optional<std::size_t>{static_cast<std::size_t>(
                    found - bond_ids_.begin())};
@@ -264,16 +277,19 @@ TopologyBuilder::retain_atoms(std::span<const AtomId> ordered_atom_ids) {
     return invalid("cannot remap atoms while property row counts are stale");
   std::vector<std::size_t> source_indices;
   source_indices.reserve(ordered_atom_ids.size());
+  std::unordered_map<std::uint64_t, std::size_t> index_of_id;
+  index_of_id.reserve(atom_ids_.size());
+  for (std::size_t index = 0; index < atom_ids_.size(); ++index)
+    index_of_id.emplace(atom_ids_[index].value, index);
   std::set<AtomId> unique;
   for (const auto id : ordered_atom_ids) {
     if (id.value == 0U || !unique.insert(id).second)
       return invalid("retained atom IDs must be non-zero and unique");
-    const auto found = std::find(atom_ids_.begin(), atom_ids_.end(), id);
-    if (found == atom_ids_.end())
+    const auto found = index_of_id.find(id.value);
+    if (found == index_of_id.end())
       return invalid("retained atom ID does not exist: " +
                      std::to_string(id.value));
-    source_indices.push_back(
-        static_cast<std::size_t>(found - atom_ids_.begin()));
+    source_indices.push_back(found->second);
   }
   std::vector<std::optional<AtomIndex>> old_to_new(atoms_.size());
   for (std::size_t target = 0; target < source_indices.size(); ++target)
@@ -606,6 +622,14 @@ operation::Result<std::shared_ptr<const Topology>> TopologyBuilder::build()
   topology->residues_ = residues_;
   topology->bonds_ = bonds_;
   topology->bond_ids_ = bond_ids_;
+  const auto strictly_increasing = [](const auto &ids) {
+    return std::adjacent_find(ids.begin(), ids.end(),
+                              [](const auto &left, const auto &right) {
+                                return left.value >= right.value;
+                              }) == ids.end();
+  };
+  topology->atom_ids_sorted_ = strictly_increasing(topology->atom_ids_);
+  topology->bond_ids_sorted_ = strictly_increasing(topology->bond_ids_);
   topology->angles_ = angles_;
   topology->dihedrals_ = dihedrals_;
   topology->impropers_ = impropers_;
@@ -620,21 +644,49 @@ operation::Result<std::shared_ptr<const Topology>> TopologyBuilder::build()
 }
 
 TopologyRemap remap_topology(const Topology& source, const Topology& target) {
+  // Identity lookups go through hash maps: Topology::atom_index/bond_index are
+  // linear scans, which made remapping quadratic in the atom count.
+  const auto index_by_id = [](const auto& ids) {
+    std::unordered_map<std::uint64_t, std::size_t> map;
+    map.reserve(ids.size());
+    for (std::size_t index = 0; index < ids.size(); ++index)
+      map.emplace(ids[index].value, index);
+    return map;
+  };
+  const auto source_atom_index = index_by_id(source.atom_ids());
+  const auto target_atom_index = index_by_id(target.atom_ids());
+  const auto source_bond_index = index_by_id(source.bond_ids());
+  const auto target_bond_index = index_by_id(target.bond_ids());
+  const auto atom_lookup =
+      [](const std::unordered_map<std::uint64_t, std::size_t>& map,
+         std::uint64_t id) -> std::optional<AtomIndex> {
+    const auto found = map.find(id);
+    return found == map.end() ? std::nullopt
+                              : std::optional<AtomIndex>{AtomIndex{found->second}};
+  };
+  const auto bond_lookup =
+      [](const std::unordered_map<std::uint64_t, std::size_t>& map,
+         std::uint64_t id) -> std::optional<std::size_t> {
+    const auto found = map.find(id);
+    return found == map.end() ? std::nullopt
+                              : std::optional<std::size_t>{found->second};
+  };
+
   TopologyRemap result;
   result.source_version = source.version();
   result.target_version = target.version();
   result.source_atoms.reserve(source.atom_count());
   for (const auto id : source.atom_ids())
-    result.source_atoms.push_back(target.atom_index(id));
+    result.source_atoms.push_back(atom_lookup(target_atom_index, id.value));
   result.source_bonds.reserve(source.bonds().size());
   for (const auto id : source.bond_ids())
-    result.source_bonds.push_back(target.bond_index(id));
+    result.source_bonds.push_back(bond_lookup(target_bond_index, id.value));
   result.target_atoms.reserve(target.atom_count());
   for (const auto id : target.atom_ids())
-    result.target_atoms.push_back(source.atom_index(id));
+    result.target_atoms.push_back(atom_lookup(source_atom_index, id.value));
   result.target_bonds.reserve(target.bonds().size());
   for (const auto id : target.bond_ids())
-    result.target_bonds.push_back(source.bond_index(id));
+    result.target_bonds.push_back(bond_lookup(source_bond_index, id.value));
   return result;
 }
 
