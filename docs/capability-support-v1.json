@@ -71,16 +71,16 @@
       "acceptance_level": "specified",
       "capability_id": "analysis.alignment.sequence_refined",
       "domain": "analysis",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 2,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Sequence-guided refined alignment"
     },
     {
@@ -363,16 +363,16 @@
       "acceptance_level": "specified",
       "capability_id": "analysis.measurement_object.distance.all_pairs",
       "domain": "analysis",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "All interatomic distances"
     },
     {
@@ -2249,96 +2249,96 @@
       "acceptance_level": "specified",
       "capability_id": "volume.map.combine",
       "domain": "data",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Combine maps"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "volume.map.combine.average",
       "domain": "data",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Map combine average"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "volume.map.combine.difference",
       "domain": "data",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Map combine difference"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "volume.map.combine.maximum",
       "domain": "data",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Map combine maximum"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "volume.map.combine.minimum",
       "domain": "data",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Map combine minimum"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "volume.map.combine.sum",
       "domain": "data",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Map combine sum"
     },
     {
@@ -9597,64 +9597,64 @@
       "acceptance_level": "specified",
       "capability_id": "export.movie.frame_sequence.dimensions",
       "domain": "rendering",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Frame-sequence dimensions"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "export.movie.frame_sequence.format",
       "domain": "rendering",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Frame-sequence image format"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "export.movie.frame_sequence.format.mode.png",
       "domain": "rendering",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Frame-sequence format png"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "export.movie.frame_sequence.format.mode.ppm",
       "domain": "rendering",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Frame-sequence format ppm"
     },
     {
@@ -9741,16 +9741,16 @@
       "acceptance_level": "specified",
       "capability_id": "export.movie.frame_sequence.render_mode.mode.draw",
       "domain": "rendering",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Frame-sequence render mode draw"
     },
     {
@@ -9773,48 +9773,48 @@
       "acceptance_level": "specified",
       "capability_id": "export.movie.frame_sequence.render_mode.mode.ray",
       "domain": "rendering",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Frame-sequence render mode ray"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "export.movie.video",
       "domain": "rendering",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Encode movie video"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "export.movie.video.encoder",
       "domain": "rendering",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Movie encoder selection"
     },
     {
@@ -9837,16 +9837,16 @@
       "acceptance_level": "specified",
       "capability_id": "export.movie.video.encoder.mode.ffmpeg",
       "domain": "rendering",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Movie encoder ffmpeg"
     },
     {
@@ -9869,160 +9869,160 @@
       "acceptance_level": "specified",
       "capability_id": "export.movie.video.even_dimensions",
       "domain": "rendering",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Movie even-dimension normalization"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "export.movie.video.format",
       "domain": "rendering",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Movie output format"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "export.movie.video.format.mode.gif",
       "domain": "rendering",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Movie format gif"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "export.movie.video.format.mode.mov",
       "domain": "rendering",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Movie format mov"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "export.movie.video.format.mode.mp4",
       "domain": "rendering",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Movie format mp4"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "export.movie.video.format.mode.mpeg1",
       "domain": "rendering",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Movie format mpeg1"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "export.movie.video.format.mode.webm",
       "domain": "rendering",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Movie format webm"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "export.movie.video.frame_rate",
       "domain": "rendering",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Movie frame rate"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "export.movie.video.quality",
       "domain": "rendering",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Movie encoding quality"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "export.movie.video.temp_frames",
       "domain": "rendering",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Movie temporary-frame lifecycle"
     },
     {
@@ -28876,7 +28876,7 @@
       "capability_id": "trajectory.movie.frame_command.append",
       "domain": "trajectory",
       "evidence_count": 0,
-      "implementation_status": "deferred",
+      "implementation_status": "excluded",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -28892,7 +28892,7 @@
       "capability_id": "trajectory.movie.frame_command.dump",
       "domain": "trajectory",
       "evidence_count": 0,
-      "implementation_status": "deferred",
+      "implementation_status": "excluded",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -28908,7 +28908,7 @@
       "capability_id": "trajectory.movie.frame_command.manage",
       "domain": "trajectory",
       "evidence_count": 0,
-      "implementation_status": "deferred",
+      "implementation_status": "excluded",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -28924,7 +28924,7 @@
       "capability_id": "trajectory.movie.frame_command.replace",
       "domain": "trajectory",
       "evidence_count": 0,
-      "implementation_status": "deferred",
+      "implementation_status": "excluded",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -28940,7 +28940,7 @@
       "capability_id": "trajectory.movie.frame_command.security_lock",
       "domain": "trajectory",
       "evidence_count": 0,
-      "implementation_status": "deferred",
+      "implementation_status": "excluded",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -29597,28 +29597,28 @@
       "acceptance_level": "specified",
       "capability_id": "trajectory.movie.state_mapping.append",
       "domain": "trajectory",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Append state mapping"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "trajectory.movie.state_mapping.manage",
       "domain": "trajectory",
-      "evidence_count": 0,
+      "evidence_count": 1,
       "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
@@ -29629,48 +29629,48 @@
       "acceptance_level": "specified",
       "capability_id": "trajectory.movie.state_mapping.range_syntax",
       "domain": "trajectory",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "State-range mapping syntax"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "trajectory.movie.state_mapping.repeat_syntax",
       "domain": "trajectory",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Repeat-state mapping syntax"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "trajectory.movie.state_mapping.replace",
       "domain": "trajectory",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Replace state mapping"
     },
     {
@@ -31462,10 +31462,10 @@
     "capability_count": 1942,
     "domain_counts": {
       "analysis": {
-        "in_progress": 29,
+        "in_progress": 31,
         "planned": 0,
         "total": 85,
-        "unavailable": 56,
+        "unavailable": 54,
         "verified": 0
       },
       "automation": {
@@ -31476,10 +31476,10 @@
         "verified": 2
       },
       "data": {
-        "in_progress": 0,
+        "in_progress": 6,
         "planned": 0,
         "total": 18,
-        "unavailable": 18,
+        "unavailable": 12,
         "verified": 0
       },
       "editing": {
@@ -31525,10 +31525,10 @@
         "verified": 0
       },
       "rendering": {
-        "in_progress": 54,
+        "in_progress": 73,
         "planned": 0,
         "total": 290,
-        "unavailable": 233,
+        "unavailable": 214,
         "verified": 3
       },
       "representation": {
@@ -31553,10 +31553,10 @@
         "verified": 0
       },
       "trajectory": {
-        "in_progress": 22,
+        "in_progress": 26,
         "planned": 0,
         "total": 83,
-        "unavailable": 61,
+        "unavailable": 57,
         "verified": 0
       },
       "ui": {
@@ -31570,14 +31570,14 @@
     "implementation_status_counts": {
       "blocked_access": 13,
       "compatible": 137,
-      "deferred": 1184,
-      "excluded": 122,
-      "partial": 486
+      "deferred": 1148,
+      "excluded": 127,
+      "partial": 517
     },
     "public_state_counts": {
-      "in_progress": 486,
+      "in_progress": 517,
       "planned": 0,
-      "unavailable": 1319,
+      "unavailable": 1288,
       "verified": 137
     }
   }

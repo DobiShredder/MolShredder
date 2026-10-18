@@ -36,6 +36,7 @@ class LocalizationController final : public QObject {
   bool applyLanguage(const QString& language, bool persist);
 
   QTranslator translator_;
+  QTranslator next_translator_;  // strings of the new shell (translations/molshredder_next_ko.ts)
   QQmlEngine* engine_{};
   QString current_language_{QStringLiteral("en")};
 };

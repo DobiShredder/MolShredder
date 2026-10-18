@@ -134,11 +134,14 @@ bool LocalizationController::applyLanguage(const QString& language,
   if (canonical.isEmpty()) return false;
 
   QCoreApplication::removeTranslator(&translator_);
+  QCoreApplication::removeTranslator(&next_translator_);
   if (canonical == QStringLiteral("ko")) {
     if (!translator_.load(QStringLiteral(":/i18n/molshredder_ko.qm"))) {
       return false;
     }
     QCoreApplication::installTranslator(&translator_);
+    if (next_translator_.load(QStringLiteral(":/i18n/molshredder_next_ko.qm")))
+      QCoreApplication::installTranslator(&next_translator_);
     QLocale::setDefault(QLocale{QStringLiteral("ko_KR")});
   } else {
     QLocale::setDefault(QLocale{QStringLiteral("en_US")});

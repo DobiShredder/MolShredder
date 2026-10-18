@@ -12,11 +12,15 @@
 #include <memory>
 #include <numbers>
 #include <optional>
+#include <functional>
+#include <set>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
 #include <QFile>
+#include <QStringList>
 #include <QEventLoop>
 #include <QFileInfo>
 #include <QMatrix4x4>
@@ -29,6 +33,8 @@
 #include <rhi/qrhi.h>
 
 #include "molshredder/analysis/secondary_structure.hpp"
+#include "molshredder/analysis/sequence_alignment.hpp"
+#include "molshredder/command/serialization.hpp"
 #include "molshredder/automation/python_script.hpp"
 #include "molshredder/model/coordinates.hpp"
 #include "molshredder/model/topology.hpp"
@@ -2230,6 +2236,9 @@ MolecularViewport::MolecularViewport(QQuickItem *parent)
   camera_animation_timer_.setTimerType(Qt::PreciseTimer);
   connect(&camera_animation_timer_, &QTimer::timeout, this,
           &MolecularViewport::onCameraAnimationTick);
+  connect(this, &MolecularViewport::objectsChanged, this, &MolecularViewport::objectTreeChanged);
+  connect(this, &MolecularViewport::selectionChanged, this, &MolecularViewport::objectTreeChanged);
+  connect(this, &MolecularViewport::sessionChanged, this, &MolecularViewport::objectTreeChanged);
   connect(this, &QQuickItem::widthChanged, this,
           &MolecularViewport::analysisResultsChanged);
   connect(this, &QQuickItem::heightChanged, this,
@@ -5264,6 +5273,101 @@ QString MolecularViewport::anaglyphModeText() const {
   return QString::fromUtf8(mode.data(), static_cast<qsizetype>(mode.size()));
 }
 
+void MolecularViewport::setPickMode(const QString &granularity, const QString &selection_name, bool merge) {
+  const auto normalized = granularity.trimmed().toLower();
+  pick_granularity_ = (normalized == QStringLiteral("residue") || normalized == QStringLiteral("chain") ||
+                       normalized == QStringLiteral("object"))
+                          ? normalized
+                          : QStringLiteral("atom");
+  pick_selection_name_ = selection_name.trimmed().isEmpty() ? QStringLiteral("picked") : selection_name.trimmed();
+  pick_merge_ = merge;
+}
+
+QVariantList MolecularViewport::objectTree() const {
+  QVariantList rows;
+  const auto objects = workspace_->list_objects();
+  const auto workspace_objects = workspace_->objects();
+  const auto groups = workspace_->list_groups();
+  std::map<std::string, const application::GroupInfo *> group_by_name;
+  for (const auto &group : groups) group_by_name.emplace(group.name, &group);
+  std::map<std::string, const application::WorkspaceObjectInfo *> object_by_name;
+  for (const auto &object : objects) object_by_name.emplace(object.name, &object);
+  std::set<std::string> emitted;
+
+  const auto object_row = [&](const application::WorkspaceObjectInfo &object, int depth) {
+    QVariantMap row;
+    row.insert(QStringLiteral("kind"), QStringLiteral("object"));
+    row.insert(QStringLiteral("name"), QString::fromStdString(object.name));
+    row.insert(QStringLiteral("id"), QVariant::fromValue<qulonglong>(static_cast<qulonglong>(object.id)));
+    row.insert(QStringLiteral("depth"), depth);
+    row.insert(QStringLiteral("visible"), object.visible);
+    row.insert(QStringLiteral("active"), object.active);
+    row.insert(QStringLiteral("atoms"), QVariant::fromValue<qulonglong>(static_cast<qulonglong>(object.atom_count)));
+    rows.push_back(row);
+    const auto source = std::find_if(workspace_objects.begin(), workspace_objects.end(),
+                                     [&object](const auto &candidate) { return candidate.id == object.id; });
+    if (source == workspace_objects.end()) return;
+    for (const auto &selection : source->selections.list()) {
+      if (selection.name.empty() || selection.name.front() == '_') continue;
+      QVariantMap child;
+      child.insert(QStringLiteral("kind"), QStringLiteral("selection"));
+      child.insert(QStringLiteral("name"), QString::fromStdString(selection.name));
+      child.insert(QStringLiteral("owner"), QString::fromStdString(object.name));
+      child.insert(QStringLiteral("depth"), depth + 1);
+      child.insert(QStringLiteral("expression"), QString::fromStdString(selection.expression));
+      child.insert(QStringLiteral("dynamic"), selection.dynamic);
+      rows.push_back(child);
+    }
+  };
+  std::function<void(const application::GroupInfo &, int)> group_row = [&](const application::GroupInfo &group, int depth) {
+    emitted.insert("g:" + group.name);
+    QVariantMap row;
+    row.insert(QStringLiteral("kind"), QStringLiteral("group"));
+    row.insert(QStringLiteral("name"), QString::fromStdString(group.name));
+    row.insert(QStringLiteral("depth"), depth);
+    row.insert(QStringLiteral("open"), group.open);
+    row.insert(QStringLiteral("visible"), group.enabled);
+    row.insert(QStringLiteral("atoms"), QVariant::fromValue<qulonglong>(static_cast<qulonglong>(group.object_count)));
+    row.insert(QStringLiteral("active"), false);
+    rows.push_back(row);
+    if (!group.open) {
+      for (const auto &member : group.members) emitted.insert((group_by_name.contains(member) ? "g:" : "o:") + member);
+      return;
+    }
+    for (const auto &member : group.members) {
+      if (const auto nested = group_by_name.find(member); nested != group_by_name.end()) {
+        group_row(*nested->second, depth + 1);
+      } else if (const auto found = object_by_name.find(member); found != object_by_name.end()) {
+        emitted.insert("o:" + member);
+        object_row(*found->second, depth + 1);
+      }
+    }
+  };
+  // Parent chain of an object or group: members name their parent group.
+  std::map<std::string, std::string> parent_of;
+  for (const auto &group : groups)
+    for (const auto &member : group.members) parent_of[(group_by_name.contains(member) ? "g:" : "o:") + member] = group.name;
+  for (const auto &object : objects) {
+    std::string key = "o:" + object.name;
+    std::string root_group;
+    while (parent_of.contains(key)) {
+      root_group = parent_of[key];
+      key = "g:" + root_group;
+    }
+    if (root_group.empty()) {
+      if (!emitted.contains("o:" + object.name)) {
+        emitted.insert("o:" + object.name);
+        object_row(object, 0);
+      }
+    } else if (!emitted.contains("g:" + root_group)) {
+      group_row(*group_by_name.at(root_group), 0);
+    }
+  }
+  for (const auto &group : groups)
+    if (!group.parent.has_value() && !emitted.contains("g:" + group.name)) group_row(group, 0);
+  return rows;
+}
+
 void MolecularViewport::pickAt(double x, double y) {
   if (!std::isfinite(x) || !std::isfinite(y) || x < 0.0 || y < 0.0 ||
       x >= width() || y >= height()) {
@@ -5421,21 +5525,48 @@ void MolecularViewport::deliverPickResult(std::uint64_t request_revision,
     }
   }
 
+  if (!atom_indices.empty() && topology != nullptr && pick_granularity_ != QStringLiteral("atom")) {
+    // Widen the picked atoms to their residues, chains or the whole object.
+    std::set<std::size_t> residues;
+    std::set<std::string> chains;
+    for (const auto index : atom_indices) {
+      const auto residue_index = topology->atoms()[index].residue.value;
+      residues.insert(residue_index);
+      chains.insert(topology->residues()[residue_index].chain_id);
+    }
+    std::vector<std::size_t> widened;
+    for (std::size_t index = 0; index < topology->atom_count(); ++index) {
+      const auto residue_index = topology->atoms()[index].residue.value;
+      if (pick_granularity_ == QStringLiteral("object") ||
+          (pick_granularity_ == QStringLiteral("residue") && residues.contains(residue_index)) ||
+          (pick_granularity_ == QStringLiteral("chain") && chains.contains(topology->residues()[residue_index].chain_id)))
+        widened.push_back(index);
+    }
+    atom_indices = std::move(widened);
+    description += QStringLiteral(" · ") + pick_granularity_ + QStringLiteral(" (%1 atoms)").arg(atom_indices.size());
+  }
+  std::sort(atom_indices.begin(), atom_indices.end());
+  atom_indices.erase(std::unique(atom_indices.begin(), atom_indices.end()), atom_indices.end());
   if (object != nullptr) {
     std::string expression = "none";
     if (!atom_indices.empty()) {
-      expression.clear();
-      for (const auto index : atom_indices) {
-        if (!expression.empty())
-          expression += " or ";
-        expression += "index " + std::to_string(index + 1U);
+      // index ranges keep the expression short for residues, chains and objects
+      expression = "index ";
+      for (std::size_t i = 0; i < atom_indices.size();) {
+        std::size_t j = i;
+        while (j + 1U < atom_indices.size() && atom_indices[j + 1U] == atom_indices[j] + 1U) ++j;
+        if (i != 0U) expression += '+';
+        expression += std::to_string(atom_indices[i] + 1U);
+        if (j > i) expression += "-" + std::to_string(atom_indices[j] + 1U);
+        i = j + 1U;
       }
     }
     gui::Action action;
     action.command_name = "select";
-    action.parameters.emplace("name", "picked");
+    action.parameters.emplace("name", pick_selection_name_.toStdString());
     action.parameters.emplace("expression", std::move(expression));
     action.parameters.emplace("update", "false");
+    if (pick_merge_ && !atom_indices.empty()) action.parameters.emplace("merge", "true");
     operation::TaskContext context;
     const auto selected = actions_.trigger(action, context);
     if (!selected.succeeded()) {
@@ -6361,6 +6492,285 @@ void MolecularViewport::setRenderPacket(render::RenderPacket packet) {
   ++packet_revision_;
   emit analysisResultsChanged();
   update();
+}
+
+
+namespace {
+
+// Splits a command line into words; single and double quotes group words, backslash escapes inside quotes.
+std::vector<std::string> split_command_words(const std::string &line, bool &ok) {
+  std::vector<std::string> words;
+  std::string current;
+  char quote = 0;
+  bool have = false;
+  ok = true;
+  for (std::size_t i = 0; i < line.size(); ++i) {
+    const char c = line[i];
+    if (quote != 0) {
+      if (c == '\\' && i + 1U < line.size()) { current.push_back(line[++i]); continue; }
+      if (c == quote) { quote = 0; continue; }
+      current.push_back(c);
+    } else if (c == '"' || c == '\'') {
+      quote = c;
+      have = true;
+    } else if (std::isspace(static_cast<unsigned char>(c)) != 0) {
+      if (have || !current.empty()) { words.push_back(current); current.clear(); have = false; }
+    } else {
+      current.push_back(c);
+      have = true;
+    }
+  }
+  if (quote != 0) ok = false;
+  if (have || !current.empty()) words.push_back(current);
+  return words;
+}
+
+// Result-text keys that only carry provenance for scientific results; the output window hides them.
+bool provenance_key(std::string_view key) {
+  static constexpr std::string_view kKeys[] = {
+      "absolute_tolerance", "algorithm", "algorithm_version", "calculation_precision", "contract_schema_version",
+      "coordinate_revision", "coordinate_revision_known", "coordinate_scope", "coordinate_source_revision",
+      "input_coordinate_unit", "missing_data_policy", "output_unit", "pbc_cell_required", "pbc_policy",
+      "presentation_precision", "relative_tolerance", "tolerance_known", "tolerance_unit", "topology_version",
+      "result_schema_version", "source_sha256"};
+  return std::find(std::begin(kKeys), std::end(kKeys), key) != std::end(kKeys);
+}
+
+QStringList result_lines(const command::ResultEnvelope &envelope) {
+  QStringList lines;
+  const auto rendered = command::render(envelope, operation::OutputFormat::text);
+  if (!rendered.has_value()) {
+    lines << QStringLiteral("error: ") + QString::fromStdString(rendered.error().message);
+    return lines;
+  }
+  const auto text = QString::fromStdString(rendered.value());
+  std::size_t shown = 0;
+  for (const auto &raw : text.split(QLatin1Char('\n'))) {
+    if (raw.isEmpty()) continue;
+    const auto equals = raw.indexOf(QLatin1Char('='));
+    if (equals > 0 && provenance_key(raw.left(equals).toStdString())) continue;
+    if (++shown > 400U) {
+      lines << QStringLiteral("… (output truncated at 400 lines)");
+      break;
+    }
+    lines << raw;
+  }
+  return lines;
+}
+
+}  // namespace
+
+QVariantMap MolecularViewport::executeCommandLine(const QString &text) {
+  QVariantMap result;
+  result.insert(QStringLiteral("ok"), true);
+  result.insert(QStringLiteral("mutated"), false);
+  const auto line = text.trimmed().toStdString();
+  if (line.empty()) {
+    result.insert(QStringLiteral("lines"), QStringList{});
+    return result;
+  }
+  QStringList lines;
+  const auto fail = [&](const QString &message) {
+    result.insert(QStringLiteral("ok"), false);
+    lines << message;
+    result.insert(QStringLiteral("lines"), lines);
+    return result;
+  };
+  bool quoting_ok = true;
+  const auto words = split_command_words(line, quoting_ok);
+  if (!quoting_ok) return fail(QStringLiteral("error: unterminated quote"));
+  if (words.empty()) {
+    result.insert(QStringLiteral("lines"), lines);
+    return result;
+  }
+  if (words.front() == "clear" && words.size() == 1U) {
+    result.insert(QStringLiteral("clear"), true);
+    result.insert(QStringLiteral("lines"), lines);
+    return result;
+  }
+  if (words.front() == "help") {
+    const std::string prefix = words.size() > 1U ? line.substr(line.find_first_of(" \t") + 1U) : std::string{};
+    std::size_t count = 0;
+    for (const auto &descriptor : registry_.descriptors()) {
+      if (!descriptor.canonical_name.starts_with(prefix)) continue;
+      if (descriptor.canonical_name == prefix) {
+        lines << QString::fromStdString(descriptor.canonical_name + " - " + descriptor.summary);
+        for (const auto &parameter : descriptor.parameters) {
+          QString entry = QStringLiteral("  --") + QString::fromStdString(parameter.name);
+          if (parameter.required) entry += QStringLiteral(" (required)");
+          if (parameter.default_value) entry += QStringLiteral(" [") + QString::fromStdString(*parameter.default_value) + QLatin1Char(']');
+          if (!parameter.allowed_values.empty()) {
+            QStringList choices;
+            for (const auto &value : parameter.allowed_values) choices << QString::fromStdString(value);
+            entry += QStringLiteral("  {") + choices.join(QStringLiteral("|")) + QLatin1Char('}');
+          }
+          lines << entry;
+        }
+        count = 1;
+        break;
+      }
+      if (++count <= 80U) lines << QString::fromStdString(descriptor.canonical_name + " - " + descriptor.summary);
+    }
+    if (count == 0U) lines << QStringLiteral("no command starts with '") + QString::fromStdString(prefix) + QLatin1Char('\'');
+    else if (count > 80U) lines << QStringLiteral("… ") + QString::number(count - 80U) + QStringLiteral(" more; narrow the prefix");
+    result.insert(QStringLiteral("lines"), lines);
+    return result;
+  }
+
+  command::Invocation invocation;
+  bool pymol_syntax = false;
+  if (words.front() == "invoke") {
+    const auto parsed = command::parse_canonical(line);
+    if (!parsed.has_value()) return fail(QStringLiteral("error: ") + QString::fromStdString(parsed.error().message));
+    invocation = parsed.value();
+  } else {
+    // CLI form: the longest leading words that name a command or alias, then --option value pairs.
+    std::set<std::string> names;
+    for (const auto &descriptor : registry_.descriptors()) names.insert(descriptor.canonical_name);
+    for (const auto &alias : registry_.aliases()) names.insert(alias.name);
+    std::size_t name_words = 0;
+    std::string name;
+    std::string candidate;
+    for (std::size_t k = 1; k <= std::min<std::size_t>(words.size(), 4U); ++k) {
+      candidate += (k == 1U ? "" : " ") + words[k - 1U];
+      if (names.contains(candidate)) { name_words = k; name = candidate; }
+    }
+    const bool option_form = name_words > 0U && words.size() > name_words && words[name_words].starts_with("--");
+    if (option_form) {
+      invocation.canonical_name = name;
+      for (std::size_t i = name_words; i < words.size(); i += 2U) {
+        if (!words[i].starts_with("--") || words[i].size() == 2U)
+          return fail(QStringLiteral("error: expected --option, got '") + QString::fromStdString(words[i]) + QLatin1Char('\''));
+        if (i + 1U >= words.size()) return fail(QStringLiteral("error: option ") + QString::fromStdString(words[i]) + QStringLiteral(" needs a value"));
+        invocation.arguments[words[i].substr(2)] = words[i + 1U];
+      }
+    } else if (name_words > 0U && name_words == words.size() && name.find(' ') != std::string::npos) {
+      invocation.canonical_name = name;  // bare multi-word command such as `object list`
+    } else {
+      pymol_syntax = true;
+      invocation.canonical_name = "pml run";
+      invocation.arguments = {{"text", line}, {"on-error", "stop"}};
+    }
+  }
+
+  operation::TaskContext context;
+  auto outcome = dispatcher_.dispatch(invocation, context);
+  if (outcome.canonical_invocation.has_value())
+    result.insert(QStringLiteral("command"), QString::fromStdString(command::serialize(*outcome.canonical_invocation)));
+  lines = result_lines(outcome.envelope);
+  if (pymol_syntax && outcome.succeeded() && !lines.isEmpty()) lines = lines.mid(0, 1);  // keep only "ran N PML statements"
+  if (!outcome.succeeded()) {
+    const auto &failure = std::get<operation::Error>(outcome.envelope.payload);
+    lines.clear();
+    lines << QStringLiteral("error: ") + QString::fromStdString(failure.message);
+    if (!failure.suggestion.empty()) lines << QStringLiteral("hint: ") + QString::fromStdString(failure.suggestion);
+    result.insert(QStringLiteral("ok"), false);
+  }
+  // Commands that can change the workspace refresh the presentation; pure queries do not.
+  bool mutating = pymol_syntax;
+  std::string target = invocation.canonical_name;
+  for (const auto &alias : registry_.aliases())
+    if (alias.name == target) target = alias.canonical_name;
+  for (const auto &descriptor : registry_.descriptors())
+    if (descriptor.canonical_name == target) mutating = descriptor.undo_policy != command::UndoPolicy::not_applicable;
+  if (mutating) {
+    static_cast<void>(refreshWorkspacePresentation());
+    emit viewsChanged();
+    emit sessionChanged();
+    emit selectionChanged();
+    emit representationChanged();
+  }
+  result.insert(QStringLiteral("mutated"), mutating);
+  result.insert(QStringLiteral("lines"), lines);
+  return result;
+}
+
+QStringList MolecularViewport::completeCommandLine(const QString &prefix) const {
+  // Completes command and alias names, then `--option` names for the command typed before the cursor.
+  QStringList completions;
+  const auto typed = prefix.trimmed().toStdString();
+  std::set<std::string> found;
+  const auto descriptors = registry_.descriptors();
+  const auto add_options = [&](const command::Descriptor &descriptor, const std::string &already) {
+    for (const auto &parameter : descriptor.parameters) {
+      const auto option = "--" + parameter.name;
+      if (option.starts_with(already)) found.insert(option);
+    }
+  };
+  for (const auto &descriptor : descriptors) {
+    if (descriptor.canonical_name.starts_with(typed)) found.insert(descriptor.canonical_name);
+    const auto head = descriptor.canonical_name + " ";
+    if (typed.starts_with(head)) {
+      const auto tail = typed.substr(head.size());
+      const auto last_space = tail.find_last_of(' ');
+      add_options(descriptor, last_space == std::string::npos ? tail : tail.substr(last_space + 1U));
+    }
+  }
+  for (const auto &alias : registry_.aliases()) {
+    if (alias.name.starts_with(typed)) found.insert(alias.name);
+    const auto head = alias.name + " ";
+    if (typed.starts_with(head))
+      for (const auto &descriptor : descriptors)
+        if (descriptor.canonical_name == alias.canonical_name) {
+          const auto tail = typed.substr(head.size());
+          const auto last_space = tail.find_last_of(' ');
+          add_options(descriptor, last_space == std::string::npos ? tail : tail.substr(last_space + 1U));
+        }
+  }
+  for (const auto &candidate : found) completions << QString::fromStdString(candidate);
+  return completions;
+}
+
+QVariantList MolecularViewport::sequenceItems() const {
+  QVariantList items;
+  const auto *object = workspace_->active_object();
+  if (object == nullptr) return items;
+  const auto &topology = *object->system->topology();
+  constexpr qsizetype kLimit = 20000;
+  for (const auto &residue : topology.residues()) {
+    if (items.size() >= kLimit) break;
+    QVariantMap item;
+    item.insert(QStringLiteral("chain"), QString::fromStdString(residue.chain_id));
+    item.insert(QStringLiteral("resi"), QString::number(residue.sequence_number) + QString::fromStdString(residue.insertion_code));
+    item.insert(QStringLiteral("letter"), QString(QChar::fromLatin1(analysis::residue_letter(residue.name))));
+    item.insert(QStringLiteral("name"), QString::fromStdString(residue.name));
+    items.push_back(item);
+  }
+  return items;
+}
+
+QVariantList MolecularViewport::commandCatalog() const {
+  QVariantList catalog;
+  for (const auto &descriptor : registry_.descriptors()) {
+    QVariantMap entry;
+    entry.insert(QStringLiteral("name"), QString::fromStdString(descriptor.canonical_name));
+    entry.insert(QStringLiteral("summary"), QString::fromStdString(descriptor.summary));
+    entry.insert(QStringLiteral("undo"), descriptor.undo_policy == command::UndoPolicy::undoable
+                                             ? QStringLiteral("undoable")
+                                             : (descriptor.undo_policy == command::UndoPolicy::not_undoable ? QStringLiteral("not_undoable")
+                                                                                                           : QStringLiteral("query")));
+    QVariantList parameters;
+    for (const auto &parameter : descriptor.parameters) {
+      QVariantMap p;
+      p.insert(QStringLiteral("name"), QString::fromStdString(parameter.name));
+      switch (parameter.type) {
+      case command::ParameterType::text: p.insert(QStringLiteral("type"), QStringLiteral("text")); break;
+      case command::ParameterType::integer: p.insert(QStringLiteral("type"), QStringLiteral("integer")); break;
+      case command::ParameterType::unsigned_integer: p.insert(QStringLiteral("type"), QStringLiteral("unsigned")); break;
+      case command::ParameterType::number: p.insert(QStringLiteral("type"), QStringLiteral("number")); break;
+      case command::ParameterType::boolean: p.insert(QStringLiteral("type"), QStringLiteral("boolean")); break;
+      }
+      p.insert(QStringLiteral("required"), parameter.required);
+      p.insert(QStringLiteral("default"), parameter.default_value ? QVariant{QString::fromStdString(*parameter.default_value)} : QVariant{});
+      QStringList choices;
+      for (const auto &value : parameter.allowed_values) choices << QString::fromStdString(value);
+      p.insert(QStringLiteral("choices"), choices);
+      parameters.push_back(p);
+    }
+    entry.insert(QStringLiteral("parameters"), parameters);
+    catalog.push_back(entry);
+  }
+  return catalog;
 }
 
 } // namespace molshredder::desktop

@@ -377,6 +377,9 @@ target_sources(
     src/analysis/principal_axes.cpp
     src/analysis/shape.cpp
     src/analysis/sasa.cpp
+    src/analysis/measure_tools.cpp
+    src/analysis/sequence_alignment.cpp
+    src/analysis/point_group.cpp
     src/analysis/rdf.cpp
     src/analysis/secondary_structure.cpp
     src/analysis/time_series.cpp
@@ -387,6 +390,8 @@ target_sources(
     src/application/session.cpp
     src/application/task_service.cpp
     src/application/rep_instance.cpp
+    src/application/movie_mapping.cpp
+    src/application/video_encoder.cpp
     src/application/representation_visibility.cpp
     src/application/workspace.cpp
     src/application/label_expression.cpp
@@ -781,17 +786,33 @@ if(MOLSHREDDER_BUILD_DESKTOP)
   set_source_files_properties(
     apps/desktop/Main.qml PROPERTIES QT_RESOURCE_ALIAS Main.qml
   )
+  # New PyMOL-style shell (SEQ-330, `--ui next`). Flat names so the files resolve each other inside the module.
+  set(MOLSHREDDER_NEXT_QML
+    NextTheme NextButton NextMenu NextObjectPanel NextConsole NextMovieBar
+    NextSequenceBar NextCommandForm NextShell
+  )
+  set(MOLSHREDDER_NEXT_QML_FILES "")
+  foreach(next_name IN LISTS MOLSHREDDER_NEXT_QML)
+    set_source_files_properties(
+      apps/desktop/qml_next/${next_name}.qml
+      PROPERTIES QT_RESOURCE_ALIAS ${next_name}.qml
+    )
+    list(APPEND MOLSHREDDER_NEXT_QML_FILES apps/desktop/qml_next/${next_name}.qml)
+  endforeach()
+  set_source_files_properties(
+    apps/desktop/qml_next/NextTheme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE
+  )
   qt_add_qml_module(
     molshredder_desktop
     URI MolShredder.Desktop
     VERSION 1.0
     OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/qml/MolShredder/Desktop"
-    QML_FILES apps/desktop/Main.qml
+    QML_FILES apps/desktop/Main.qml ${MOLSHREDDER_NEXT_QML_FILES}
     NO_RESOURCE_TARGET_PATH
   )
   qt_add_translations(
     molshredder_desktop
-    TS_FILES translations/molshredder_ko.ts
+    TS_FILES translations/molshredder_ko.ts translations/molshredder_next_ko.ts
     RESOURCE_PREFIX /i18n
   )
   qt_add_shaders(
@@ -850,6 +871,14 @@ if(MOLSHREDDER_BUILD_DESKTOP)
         --action-translations
           "${CMAKE_CURRENT_SOURCE_DIR}/apps/desktop/action_translation_sources.cpp"
         --ts "${CMAKE_CURRENT_SOURCE_DIR}/translations/molshredder_ko.ts"
+    )
+    add_test(
+      NAME frontend.localization_next_catalog
+      COMMAND
+        Python3::Interpreter
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/localization_next_catalog_test.py"
+        --qml-dir "${CMAKE_CURRENT_SOURCE_DIR}/apps/desktop/qml_next"
+        --ts "${CMAKE_CURRENT_SOURCE_DIR}/translations/molshredder_next_ko.ts"
     )
     add_test(
       NAME desktop.localization_english_smoke
@@ -1045,6 +1074,52 @@ if(MOLSHREDDER_BUILD_DESKTOP)
         TIMEOUT 10
         PASS_REGULAR_EXPRESSION "MolShredder desktop interleaved ready: modes=3 final=checkerboard eyes=2 compositor=QRhi"
     )
+    add_test(
+      NAME desktop.next_ui_smoke
+      COMMAND
+        molshredder_desktop --smoke --ui=next --language=en
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb"
+        "--command=show cartoon, 1UBQ"
+        "--command=color cyan, 1UBQ"
+        "--command=movie map --spec \"1 x3\""
+        "--command=help movie map"
+        "--command=ui:sequence on"
+        "--command=ui:menu Analyze"
+        "--command=ui:objectmenu S"
+        "--command=ui:form movie map"
+        "--command=select sele, resi 10-20"
+        "--command=group add --name g1 --members 1UBQ"
+        "--command=ui:mouse select-residues"
+        "--command=ui:lang ko"
+        "--command=ui:lang en"
+    )
+    set_tests_properties(
+      desktop.next_ui_smoke
+      PROPERTIES
+        TIMEOUT 20
+        PASS_REGULAR_EXPRESSION "MolShredder next UI ready: commands=6 errors=0 objects=1"
+    )
+    add_test(
+      NAME desktop.next_ui_pick_residue_smoke
+      COMMAND
+        molshredder_desktop --picking-smoke --ui=next --pick-mode=residue --language=en
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/pick_residue.pdb"
+        "--representation=spheres"
+    )
+    set_tests_properties(
+      desktop.next_ui_pick_residue_smoke
+      PROPERTIES
+        TIMEOUT 15
+        PASS_REGULAR_EXPRESSION "MolShredder desktop GPU picking ready: Atom [0-9]+ .* residue \\(3 atoms\\)"
+    )
+    add_test(
+      NAME desktop.next_ui_error_smoke
+      COMMAND
+        molshredder_desktop --smoke --ui=next --language=en
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb"
+        "--command=show cartoon, nosuchobject"
+    )
+    set_tests_properties(desktop.next_ui_error_smoke PROPERTIES TIMEOUT 20 WILL_FAIL TRUE)
     add_test(
       NAME desktop.structure_open_smoke
       COMMAND
@@ -2505,6 +2580,33 @@ if(BUILD_TESTING)
   add_test(NAME analysis.sasa COMMAND molshredder_sasa_tests)
 
   add_executable(
+    molshredder_measure_tools_tests
+    tests/analysis/measure_tools_test.cpp
+  )
+  target_compile_features(molshredder_measure_tools_tests PRIVATE cxx_std_20)
+  target_link_libraries(molshredder_measure_tools_tests PRIVATE MolShredder::Core)
+  molshredder_enable_warnings(molshredder_measure_tools_tests)
+  add_test(NAME analysis.measure_tools COMMAND molshredder_measure_tools_tests)
+
+  add_executable(
+    molshredder_sequence_alignment_tests
+    tests/analysis/sequence_alignment_test.cpp
+  )
+  target_compile_features(molshredder_sequence_alignment_tests PRIVATE cxx_std_20)
+  target_link_libraries(molshredder_sequence_alignment_tests PRIVATE MolShredder::Core)
+  molshredder_enable_warnings(molshredder_sequence_alignment_tests)
+  add_test(NAME analysis.sequence_alignment COMMAND molshredder_sequence_alignment_tests)
+
+  add_executable(
+    molshredder_point_group_tests
+    tests/analysis/point_group_test.cpp
+  )
+  target_compile_features(molshredder_point_group_tests PRIVATE cxx_std_20)
+  target_link_libraries(molshredder_point_group_tests PRIVATE MolShredder::Core)
+  molshredder_enable_warnings(molshredder_point_group_tests)
+  add_test(NAME analysis.point_group COMMAND molshredder_point_group_tests)
+
+  add_executable(
     molshredder_rdf_tests
     tests/analysis/rdf_test.cpp
   )
@@ -3506,6 +3608,58 @@ if(BUILD_TESTING)
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/pse_session_test.py"
       "$<TARGET_FILE:molshredder_python>"
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures"
+  )
+
+  add_test(
+    NAME frontend.movie_mapping
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/movie_mapping_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+  )
+
+  add_test(
+    NAME frontend.movie_video
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/movie_video_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures"
+  )
+
+  add_test(
+    NAME frontend.measure_tools
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/measure_tools_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures"
+  )
+
+  add_test(
+    NAME frontend.sequence_align
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/sequence_align_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures"
+  )
+
+  add_test(
+    NAME frontend.selection_ui_commands
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/selection_ui_commands_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures"
+  )
+
+  add_test(
+    NAME frontend.volume_combine
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/volume_combine_test.py"
+      "$<TARGET_FILE:molshredder_python>"
   )
 
   add_test(

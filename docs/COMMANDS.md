@@ -535,6 +535,19 @@ Additive `format list`와 `save` 문법, atomic output 및 semantic loss table�
   molecule object(모든 state, 결합, 원자 식별자, 전하, B-factor·occupancy, 이차구조, 단위 셀, 숨김 상태), 원자별 표현(sticks·spheres·lines·ribbon·cartoon)과 이름 있는 selection을 가져오고
   surface·mesh·dots·label·nonbonded 표현, map·CGO·measurement 같은 다른 object, 색·setting·scene·movie·카메라 view는 `import_notes`에 보고만 한다.
   원자 표가 binary dump(`pse_binary_dump`)로 저장된 세션은 오류로 거부하고 `set pse_binary_dump, 0`으로 다시 저장하라고 안내한다. `.pze`(gzip)는 지원하지 않는다.
+- 영상(SEQ-320): `movie map --spec "1 x30 1 -15 15 x30 15 -1" [--frame N | --append]`는 PyMOL `mset`/`madd` 문법으로 movie frame마다 보일 trajectory state를 정한다
+  (`N` 한 frame, `a -b` 범위, `xK` 반복(앞 요소가 없으면 현재 state), 빈 문자열은 `--frame` 뒤를 잘라내고 남는 게 없으면 movie를 지운다). 길이는 최대 1,000,000 frame이고
+  활성 object에 없는 state는 거부한다. `movie seek`이 표를 적용하며 `movie keyframe --trajectory-frame`이 있으면 그 frame이 우선한다. `movie status`의 `state_map`은 같은 문법의 압축 표기다.
+  PML `mset`/`madd`/`mclear`는 같은 명령으로 번역된다. `movie export-video --path out.mp4`는 movie를 임시 PNG로 그린 뒤 선택적 외부 ffmpeg로 인코딩한다
+  (mp4·mov·webm·gif·mpeg1, `--quality 0-100`, `--fps` 기본은 movie fps, `--keep-frames`, 홀수 크기는 짝수로 scale). ffmpeg는 `--encoder-path` → `MOLSHREDDER_FFMPEG` → `PATH` 순으로 찾고
+  없으면 렌더링 전에 오류를 낸다(번들·자동 설치 없음; 인코더 없이도 `movie export`로 frame 시퀀스를 얻는다). 인코더는 셸 없이 인자 벡터로, 최소 환경에서 실행되고 실패하면 출력 파일과 임시 frame을 남기지 않는다.
+  mview 보간·시간선 편집·`mdo`는 아직 제공하지 않는다.
+- 분석 도구(SEQ-321, 정의는 `docs/QUESTIONS.md` Q-039): `analyze dipole`은 `partial_charge`로 μ=Σq(r−r0)를 e·Å(`--dipole-unit debye`면 Debye)로 계산하고 총 전하가 0이 아니면 `--reference geometric|mass|origin`에 따라 달라진다는 것을 응답에 표시한다.
+  `analyze surface-atoms`는 격자(`--gridsize`)에서 `--radius` 안을 채운 뒤 바깥과 이어진 빈 점 근처(`radius+depth+gridsize`)의 원자를 표면 원자로 정하며 `--select-name`으로 selection을 만든다.
+  `analyze trajectory cluster --cutoff X`는 RMSD 행렬로 Quality Threshold cluster(직경 ≤ cutoff)를 만든다. `analyze symmetry [--tolerance 0.1]`는 질량 중심을 지나는 대칭 요소를 찾아 점군(Schoenflies, ASCII)을 정한다(원자 300개 제한, 12차 이상 축은 5·2차로 보임).
+  `analyze pbc-neighbors --cutoff X [--center x,y,z]`는 셀을 cutoff만큼 넓힌 영역 안의 image 원자와 이동량을, `analyze pbc-orthonormal`은 셀을 같은 변 길이의 직교 셀로 보내는 4×4 행렬을 돌려준다. `pbc get`/`pbc set --a --b --c [--alpha --beta --gamma] | --clear true`는 셀을 읽고 모든 state에 설정·제거한다(undo 가능).
+  `measure fit|object align`은 `--match sequence`(선택 residue의 BLOSUM62·affine gap 정렬 `--gap -10 --extend -0.5` 뒤 같은 이름 원자 짝짓기)와 `--cycles N --cutoff X`(짝이 RMS×cutoff보다 멀면 제외하고 다시 맞춤, PyMOL `align`과 같은 정의)를 지원하고 응답에 짝 수·제외 수·정렬 점수를 싣는다.
+  `volume combine --volumes "a;b;c" --name n --mode sum|difference|average|product|maximum|minimum`은 같은 격자의 volume을 voxel 단위로 합친다. 두 selection 사이 cutoff 이내의 모든 원자쌍은 `analyze contacts --exclude-bonded false`로 얻는다.
 - `object split`은 chain마다 새 object(`<prefix><chain>`, prefix가 없으면 `<원본>_<chain>`)를 만든다. chain이 하나이거나 chain 식별자가 비어
   있거나 대상 이름 하나라도 이미 있으면 아무 것도 만들지 않는 오류이고 중간에 실패하면 만든 object를 지운다. `object sort`는 object panel 순서를
   이름의 natural order(`s2` < `s10`)로 바꾸고 object ID는 그대로다. `object matrix-copy`는 한 object의 scene 배치(이동·회전·scale·pivot)를 다른

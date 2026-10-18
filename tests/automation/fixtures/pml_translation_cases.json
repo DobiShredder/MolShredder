@@ -1522,11 +1522,98 @@
       "name": "s",
       "expression": "all"
      }
+    },
+    {
+     "command": "select delete",
+     "arguments": {
+      "name": "s"
+     }
     }
    ],
-   "diagnostics": [
-    "selection_delete_not_applied"
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "group_add",
+   "pml": "group g1, a b",
+   "invocations": [
+    {
+     "command": "group add",
+     "arguments": {
+      "name": "g1",
+      "members": "a b"
+     }
+    }
    ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "group_close",
+   "pml": "group g1, action=close",
+   "invocations": [
+    {
+     "command": "group close",
+     "arguments": {
+      "name": "g1"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "enable_all",
+   "pml": "enable",
+   "invocations": [
+    {
+     "command": "object enable",
+     "arguments": {
+      "pattern": "*"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "disable_object",
+   "pml": "disable a",
+   "invocations": [
+    {
+     "command": "object disable",
+     "arguments": {
+      "pattern": "a"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "disable_selection",
+   "pml": "select s, all\ndisable s",
+   "invocations": [
+    {
+     "command": "select",
+     "arguments": {
+      "name": "s",
+      "expression": "all"
+     }
+    },
+    {
+     "command": "object disable",
+     "arguments": {
+      "selection": "@s"
+     }
+    }
+   ],
+   "diagnostics": [],
    "stop": false,
    "objects": []
   },

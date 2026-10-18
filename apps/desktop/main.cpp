@@ -152,6 +152,16 @@ int main(int argc, char *argv[]) {
   }
   QCoreApplication::setApplicationName(QStringLiteral("MolShredder"));
   QCoreApplication::setOrganizationName(QStringLiteral("MolShredder"));
+  // Smoke tests, screenshots and `--command` runs must not write the user's persisted preferences (language, panel
+  // layout, theme): they use a separate settings domain.
+  for (int index = 1; index < argc; ++index) {
+    const std::string_view argument{argv[index]};
+    if (argument.find("smoke") != std::string_view::npos || argument.starts_with("--screenshot") ||
+        argument.starts_with("--command")) {
+      QCoreApplication::setApplicationName(QStringLiteral("MolShredder-test"));
+      break;
+    }
+  }
 
   bool smoke = false;
   bool camera_smoke = false;
@@ -189,6 +199,9 @@ int main(int argc, char *argv[]) {
   bool direct_volume_smoke = false;
   std::optional<QString> redirected_render_smoke;
   std::optional<QString> screenshot;
+  bool next_ui = false;
+  QString pick_mode;  // atom|residue|chain|object for --picking-smoke
+  std::vector<QString> startup_commands;
   std::vector<QString> open_paths;
   std::optional<QString> representation;
   std::optional<QString> trajectory;
@@ -284,6 +297,14 @@ int main(int argc, char *argv[]) {
           argument.substr(std::string_view{"--screenshot="}.size());
       screenshot =
           QString::fromUtf8(path.data(), static_cast<qsizetype>(path.size()));
+    } else if (argument == "--ui=next" || (argument == "--ui" && index + 1 < argc && std::string_view{argv[index + 1]} == "next")) {
+      next_ui = true;
+      if (argument == "--ui") ++index;
+    } else if (argument.starts_with("--pick-mode=")) {
+      pick_mode = QString::fromUtf8(argument.substr(std::string_view{"--pick-mode="}.size()).data());
+    } else if (argument.starts_with("--command=")) {
+      const auto text = argument.substr(std::string_view{"--command="}.size());
+      startup_commands.push_back(QString::fromUtf8(text.data(), static_cast<qsizetype>(text.size())));
     } else if (argument.starts_with("--open=")) {
       const auto path = argument.substr(std::string_view{"--open="}.size());
       open_paths.push_back(
@@ -348,7 +369,7 @@ int main(int argc, char *argv[]) {
   localization.setEngine(&engine);
   engine.rootContext()->setContextProperty(QStringLiteral("localization"),
                                            &localization);
-  engine.load(QUrl{QStringLiteral("qrc:/Main.qml")});
+  engine.load(QUrl{next_ui ? QStringLiteral("qrc:/NextShell.qml") : QStringLiteral("qrc:/Main.qml")});
   if (engine.rootObjects().isEmpty())
     return EXIT_FAILURE;
   auto *window =
@@ -1112,6 +1133,15 @@ int main(int argc, char *argv[]) {
        !viewport->waitForTrajectoryTask(10000))) {
     qCritical("%s", viewport->statusText().toUtf8().constData());
     return EXIT_FAILURE;
+  }
+  if (next_ui) {
+    // New shell: run `--command=` lines through the same path as the command line (logged in the output window).
+    for (const auto &line : startup_commands)
+      QMetaObject::invokeMethod(window, "run", Q_ARG(QVariant, QVariant{line}));
+    const auto errors = window->property("errorCount").toInt();
+    qInfo("MolShredder next UI ready: commands=%d errors=%d objects=%d", window->property("commandCount").toInt(), errors,
+          static_cast<int>(viewport->objectItems().size()));
+    if (errors > 0) return EXIT_FAILURE;
   }
   if (volume_slice_smoke) {
     const auto sliced = viewport->hasVolume() &&
@@ -1990,8 +2020,10 @@ int main(int argc, char *argv[]) {
     pick_retry->setInterval(500);
     QObject::connect(
         viewport, &molshredder::desktop::MolecularViewport::selectionChanged,
-        &application, [viewport, pick_retry, &application, capture_requested] {
-          if (viewport->selectionText().startsWith(QStringLiteral("Atom "))) {
+        &application, [viewport, pick_retry, &application, capture_requested, pick_mode] {
+          const auto widened = pick_mode.isEmpty() || pick_mode == QStringLiteral("atom") ||
+                               viewport->selectionText().contains(QStringLiteral(" · %1 (").arg(pick_mode));
+          if (viewport->selectionText().startsWith(QStringLiteral("Atom ")) && widened) {
             pick_retry->stop();
             qInfo("MolShredder desktop GPU picking ready: %s",
                   viewport->selectionText().toUtf8().constData());
@@ -2002,6 +2034,7 @@ int main(int argc, char *argv[]) {
     QObject::connect(pick_retry, &QTimer::timeout, viewport, [viewport] {
       viewport->pickAt(viewport->width() * 0.5, viewport->height() * 0.5);
     });
+    if (!pick_mode.isEmpty()) viewport->setPickMode(pick_mode, QStringLiteral("sele"), false);
     QTimer::singleShot(750, pick_retry, [pick_retry] { pick_retry->start(); });
     QTimer::singleShot(12000, &application, [&application] {
       qCritical("MolShredder desktop GPU picking smoke timed out");

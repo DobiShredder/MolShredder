@@ -45,6 +45,8 @@ class MolecularViewport : public QQuickRhiItem {
   Q_PROPERTY(qulonglong primitiveCount READ primitiveCount NOTIFY statusChanged)
   Q_PROPERTY(QString selectionText READ selectionText NOTIFY selectionChanged)
   Q_PROPERTY(QVariantList objectItems READ objectItems NOTIFY objectsChanged)
+  // Rows of the object panel: groups, objects and their named selections, already ordered and indented.
+  Q_PROPERTY(QVariantList objectTree READ objectTree NOTIFY objectTreeChanged)
   Q_PROPERTY(bool hasTrajectory READ hasTrajectory NOTIFY trajectoryChanged)
   Q_PROPERTY(
       qulonglong trajectoryFrame READ trajectoryFrame NOTIFY trajectoryChanged)
@@ -130,6 +132,7 @@ public:
     return last_pick_completion_revision_;
   }
   [[nodiscard]] QVariantList objectItems() const;
+  [[nodiscard]] QVariantList objectTree() const;
   [[nodiscard]] bool hasTrajectory() const noexcept { return has_trajectory_; }
   [[nodiscard]] qulonglong trajectoryFrame() const noexcept {
     return trajectory_frame_;
@@ -326,6 +329,9 @@ public:
   Q_INVOKABLE double stereoAngleScale() const noexcept;
   Q_INVOKABLE QString anaglyphModeText() const;
   Q_INVOKABLE void pickAt(double x, double y);
+  // How a click selects: granularity atom|residue|chain|object, the selection that receives it, and whether it
+  // is added to that selection (merge) instead of replacing it.
+  Q_INVOKABLE void setPickMode(const QString &granularity, const QString &selection_name, bool merge);
   Q_INVOKABLE bool defineSelection(const QString &name,
                                    const QString &expression, bool dynamic);
   Q_INVOKABLE bool selectAll();
@@ -428,6 +434,15 @@ public:
   Q_INVOKABLE bool autosaveSession(const QUrl &primary,
                                    const QUrl &recovery,
                                    const QString &visible_panels = {});
+  // Command line bridge for the PyMOL-style shell (SEQ-330). Accepts `invoke "name" --opt value`, the CLI form
+  // `name --opt value`, or PyMOL syntax (`show cartoon, chain A`, run through `pml run`). Returns
+  // {ok, lines[], clear, mutated, command}.
+  Q_INVOKABLE QVariantMap executeCommandLine(const QString &text);
+  Q_INVOKABLE QStringList completeCommandLine(const QString &prefix) const;
+  // Residues of the active object for the sequence bar: [{chain, resi, letter, name}] (at most 20000).
+  Q_INVOKABLE QVariantList sequenceItems() const;
+  // Every registered command with its parameters (name, summary, undo, parameters[]), for forms and help.
+  Q_INVOKABLE QVariantList commandCatalog() const;
   Q_INVOKABLE QString pymolViewText() const;
   Q_INVOKABLE bool importPymolView(const QString &values);
   Q_INVOKABLE bool importPymolViewAnimated(const QString &values,
@@ -498,6 +513,7 @@ signals:
   void representationChanged();
   void selectionChanged();
   void objectsChanged();
+  void objectTreeChanged();
   void trajectoryChanged();
   void trajectoryTaskChanged();
   void analysisTaskChanged();
@@ -571,6 +587,9 @@ private:
   double camera_animation_duration_seconds_{};
   int camera_animation_hand_{1};
   QPointF pick_position_;
+  QString pick_granularity_{QStringLiteral("atom")};
+  QString pick_selection_name_{QStringLiteral("picked")};
+  bool pick_merge_{false};
   std::uint64_t pick_request_revision_{};
   std::uint64_t last_pick_id_{};
   std::uint64_t last_pick_completion_revision_{};

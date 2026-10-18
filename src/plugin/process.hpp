@@ -43,6 +43,8 @@ class ChildProcess {
   // Waits for the next stdout line, the end of the stream or the timeout.
   [[nodiscard]] Message read(std::chrono::milliseconds timeout);
   [[nodiscard]] bool running();
+  // Exit status once the process has ended (128 + signal when it was killed); nullopt while it runs.
+  [[nodiscard]] std::optional<int> exit_code();
   // Closes stdin, waits briefly, then terminates.
   void stop(std::chrono::milliseconds grace);
   void kill();

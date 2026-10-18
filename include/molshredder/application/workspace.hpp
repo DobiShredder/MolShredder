@@ -579,12 +579,25 @@ struct AlignmentRequest {
   std::vector<std::pair<std::size_t, std::size_t>> pairs;
   bool uniform_weights{true};
   bool apply{};
+  // match == "sequence": the selected residues are aligned with BLOSUM62 and affine gaps (negative costs; the first
+  // gapped residue costs gap_open, every further one gap_extend), then atoms of aligned residues are paired by name.
+  double gap_open{-10.0};
+  double gap_extend{-0.5};
+  // Outlier rejection after the first fit (PyMOL fit/align): pairs farther than cutoff * RMS are dropped and the
+  // rest refitted, up to `cycles` times. 0 disables it.
+  std::size_t cycles{0};
+  double cutoff{2.0};
 };
 
 struct AlignmentResult {
   std::uint64_t mobile_object_id{};
   std::uint64_t target_object_id{};
   std::size_t paired_atom_count{};
+  std::size_t initial_pair_count{};
+  std::size_t cycles_run{};
+  std::size_t aligned_residue_count{};
+  std::size_t identical_residue_count{};
+  double alignment_score{};
   double rmsd_before{};
   double rmsd_after{};
   // Row-major 4x4 matrix taking mobile world coordinates onto the target.
@@ -623,6 +636,12 @@ struct StateAppendResult {
 // affine matrix (VMD atomselect moveto/moveby/lmoveto/lmoveby/move, PyMOL
 // translate/transform_selection).
 enum class CoordinateMoveMode { set, add, transform };
+
+// Crystallographic cell in angstrom and degrees.
+struct CellParameters {
+  double a{}, b{}, c{};
+  double alpha{90.0}, beta{90.0}, gamma{90.0};
+};
 
 struct CoordinateMoveResult {
   std::uint64_t transaction_id{};
@@ -923,6 +942,37 @@ struct MovieExportResult {
   std::size_t total_bytes{};
   std::string format;
   std::vector<std::filesystem::path> paths;
+  std::vector<std::string> warnings;
+};
+
+struct MovieVideoRequest {
+  std::filesystem::path path;
+  // "auto" derives mp4/mov/webm/gif/mpeg1 from the extension.
+  std::string format{"auto"};
+  // Defaults to the movie's frame rate.
+  std::optional<double> fps;
+  int quality{70};
+  std::optional<std::filesystem::path> encoder_path;
+  bool keep_frames{};
+  bool overwrite{};
+  std::optional<std::size_t> first;
+  std::optional<std::size_t> last;
+  // Size/ray options for the rendered frames (the frame format is always PNG).
+  ImageSaveRequest image;
+};
+
+struct MovieVideoResult {
+  std::filesystem::path output;
+  std::string format;
+  std::size_t frame_count{};
+  std::size_t width{};
+  std::size_t height{};
+  double frames_per_second{};
+  std::size_t bytes{};
+  std::filesystem::path encoder;
+  std::vector<std::string> command;
+  // Set only when the rendered frames were kept.
+  std::filesystem::path frames_directory;
   std::vector<std::string> warnings;
 };
 
@@ -1294,6 +1344,20 @@ struct NamedSceneDeleteResult {
   bool cleared_all{};
 };
 
+// Per-atom data of a selection in one frame (positions converted to angstrom), for the measure tools.
+struct SelectedAtomData {
+  std::uint64_t object_id{};
+  std::string object_name;
+  std::size_t frame_index{};
+  std::vector<std::size_t> indices;
+  std::vector<model::Vec3d> positions;
+  // Present only when requested; masses may be estimated from the element (see masses_estimated).
+  std::vector<double> partial_charges;
+  std::vector<double> masses;
+  bool masses_estimated{};
+  std::optional<model::UnitCell> unit_cell;
+};
+
 struct MovieFrameRecord {
   // Movie frames are one-based at the product API boundary.
   std::size_t frame{1U};
@@ -1312,6 +1376,8 @@ struct MovieTimelineState {
   bool loop{};
   bool playing{};
   std::map<std::size_t, MovieFrameRecord> keyframes;
+  // Zero-based trajectory frame shown by each movie frame (`movie map` / PyMOL mset); empty means unmapped.
+  std::vector<std::size_t> state_map{};
 
   friend bool operator==(const MovieTimelineState&, const MovieTimelineState&) =
       default;
@@ -1348,6 +1414,10 @@ public:
   [[nodiscard]] operation::Result<VolumeLoadResult>
   load_volume_document(io::VolumeDocument document,
                        const std::filesystem::path &path);
+  // Voxel-wise combination of volumes that share one grid (shape, origin and spacing): sum, difference (first minus
+  // the rest), average, product, maximum or minimum. The result becomes a new volume object.
+  [[nodiscard]] operation::Result<VolumeLoadResult>
+  combine_volumes(const std::vector<std::string> &names, std::string_view mode, std::string result_name);
   [[nodiscard]] std::vector<WorkspaceVolumeInfo> list_volumes() const;
   [[nodiscard]] operation::Result<VolumeIsosurfaceResult>
   show_volume_isosurface(double level, render::ColorRgba color,
@@ -1532,6 +1602,10 @@ public:
   list_bonds(std::string selection_expression, std::size_t limit) const;
   [[nodiscard]] operation::Result<std::vector<std::string>>
   list_chains(std::string selection_expression) const;
+  // Sets (or with nullopt removes) the unit cell of every state of the active object; undoable.
+  [[nodiscard]] operation::Result<CoordinateMoveResult> set_unit_cell(std::optional<CellParameters> cell);
+  [[nodiscard]] operation::Result<SelectedAtomData>
+  selected_atom_data(std::string selection_expression, bool need_partial_charges, bool need_masses) const;
   [[nodiscard]] operation::Result<ChargeSum>
   sum_charge(std::string selection_expression, std::string_view kind) const;
   [[nodiscard]] operation::Result<MassSum>
@@ -1581,6 +1655,9 @@ public:
   [[nodiscard]] std::optional<operation::Error>
   set_named_selection(std::string name, std::string expression, bool dynamic,
                       bool merge = false, std::string state = "current");
+  // Removes a named selection of the active object.
+  [[nodiscard]] std::optional<operation::Error> delete_named_selection(
+      std::string_view name);
   [[nodiscard]] operation::Result<ShowResult>
   show(render::RepresentationKind kind, std::string selection_expression,
        bool replace_existing = false);
@@ -1918,6 +1995,12 @@ public:
                   bool loop);
   [[nodiscard]] operation::Result<MovieTimelineResult>
   set_movie_keyframe(MovieFrameRecord keyframe);
+  // Defines which trajectory frame each movie frame shows (PyMOL mset/madd). `start_frame` is the one-based movie
+  // frame where the specification begins (the movie is truncated there first); unset appends after the last frame.
+  // An empty specification truncates (and removes the movie when nothing is left).
+  [[nodiscard]] operation::Result<MovieTimelineResult>
+  map_movie_states(std::string_view specification,
+                   std::optional<std::size_t> start_frame);
   [[nodiscard]] operation::Result<MovieTimelineResult>
   seek_movie(std::size_t frame);
   [[nodiscard]] operation::Result<MovieTimelineResult>
@@ -1930,6 +2013,9 @@ public:
   // removes the files this call created.
   [[nodiscard]] operation::Result<MovieExportResult>
   export_movie_frames(const MovieExportRequest &request);
+  // Renders the movie to a temporary PNG sequence and encodes it with the optional external FFmpeg adapter.
+  [[nodiscard]] operation::Result<MovieVideoResult>
+  export_movie_video(const MovieVideoRequest &request, operation::TaskContext &context);
   [[nodiscard]] const std::optional<MovieTimelineState>& movie() const
       noexcept {
     return movie_;

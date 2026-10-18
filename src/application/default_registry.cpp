@@ -1,4 +1,8 @@
 #include "molshredder/application/default_registry.hpp"
+#include "molshredder/application/movie_mapping.hpp"
+#include "molshredder/application/video_encoder.hpp"
+#include "molshredder/analysis/measure_tools.hpp"
+#include "molshredder/analysis/point_group.hpp"
 #include "molshredder/application/session.hpp"
 
 #include <algorithm>
@@ -1508,7 +1512,9 @@ command::Value movie_timeline_value(const MovieTimelineState &movie) {
       {"frame_count", static_cast<std::uint64_t>(movie.frame_count)},
       {"keyframes", std::move(keyframes)},
       {"loop", movie.loop},
+      {"mapped_frame_count", static_cast<std::uint64_t>(movie.state_map.size())},
       {"playing", movie.playing},
+      {"state_map", compress_movie_state_map(movie.state_map)},
       {"security", "typed-scene-trajectory-keys-only"}};
 }
 
@@ -2768,6 +2774,28 @@ command::Registry make_default_registry(
         return Result<Response>::success(
             movie_response("Movie timeline configured", configured.value()));
       };
+    } else if (canonical_name == "movie map") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const bool append = arguments.at("append") == "true";
+        std::optional<std::size_t> start;
+        if (arguments.contains("frame")) {
+          if (append)
+            return Result<Response>::failure(operation::Error{
+                operation::ErrorCode::invalid_argument,
+                "--frame and --append are mutually exclusive",
+                "use --append to extend the movie or --frame to rewrite from a frame"});
+          const auto frame = size_argument(arguments, "frame");
+          if (!frame.has_value()) return Result<Response>::failure(frame.error());
+          start = frame.value();
+        } else if (!append) {
+          start = 1U;  // mset default: replace from frame 1
+        }
+        const auto mapped = workspace->map_movie_states(arguments.at("spec"), start);
+        if (!mapped.has_value()) return Result<Response>::failure(mapped.error());
+        return Result<Response>::success(movie_response(
+            workspace->movie().has_value() ? "Movie states mapped" : "Movie removed (empty mapping)",
+            mapped.value()));
+      };
     } else if (canonical_name == "movie keyframe") {
       handler = [workspace](const Arguments &arguments, TaskContext &) {
         const auto frame = size_argument(arguments, "frame", true);
@@ -3166,6 +3194,24 @@ command::Registry make_default_registry(
               {"precision",
                std::string{volume_precision_name(loaded.value().precision)}},
               {"value_count", loaded.value().value_count}}});
+      };
+    } else if (canonical_name == "volume combine") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const auto names = batch_values(arguments.at("volumes"), "volumes");
+        if (!names.has_value()) return Result<Response>::failure(names.error());
+        const auto combined = workspace->combine_volumes(names.value(), arguments.at("mode"), arguments.at("name"));
+        if (!combined.has_value()) return Result<Response>::failure(combined.error());
+        const auto &value = combined.value();
+        return Result<Response>::success(
+            {"combined volume " + value.object_name,
+             {{"dimensions", shape_value(value.shape)},
+              {"maximum", value.maximum},
+              {"minimum", value.minimum},
+              {"mode", arguments.at("mode")},
+              {"object_id", value.object_id},
+              {"object_name", value.object_name},
+              {"sources", arguments.at("volumes")},
+              {"value_count", value.value_count}}});
       };
     } else if (canonical_name == "volume list") {
       handler = [workspace](const Arguments &, TaskContext &) {
@@ -5287,6 +5333,15 @@ command::Registry make_default_registry(
               {"name", arguments.at("name")},
               {"state", arguments.at("state")}}});
       };
+    } else if (canonical_name == "select delete") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const auto error = workspace->delete_named_selection(arguments.at("name"));
+        if (error.has_value())
+          return Result<Response>::failure(error.value());
+        return Result<Response>::success(
+            {"selection " + arguments.at("name") + " deleted",
+             {{"name", arguments.at("name")}}});
+      };
     } else if (canonical_name == "select") {
       handler = [workspace](const Arguments &arguments, TaskContext &) {
         const auto error = workspace->set_named_selection(
@@ -5595,16 +5650,18 @@ command::Registry make_default_registry(
               {"type", value.type}}});
       };
     } else if (canonical_name == "image save" ||
-               canonical_name == "movie export") {
+               canonical_name == "movie export" ||
+               canonical_name == "movie export-video") {
       const bool movie_export = canonical_name == "movie export";
-      handler = [workspace, movie_export](const Arguments &arguments,
+      const bool movie_video = canonical_name == "movie export-video";
+      handler = [workspace, movie_export, movie_video](const Arguments &arguments,
                                           TaskContext &context) {
         if (context.cancellation.is_cancelled())
           return Result<Response>::failure(operation::Error{
               operation::ErrorCode::cancelled, "image export cancelled", {}});
         application::ImageSaveRequest request;
-        if (!movie_export) request.path = arguments.at("path");
-        request.format = arguments.at("image-format");
+        if (!movie_export && !movie_video) request.path = arguments.at("path");
+        request.format = movie_video ? std::string{"png"} : arguments.at("image-format");
         request.units = arguments.at("units");
         request.ray = arguments.at("ray") == "true";
         const auto width = number_argument(arguments, "width");
@@ -5634,6 +5691,54 @@ command::Registry make_default_registry(
           if (!parsed.has_value())
             return Result<Response>::failure(parsed.error());
           request.dpi = parsed.value();
+        }
+        if (movie_video) {
+          application::MovieVideoRequest video;
+          video.path = arguments.at("path");
+          video.format = arguments.at("video-format");
+          video.overwrite = arguments.at("overwrite") == "true";
+          video.keep_frames = arguments.at("keep-frames") == "true";
+          video.image = request;
+          if (const auto fps = arguments.find("fps"); fps != arguments.end() && !fps->second.empty()) {
+            const auto parsed = number_argument(arguments, "fps");
+            if (!parsed.has_value()) return Result<Response>::failure(parsed.error());
+            video.fps = parsed.value();
+          }
+          const auto quality = size_argument(arguments, "quality");
+          if (!quality.has_value()) return Result<Response>::failure(quality.error());
+          if (quality.value() > 100U)
+            return Result<Response>::failure(operation::Error{
+                operation::ErrorCode::invalid_argument, "video quality must be between 0 and 100", {}});
+          video.quality = static_cast<int>(quality.value());
+          if (const auto path = arguments.find("encoder-path"); path != arguments.end() && !path->second.empty())
+            video.encoder_path = std::filesystem::path{path->second};
+          for (const auto &[name, target] :
+               {std::pair<const char *, std::optional<std::size_t> *>{"first", &video.first}, {"last", &video.last}}) {
+            const auto found = arguments.find(name);
+            if (found == arguments.end() || found->second.empty()) continue;
+            const auto parsed = size_argument(arguments, name);
+            if (!parsed.has_value()) return Result<Response>::failure(parsed.error());
+            *target = parsed.value();
+          }
+          const auto encoded = workspace->export_movie_video(video, context);
+          if (!encoded.has_value()) return Result<Response>::failure(encoded.error());
+          const auto &value = encoded.value();
+          command::Value::Array warnings, command_line;
+          for (const auto &warning : value.warnings) warnings.emplace_back(warning);
+          for (const auto &part : value.command) command_line.emplace_back(part);
+          return Result<Response>::success(
+              {"movie video exported",
+               {{"bytes", static_cast<std::uint64_t>(value.bytes)},
+                {"command", std::move(command_line)},
+                {"encoder", value.encoder.string()},
+                {"format", value.format},
+                {"fps", value.frames_per_second},
+                {"frame_count", static_cast<std::uint64_t>(value.frame_count)},
+                {"frames_directory", value.frames_directory.string()},
+                {"height", static_cast<std::uint64_t>(value.height)},
+                {"path", value.output.string()},
+                {"warnings", std::move(warnings)},
+                {"width", static_cast<std::uint64_t>(value.width)}}});
         }
         if (movie_export) {
           application::MovieExportRequest export_request;
@@ -5989,6 +6094,20 @@ command::Registry make_default_registry(
         request.match = arguments.at("match");
         request.uniform_weights = arguments.at("weight") == "uniform";
         request.apply = apply;
+        {
+          const auto cycles = size_argument(arguments, "cycles");
+          const auto cutoff = number_argument(arguments, "cutoff");
+          const auto gap = number_argument(arguments, "gap");
+          const auto extend = number_argument(arguments, "extend");
+          if (!cycles.has_value()) return Result<Response>::failure(cycles.error());
+          if (!cutoff.has_value()) return Result<Response>::failure(cutoff.error());
+          if (!gap.has_value()) return Result<Response>::failure(gap.error());
+          if (!extend.has_value()) return Result<Response>::failure(extend.error());
+          request.cycles = cycles.value();
+          request.cutoff = cutoff.value();
+          request.gap_open = gap.value();
+          request.gap_extend = extend.value();
+        }
         if (const auto found = arguments.find("pairs");
             found != arguments.end() && !found->second.empty()) {
           // "m:t,m:t" 1-based atom index pairs.
@@ -6027,9 +6146,15 @@ command::Registry make_default_registry(
         for (const auto entry : value.matrix) matrix.emplace_back(rounded(entry, precision));
         command::Value::Object fields{
             {"applied", value.applied},
+            {"alignment_score", rounded(value.alignment_score, precision)},
+            {"aligned_residue_count", static_cast<std::uint64_t>(value.aligned_residue_count)},
+            {"cycles_run", static_cast<std::uint64_t>(value.cycles_run)},
+            {"identical_residue_count", static_cast<std::uint64_t>(value.identical_residue_count)},
+            {"initial_pair_count", static_cast<std::uint64_t>(value.initial_pair_count)},
             {"matrix", std::move(matrix)},
             {"mobile_object_id", value.mobile_object_id},
             {"paired_atom_count", static_cast<std::uint64_t>(value.paired_atom_count)},
+            {"rejected_pair_count", static_cast<std::uint64_t>(value.initial_pair_count - value.paired_atom_count)},
             {"precision", precision},
             {"rmsd_after", rounded(value.rmsd_after, precision)},
             {"rmsd_before", rounded(value.rmsd_before, precision)},
@@ -6122,6 +6247,297 @@ command::Registry make_default_registry(
               {"selection", arguments.at("selection")},
               {"source", summed.value().source},
               {"unit", std::string{"elementary charge"}}}});
+      };
+    } else if (canonical_name == "analyze dipole") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const auto reference_name = arguments.at("reference");
+        const auto data = workspace->selected_atom_data(arguments.at("selection"), true, reference_name == "mass");
+        if (!data.has_value()) return Result<Response>::failure(data.error());
+        const auto reference = reference_name == "mass"       ? analysis::DipoleReference::mass
+                               : reference_name == "origin"   ? analysis::DipoleReference::origin
+                                                              : analysis::DipoleReference::geometric;
+        const auto result = analysis::dipole_moment(data.value().positions, data.value().partial_charges, data.value().masses, reference);
+        if (!result.has_value()) return Result<Response>::failure(result.error());
+        const auto precision = static_cast<unsigned int>(std::stoul(arguments.at("precision")));
+        const bool debye = arguments.at("dipole-unit") == "debye";
+        const double scale = debye ? analysis::kDebyePerElementaryAngstrom : 1.0;
+        const auto &moment = result.value().moment;
+        const bool neutral = std::abs(result.value().total_charge) < 1.0e-6;
+        return Result<Response>::success(
+            {"dipole moment calculated",
+             {{"atom_count", static_cast<std::uint64_t>(data.value().indices.size())},
+              {"dipole", command::Value::Array{rounded(moment.x * scale, precision), rounded(moment.y * scale, precision),
+                                               rounded(moment.z * scale, precision)}},
+              {"magnitude", rounded(result.value().magnitude * scale, precision)},
+              {"mass_estimated", data.value().masses_estimated},
+              {"net_charge", rounded(result.value().total_charge, precision)},
+              {"precision", precision},
+              {"reference", reference_name},
+              {"reference_origin_independent", neutral},
+              {"reference_point", command::Value::Array{rounded(result.value().reference.x, precision),
+                                                         rounded(result.value().reference.y, precision),
+                                                         rounded(result.value().reference.z, precision)}},
+              {"selection", arguments.at("selection")},
+              {"unit", debye ? std::string{"debye"} : std::string{"elementary charge * angstrom"}}}});
+      };
+    } else if (canonical_name == "analyze surface-atoms") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const auto gridsize = number_argument(arguments, "gridsize");
+        const auto radius = number_argument(arguments, "radius");
+        const auto depth = number_argument(arguments, "depth");
+        if (!gridsize.has_value()) return Result<Response>::failure(gridsize.error());
+        if (!radius.has_value()) return Result<Response>::failure(radius.error());
+        if (!depth.has_value()) return Result<Response>::failure(depth.error());
+        const auto data = workspace->selected_atom_data(arguments.at("selection"), false, false);
+        if (!data.has_value()) return Result<Response>::failure(data.error());
+        analysis::SurfaceAtomsRequest request;
+        request.grid_spacing = gridsize.value();
+        request.radius = radius.value();
+        request.depth = depth.value();
+        const auto surface = analysis::surface_atoms(data.value().positions, request);
+        if (!surface.has_value()) return Result<Response>::failure(surface.error());
+        command::Table table;
+        table.columns = {"index", "name", "residue_name", "residue_number", "chain"};
+        const auto *object = workspace->active_object();
+        std::vector<std::size_t> picked;
+        for (const auto position : surface.value()) {
+          const auto atom_index = data.value().indices[position];
+          picked.push_back(atom_index);
+          const auto &atom = object->system->topology()->atoms()[atom_index];
+          const auto &residue = object->system->topology()->residues()[atom.residue.value];
+          table.rows.push_back({static_cast<std::uint64_t>(atom_index + 1U), atom.name, residue.name,
+                                static_cast<std::int64_t>(residue.sequence_number), residue.chain_id});
+        }
+        std::string created;
+        if (const auto found = arguments.find("select-name"); found != arguments.end() && !found->second.empty() && !picked.empty()) {
+          std::string expression = "index ";
+          for (std::size_t i = 0; i < picked.size();) {
+            std::size_t j = i;
+            while (j + 1U < picked.size() && picked[j + 1U] == picked[j] + 1U) ++j;
+            if (i != 0U) expression += '+';
+            expression += std::to_string(picked[i] + 1U);
+            if (j > i) expression += "-" + std::to_string(picked[j] + 1U);
+            i = j + 1U;
+          }
+          if (const auto error = workspace->set_named_selection(found->second, expression, false); error.has_value())
+            return Result<Response>::failure(*error);
+          created = found->second;
+        }
+        return Result<Response>::success(
+            {"surface atoms found",
+             {{"atom_count", static_cast<std::uint64_t>(data.value().indices.size())},
+              {"depth", depth.value()},
+              {"gridsize", gridsize.value()},
+              {"radius", radius.value()},
+              {"selection", arguments.at("selection")},
+              {"selection_created", created},
+              {"surface_atom_count", static_cast<std::uint64_t>(surface.value().size())}},
+             std::move(table)});
+      };
+    } else if (canonical_name == "analyze trajectory cluster") {
+      handler = [workspace](const Arguments &arguments, TaskContext &context) {
+        const auto range = series_range(arguments, *workspace);
+        const auto budget = size_argument(arguments, "frame-pair-budget", true);
+        const auto cutoff = number_argument(arguments, "cutoff");
+        if (!range.has_value()) return Result<Response>::failure(range.error());
+        if (!budget.has_value()) return Result<Response>::failure(budget.error());
+        if (!cutoff.has_value()) return Result<Response>::failure(cutoff.error());
+        if (!(cutoff.value() > 0.0))
+          return Result<Response>::failure(operation::Error{operation::ErrorCode::invalid_argument, "cluster cutoff must be positive", {}});
+        const auto analyzed = workspace->analyze_rmsd_matrix(
+            arguments.at("selection"), fit_selection(arguments), range.value(), fit_mode(arguments.at("fit")),
+            weight_mode(arguments.at("weight")),
+            arguments.at("missing") == "skip" ? analysis::MissingAtomPolicy::skip : analysis::MissingAtomPolicy::error,
+            static_cast<std::uint64_t>(budget.value()), context);
+        if (!analyzed.has_value()) return Result<Response>::failure(analyzed.error());
+        const auto target_unit = length_unit(arguments.at("unit"));
+        const auto precision = static_cast<unsigned int>(std::stoul(arguments.at("precision")));
+        const auto &matrix = analyzed.value().matrix;
+        const std::size_t count = matrix.frame_indices.size();
+        std::map<std::size_t, std::size_t> position_of;
+        for (std::size_t i = 0; i < count; ++i) position_of[matrix.frame_indices[i]] = i;
+        std::vector<double> distances(count * count, 0.0);
+        for (const auto &cell : matrix.upper_triangle) {
+          const auto a = position_of.at(cell.first_frame), b = position_of.at(cell.second_frame);
+          const double value = convert_length(cell.rmsd.rmsd, cell.rmsd.coordinate_unit, target_unit);
+          distances[a * count + b] = value;
+          distances[b * count + a] = value;
+        }
+        const auto clusters = analysis::quality_threshold_clusters(
+            count, [&](std::size_t a, std::size_t b) { return distances[a * count + b]; }, cutoff.value());
+        command::Table table;
+        table.columns = {"cluster", "size", "seed_frame", "diameter", "unit", "frames"};
+        for (std::size_t c = 0; c < clusters.size(); ++c) {
+          std::string frames;
+          for (const auto member : clusters[c].members) {
+            if (!frames.empty()) frames += ',';
+            frames += std::to_string(matrix.frame_indices[member]);
+          }
+          table.rows.push_back({static_cast<std::uint64_t>(c + 1U), static_cast<std::uint64_t>(clusters[c].members.size()),
+                                static_cast<std::uint64_t>(matrix.frame_indices[clusters[c].seed]),
+                                precise(clusters[c].diameter, precision), std::string{length_unit_name(target_unit)}, frames});
+        }
+        return Result<Response>::success(
+            {"trajectory frames clustered",
+             {{"cluster_count", static_cast<std::uint64_t>(clusters.size())},
+              {"cutoff", cutoff.value()},
+              {"distance", arguments.at("fit") == "rigid" ? std::string{"fitted rmsd"} : std::string{"rmsd without fit"}},
+              {"frame_count", static_cast<std::uint64_t>(count)},
+              {"selection", arguments.at("selection")},
+              {"unit", std::string{length_unit_name(target_unit)}}},
+             std::move(table)});
+      };
+    } else if (canonical_name == "analyze pbc-neighbors" || canonical_name == "analyze pbc-orthonormal") {
+      const bool neighbors = canonical_name == "analyze pbc-neighbors";
+      handler = [workspace, neighbors](const Arguments &arguments, TaskContext &) {
+        const auto data = workspace->selected_atom_data(arguments.at("selection"), false, false);
+        if (!data.has_value()) return Result<Response>::failure(data.error());
+        if (!data.value().unit_cell.has_value())
+          return Result<Response>::failure(operation::Error{operation::ErrorCode::not_found, "the current frame has no unit cell",
+                                                            "load a structure with a cell (CRYST1, mmCIF cell) or a periodic trajectory", {}});
+        // Cell centre: --center "x,y,z" (angstrom) or the centroid of the selected atoms.
+        model::Vec3d center{0.0, 0.0, 0.0};
+        std::string center_source = "selection centroid";
+        if (const auto found = arguments.find("center"); found != arguments.end() && !found->second.empty()) {
+          std::string text = found->second;
+          for (auto &c : text) if (c == ',') c = ' ';
+          std::istringstream stream{text};
+          if (!(stream >> center.x >> center.y >> center.z))
+            return Result<Response>::failure(operation::Error{operation::ErrorCode::invalid_argument, "--center needs three numbers such as 5,5,5", {}});
+          center_source = "explicit";
+        } else {
+          for (const auto &p : data.value().positions) { center.x += p.x; center.y += p.y; center.z += p.z; }
+          const auto n = static_cast<double>(data.value().positions.size());
+          center = {center.x / n, center.y / n, center.z / n};
+        }
+        const auto precision = static_cast<unsigned int>(std::stoul(arguments.at("precision")));
+        const auto center_value = command::Value::Array{rounded(center.x, precision), rounded(center.y, precision), rounded(center.z, precision)};
+        if (!neighbors) {
+          const auto matrix = analysis::pbc_to_orthonormal(*data.value().unit_cell, center);
+          if (!matrix.has_value()) return Result<Response>::failure(matrix.error());
+          command::Value::Array rows;
+          for (std::size_t r = 0; r < 4U; ++r)
+            rows.emplace_back(command::Value::Array{rounded(matrix.value()[r * 4U], precision), rounded(matrix.value()[r * 4U + 1U], precision),
+                                                    rounded(matrix.value()[r * 4U + 2U], precision), rounded(matrix.value()[r * 4U + 3U], precision)});
+          return Result<Response>::success({"orthonormal cell transform calculated",
+                                            {{"center", center_value}, {"center_source", center_source}, {"matrix", std::move(rows)},
+                                             {"precision", precision}, {"unit", std::string{"angstrom"}}}});
+        }
+        const auto cutoff = number_argument(arguments, "cutoff");
+        if (!cutoff.has_value()) return Result<Response>::failure(cutoff.error());
+        const auto images = analysis::pbc_neighbors(data.value().positions, *data.value().unit_cell, center, cutoff.value());
+        if (!images.has_value()) return Result<Response>::failure(images.error());
+        command::Table table;
+        table.columns = {"index", "shift_a", "shift_b", "shift_c", "x", "y", "z"};
+        for (const auto &image : images.value())
+          table.rows.push_back({static_cast<std::uint64_t>(data.value().indices[image.source] + 1U), static_cast<std::int64_t>(image.shift[0]),
+                                static_cast<std::int64_t>(image.shift[1]), static_cast<std::int64_t>(image.shift[2]),
+                                precise(image.position.x, precision), precise(image.position.y, precision), precise(image.position.z, precision)});
+        return Result<Response>::success({"periodic image atoms listed",
+                                          {{"atom_count", static_cast<std::uint64_t>(data.value().indices.size())},
+                                           {"center", center_value},
+                                           {"center_source", center_source},
+                                           {"cutoff", cutoff.value()},
+                                           {"image_count", static_cast<std::uint64_t>(images.value().size())},
+                                           {"precision", precision},
+                                           {"unit", std::string{"angstrom"}}},
+                                          std::move(table)});
+      };
+    } else if (canonical_name == "analyze symmetry") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const auto tolerance = number_argument(arguments, "tolerance");
+        if (!tolerance.has_value()) return Result<Response>::failure(tolerance.error());
+        const auto data = workspace->selected_atom_data(arguments.at("selection"), false, true);
+        if (!data.has_value()) return Result<Response>::failure(data.error());
+        const auto *object = workspace->active_object();
+        std::vector<int> labels;
+        labels.reserve(data.value().indices.size());
+        for (const auto index : data.value().indices)
+          labels.push_back(static_cast<int>(object->system->topology()->atoms()[index].atomic_number));
+        analysis::PointGroupRequest request;
+        request.positions = data.value().positions;
+        request.labels = labels;
+        request.masses = data.value().masses;
+        request.tolerance = tolerance.value();
+        const auto detected = analysis::detect_point_group(request);
+        if (!detected.has_value()) return Result<Response>::failure(detected.error());
+        const auto precision = static_cast<unsigned int>(std::stoul(arguments.at("precision")));
+        const auto &value = detected.value();
+        command::Value::Object rotations, impropers;
+        for (const auto &[order, count] : value.rotation_axes) rotations.emplace("C" + std::to_string(order), static_cast<std::uint64_t>(count));
+        for (const auto &[order, count] : value.improper_axes) impropers.emplace("S" + std::to_string(order), static_cast<std::uint64_t>(count));
+        command::Value::Object fields{
+            {"atom_count", static_cast<std::uint64_t>(data.value().indices.size())},
+            {"center", command::Value::Array{rounded(value.center.x, precision), rounded(value.center.y, precision), rounded(value.center.z, precision)}},
+            {"improper_axes", std::move(impropers)},
+            {"inversion", value.inversion},
+            {"linear", value.linear},
+            {"mass_estimated", data.value().masses_estimated},
+            {"mirror_planes", static_cast<std::uint64_t>(value.mirror_planes)},
+            {"point_group", value.point_group},
+            {"precision", precision},
+            {"rotation_axes", std::move(rotations)},
+            {"selection", arguments.at("selection")},
+            {"tolerance", value.tolerance},
+            {"unit", std::string{"angstrom"}}};
+        fields.emplace("principal_axis", value.principal_axis.has_value()
+                                              ? command::Value{command::Value::Array{rounded(value.principal_axis->x, precision),
+                                                                                       rounded(value.principal_axis->y, precision),
+                                                                                       rounded(value.principal_axis->z, precision)}}
+                                              : command::Value{nullptr});
+        return Result<Response>::success({"point group detected: " + value.point_group, std::move(fields)});
+      };
+    } else if (canonical_name == "pbc get") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const auto data = workspace->selected_atom_data("all", false, false);
+        if (!data.has_value()) return Result<Response>::failure(data.error());
+        const auto precision = static_cast<unsigned int>(std::stoul(arguments.at("precision")));
+        if (!data.value().unit_cell.has_value())
+          return Result<Response>::success({"the current frame has no unit cell", {{"has_cell", false}, {"object_name", data.value().object_name}}});
+        const auto &cell = *data.value().unit_cell;
+        const auto length = [](const model::Vec3d &v) { return std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z); };
+        const auto angle = [&](const model::Vec3d &u, const model::Vec3d &v) {
+          return std::acos(std::clamp((u.x * v.x + u.y * v.y + u.z * v.z) / (length(u) * length(v)), -1.0, 1.0)) * 180.0 / std::acos(-1.0);
+        };
+        const auto vector = [&](const model::Vec3d &v) {
+          return command::Value::Array{rounded(v.x, precision), rounded(v.y, precision), rounded(v.z, precision)};
+        };
+        return Result<Response>::success(
+            {"unit cell reported",
+             {{"a", rounded(length(cell.a), precision)},
+              {"alpha", rounded(angle(cell.b, cell.c), precision)},
+              {"b", rounded(length(cell.b), precision)},
+              {"beta", rounded(angle(cell.a, cell.c), precision)},
+              {"c", rounded(length(cell.c), precision)},
+              {"gamma", rounded(angle(cell.a, cell.b), precision)},
+              {"has_cell", true},
+              {"object_name", data.value().object_name},
+              {"precision", precision},
+              {"unit", std::string{"angstrom"}},
+              {"vectors", command::Value::Array{vector(cell.a), vector(cell.b), vector(cell.c)}},
+              {"volume", rounded(std::abs(cell.signed_volume()), precision)}}});
+      };
+    } else if (canonical_name == "pbc set") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        std::optional<application::CellParameters> cell;
+        if (arguments.at("clear") == "true") {
+          if (arguments.contains("a") || arguments.contains("b") || arguments.contains("c"))
+            return Result<Response>::failure(operation::Error{operation::ErrorCode::invalid_argument, "--clear cannot be combined with cell lengths", {}});
+        } else {
+          for (const char *name : {"a", "b", "c"})
+            if (!arguments.contains(name))
+              return Result<Response>::failure(operation::Error{operation::ErrorCode::invalid_argument, "pbc set needs --a, --b and --c (or --clear true)", {}});
+          const auto a = number_argument(arguments, "a"), b = number_argument(arguments, "b"), c = number_argument(arguments, "c");
+          const auto alpha = number_argument(arguments, "alpha"), beta = number_argument(arguments, "beta"), gamma = number_argument(arguments, "gamma");
+          for (const auto *parsed : {&a, &b, &c, &alpha, &beta, &gamma})
+            if (!parsed->has_value()) return Result<Response>::failure(parsed->error());
+          cell = application::CellParameters{a.value(), b.value(), c.value(), alpha.value(), beta.value(), gamma.value()};
+        }
+        const auto changed = workspace->set_unit_cell(cell);
+        if (!changed.has_value()) return Result<Response>::failure(changed.error());
+        return Result<Response>::success({cell.has_value() ? "unit cell set" : "unit cell removed",
+                                          {{"object_id", changed.value().object_id},
+                                           {"state_count", static_cast<std::uint64_t>(changed.value().state_count)}}});
       };
     } else if (canonical_name == "analyze mass") {
       handler = [workspace](const Arguments &arguments, TaskContext &) {

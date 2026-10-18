@@ -139,6 +139,13 @@ bool ChildProcess::running() {
   return native_->process != nullptr && WaitForSingleObject(native_->process, 0) == WAIT_TIMEOUT;
 }
 
+std::optional<int> ChildProcess::exit_code() {
+  if (native_->process == nullptr || running()) return std::nullopt;
+  DWORD code = 0;
+  if (!GetExitCodeProcess(native_->process, &code)) return std::nullopt;
+  return static_cast<int>(code);
+}
+
 void ChildProcess::kill() {
   if (native_ && native_->process != nullptr && running()) TerminateProcess(native_->process, 1);
 }
@@ -190,6 +197,7 @@ struct ChildProcess::Native {
   int stdout_fd{-1};
   int stderr_fd{-1};
   bool reaped{false};
+  int exit_status{-1};
 };
 
 Result<std::unique_ptr<ChildProcess>> ChildProcess::start(
@@ -296,9 +304,17 @@ bool ChildProcess::running() {
   const auto result = waitpid(native_->pid, &status, WNOHANG);
   if (result == native_->pid) {
     native_->reaped = true;
+    native_->exit_status = WIFEXITED(status)     ? WEXITSTATUS(status)
+                           : WIFSIGNALED(status) ? 128 + WTERMSIG(status)
+                                                 : -1;
     return false;
   }
   return true;
+}
+
+std::optional<int> ChildProcess::exit_code() {
+  if (running()) return std::nullopt;
+  return native_->exit_status;
 }
 
 void ChildProcess::kill() {
@@ -319,6 +335,7 @@ void ChildProcess::stop(std::chrono::milliseconds grace) {
     int status = 0;
     waitpid(native_->pid, &status, 0);
     native_->reaped = true;
+    native_->exit_status = 128 + SIGKILL;
   }
 }
 

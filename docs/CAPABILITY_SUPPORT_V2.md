@@ -13,39 +13,39 @@ Machine-readable data: [`capability-support-v2.json`](capability-support-v2.json
 | Baseline | 버전/commit | 기준일 | 분모 | 검증됨 | 진행 중 | 계획 | 사용 불가 |
 |---|---|---|---:|---:|---:|---:|---:|
 | `pymol-incentive-3.1.8` | `3.1.8` | 2026-10-02 | 35 | 0 | 6 | 0 | 29 |
-| `pymol-oss-3.1.0` | `f51e58f6b08308c41c85b9d12a23231f49ca325a` | 2026-10-03 | 1942 | 137 | 486 | 0 | 1319 |
-| `source-audit-2026-10` | `—` | 2026-10-17 | 522 | 0 | 83 | 0 | 439 |
-| `vmd-1.9.3` | `1.9.3` | 2026-10-02 | 533 | 23 | 200 | 0 | 310 |
-| `vmd-1.9.4a57` | `1.9.4a48` | 2026-10-02 | 573 | 23 | 199 | 0 | 351 |
-| `vmd-plugin-catalog-current` | `—` | 2026-10-02 | 109 | 2 | 14 | 0 | 93 |
+| `pymol-oss-3.1.0` | `f51e58f6b08308c41c85b9d12a23231f49ca325a` | 2026-10-03 | 1942 | 137 | 517 | 0 | 1288 |
+| `source-audit-2026-10` | `—` | 2026-10-17 | 522 | 0 | 85 | 0 | 437 |
+| `vmd-1.9.3` | `1.9.3` | 2026-10-02 | 533 | 23 | 206 | 0 | 304 |
+| `vmd-1.9.4a57` | `1.9.4a48` | 2026-10-02 | 573 | 23 | 208 | 0 | 342 |
+| `vmd-plugin-catalog-current` | `—` | 2026-10-02 | 109 | 2 | 18 | 0 | 89 |
 
 ## 전체 상태 요약(중복 제거)
 
 | 상태 | 개수 | 의미 |
 |---|---:|---|
 | 검증됨 | 137 | implementation이 compatible/robust이며 fixture, evidence, module과 public interface가 모두 연결됨 |
-| 진행 중(미검증) | 679 | partial 구현이며 compatibility 완료 주장이 아님 |
+| 진행 중(미검증) | 718 | partial 구현이며 compatibility 완료 주장이 아님 |
 | 인벤토리/계획 | 0 | inventory 또는 acceptance 설계 단계이며 사용자가 실행할 수 없음 |
-| 사용 불가/보류 | 2167 | 보류, 제외, 접근 제한 또는 license 격리 상태 |
+| 사용 불가/보류 | 2128 | 보류, 제외, 접근 제한 또는 license 격리 상태 |
 
 ## Domain 요약
 
 | Domain | 검증됨 | 진행 중 | 계획 | 사용 불가 | 전체 |
 |---|---:|---:|---:|---:|---:|
-| `analysis` | 0 | 67 | 0 | 197 | 264 |
+| `analysis` | 0 | 75 | 0 | 189 | 264 |
 | `automation` | 2 | 39 | 0 | 142 | 183 |
-| `data` | 0 | 0 | 0 | 43 | 43 |
+| `data` | 0 | 6 | 0 | 37 | 43 |
 | `editing` | 0 | 1 | 0 | 172 | 173 |
 | `io` | 0 | 74 | 0 | 153 | 227 |
 | `object_state` | 0 | 88 | 0 | 54 | 142 |
-| `pbc` | 0 | 2 | 0 | 59 | 61 |
+| `pbc` | 0 | 4 | 0 | 57 | 61 |
 | `performance` | 0 | 0 | 0 | 60 | 60 |
 | `plugin` | 0 | 2 | 0 | 40 | 42 |
-| `rendering` | 3 | 55 | 0 | 296 | 354 |
+| `rendering` | 3 | 74 | 0 | 277 | 354 |
 | `representation` | 101 | 71 | 0 | 536 | 708 |
 | `scene` | 31 | 57 | 0 | 121 | 209 |
 | `selection` | 0 | 192 | 0 | 66 | 258 |
-| `trajectory` | 0 | 31 | 0 | 84 | 115 |
+| `trajectory` | 0 | 35 | 0 | 80 | 115 |
 | `ui` | 0 | 0 | 0 | 144 | 144 |
 
 ## Capability 행
@@ -57,7 +57,7 @@ Machine-readable data: [`capability-support-v2.json`](capability-support-v2.json
 | `analysis.alignment.ce` | Combinatorial Extension alignment | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `analysis.alignment.multi_object` | Align multiple objects to one reference | `pymol-oss-3.1.0`, `vmd-plugin-catalog-current` | P1 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
 | `analysis.alignment.residue_structural` | Residue/structure-guided refined alignment | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `analysis.alignment.sequence_refined` | Sequence-guided refined alignment | `pymol-oss-3.1.0` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `analysis.alignment.sequence_refined` | Sequence-guided refined alignment | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 2 |
 | `analysis.atom_property.iterate` | Iterate atom properties read-only | `pymol-oss-3.1.0`, `vmd-1.9.3`, `vmd-1.9.4a57` | P1 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
 | `analysis.center.mass` | Selection center of mass | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 2 |
 | `analysis.charge.sum_formal` | Sum formal charges | `pymol-oss-3.1.0` | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
@@ -85,8 +85,8 @@ Machine-readable data: [`capability-support-v2.json`](capability-support-v2.json
 | `analysis.mass.compute` | Compute molecular mass | `pymol-oss-3.1.0` | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `analysis.measure.avpos` | Returns the average position of each of the selected atoms, for the selected fra | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | — | — | — | `unwritten` | — | 0 |
 | `analysis.measure.center` | Returns the geometric center of atoms in selection using the given weight  | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | — | — | — | `unwritten` | — | 0 |
-| `analysis.measure.cluster` | Performs a cluster analysis (find clusters of timesteps that are similar with re | `vmd-1.9.3`, `vmd-1.9.4a57`, `vmd-plugin-catalog-current` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `analysis.measure.dipole` | Compute the dipole moment vector of the atoms in selection from their respective | `vmd-1.9.3`, `vmd-1.9.4a57`, `vmd-plugin-catalog-current` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
+| `analysis.measure.cluster` | Performs a cluster analysis (find clusters of timesteps that are similar with re | `vmd-1.9.3`, `vmd-1.9.4a57`, `vmd-plugin-catalog-current` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
+| `analysis.measure.dipole` | Compute the dipole moment vector of the atoms in selection from their respective | `vmd-1.9.3`, `vmd-1.9.4a57`, `vmd-plugin-catalog-current` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
 | `analysis.measure.energy` | energy_term atom_list [parameters] [options]: Returns the specified energy term  | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 사용 불가/보류 (`excluded`) | — | — | — | `unwritten` | — | 0 |
 | `analysis.measure.fit` | Returns a 4x4 transformation matrix which, when applied to the atoms in selectio | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
 | `analysis.measure.gofr` | Calculates the atomic radial pair distribution function and the number integral  | `vmd-1.9.3`, `vmd-1.9.4a57`, `vmd-plugin-catalog-current` | P0 | 진행 중(미검증) (`partial`) | — | — | — | `unwritten` | — | 0 |
@@ -95,17 +95,17 @@ Machine-readable data: [`capability-support-v2.json`](capability-support-v2.json
 | `analysis.measure.inertia` | Returns the center of mass and the principles axes of inertia for the selected a | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 2 |
 | `analysis.measure.inverse` | Returns the inverse of the given 4x4 matrix | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 사용 불가/보류 (`excluded`) | — | — | — | `unwritten` | — | 0 |
 | `analysis.measure.manage` | measure command family | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | — | — | — | `unwritten` | — | 0 |
-| `analysis.measure.pbc2onc` | center [frame frame last ]: Computes the transformation matrix that transforms c | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `analysis.measure.pbcneighbors` | center cutoff [ options ]: Returns all image atoms that are within cutoff Å of t | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
+| `analysis.measure.pbc2onc` | center [frame frame last ]: Computes the transformation matrix that transforms c | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
+| `analysis.measure.pbcneighbors` | center cutoff [ options ]: Returns all image atoms that are within cutoff Å of t | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
 | `analysis.measure.rgyr` | Returns the radius of gyration of atoms in selection using the given weight  | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 2 |
 | `analysis.measure.rmsf` | Returns the root mean square position fluctuation for each selected atom in the  | `vmd-1.9.3`, `vmd-1.9.4a57`, `vmd-plugin-catalog-current` | P0 | 진행 중(미검증) (`partial`) | — | — | — | `unwritten` | — | 0 |
 | `analysis.measure.sumweights` | Returns the sum of the list of weights (or data field to use for the weights) fo | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 사용 불가/보류 (`excluded`) | — | — | — | `unwritten` | — | 0 |
-| `analysis.measure.surface` | selection gridsize radius depth : Returns a list of atom indices comprising the  | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `analysis.measure.symmetry` | This function evaluates the molecular symmetry of an atom selection | `vmd-1.9.3`, `vmd-1.9.4a57`, `vmd-plugin-catalog-current` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
+| `analysis.measure.surface` | selection gridsize radius depth : Returns a list of atom indices comprising the  | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
+| `analysis.measure.symmetry` | This function evaluates the molecular symmetry of an atom selection | `vmd-1.9.3`, `vmd-1.9.4a57`, `vmd-plugin-catalog-current` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 2 |
 | `analysis.measurement_object.angle` | Angle measurement object | `pymol-oss-3.1.0`, `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | — | — | — | `unwritten` | — | 2 |
 | `analysis.measurement_object.dihedral` | Dihedral measurement object | `pymol-oss-3.1.0`, `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | — | — | — | `unwritten` | — | 2 |
 | `analysis.measurement_object.distance` | Distance measurement object | `pymol-oss-3.1.0`, `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `unwritten` | — | 2 |
-| `analysis.measurement_object.distance.all_pairs` | All interatomic distances | `pymol-oss-3.1.0` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `analysis.measurement_object.distance.all_pairs` | All interatomic distances | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `analysis.measurement_object.distance.bonded` | Bond distances | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `analysis.measurement_object.distance.centroid` | Centroid distance | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `analysis.measurement_object.distance.exclusion_filtered` | Exclusion-filtered distances | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
@@ -500,12 +500,12 @@ Machine-readable data: [`capability-support-v2.json`](capability-support-v2.json
 | `trajectory.timestep_access.manage` | gettimestep command family | `vmd-1.9.3`, `vmd-1.9.4a57` | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
 | `trajectory.timestep_access.timestep` | retrieve timestep as a Tcl byte array for use in compiled analysis plugins | `vmd-1.9.3`, `vmd-1.9.4a57` | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
 | `data.per_residue_import` | Import per-residue values into an atom field | `vmd-plugin-catalog-current` | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `volume.map.combine` | Combine maps | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `volume.map.combine.average` | Map combine average | `pymol-oss-3.1.0`, `vmd-1.9.4a57` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `volume.map.combine.difference` | Map combine difference | `pymol-oss-3.1.0`, `vmd-1.9.4a57` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `volume.map.combine.maximum` | Map combine maximum | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `volume.map.combine.minimum` | Map combine minimum | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `volume.map.combine.sum` | Map combine sum | `pymol-oss-3.1.0`, `vmd-1.9.4a57` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `volume.map.combine` | Combine maps | `pymol-oss-3.1.0` | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `volume.map.combine.average` | Map combine average | `pymol-oss-3.1.0`, `vmd-1.9.4a57` | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `volume.map.combine.difference` | Map combine difference | `pymol-oss-3.1.0`, `vmd-1.9.4a57` | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `volume.map.combine.maximum` | Map combine maximum | `pymol-oss-3.1.0` | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `volume.map.combine.minimum` | Map combine minimum | `pymol-oss-3.1.0` | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `volume.map.combine.sum` | Map combine sum | `pymol-oss-3.1.0`, `vmd-1.9.4a57` | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `volume.map.generate` | Generate map from atoms | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `volume.map.generate.coulomb` | Map generator coulomb | `pymol-oss-3.1.0` | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `volume.map.generate.coulomb_local` | Map generator coulomb_local | `pymol-oss-3.1.0` | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
@@ -1091,11 +1091,11 @@ Machine-readable data: [`capability-support-v2.json`](capability-support-v2.json
 | `pbc.symmetry.set` | Set crystal symmetry | `pymol-oss-3.1.0`, `vmd-1.9.3`, `vmd-1.9.4a57` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `pbc.unwrap` | Unwrap periodic jumps | `pymol-oss-3.1.0`, `source-audit-2026-10`, `vmd-plugin-catalog-current` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 2 |
 | `pbc.vmd_pbctools.check_cell` | VMD pbctools pbc check_cell | `source-audit-2026-10` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `pbc.vmd_pbctools.get` | VMD pbctools pbc get | `source-audit-2026-10` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
+| `pbc.vmd_pbctools.get` | VMD pbctools pbc get | `source-audit-2026-10` | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
 | `pbc.vmd_pbctools.join` | VMD pbctools pbc join | `source-audit-2026-10` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
 | `pbc.vmd_pbctools.namd2vmd` | VMD pbctools pbc namd2vmd | `source-audit-2026-10` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
 | `pbc.vmd_pbctools.readxst` | VMD pbctools pbc readxst | `source-audit-2026-10` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `pbc.vmd_pbctools.set` | VMD pbctools pbc set | `source-audit-2026-10` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
+| `pbc.vmd_pbctools.set` | VMD pbctools pbc set | `source-audit-2026-10` | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
 | `pbc.vmd_pbctools.vmd2namd` | VMD pbctools pbc vmd2namd | `source-audit-2026-10` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
 | `pbc.vmd_pbctools.writexst` | VMD pbctools pbc writexst | `source-audit-2026-10` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
 | `pbc.vmd_pbctools_option.alignx` | VMD pbctools option -alignx | `source-audit-2026-10` | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
@@ -1280,35 +1280,35 @@ Machine-readable data: [`capability-support-v2.json`](capability-support-v2.json
 | `export.image.write` | Write rendered image | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 1 |
 | `export.movie.camera_flight` | Camera flight movie | `vmd-plugin-catalog-current` | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
 | `export.movie.frame_sequence` | Export movie frame sequence | `pymol-oss-3.1.0`, `vmd-plugin-catalog-current` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
-| `export.movie.frame_sequence.dimensions` | Frame-sequence dimensions | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `export.movie.frame_sequence.format` | Frame-sequence image format | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `export.movie.frame_sequence.format.mode.png` | Frame-sequence format png | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `export.movie.frame_sequence.format.mode.ppm` | Frame-sequence format ppm | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `export.movie.frame_sequence.dimensions` | Frame-sequence dimensions | `pymol-oss-3.1.0` | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `export.movie.frame_sequence.format` | Frame-sequence image format | `pymol-oss-3.1.0` | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `export.movie.frame_sequence.format.mode.png` | Frame-sequence format png | `pymol-oss-3.1.0` | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `export.movie.frame_sequence.format.mode.ppm` | Frame-sequence format ppm | `pymol-oss-3.1.0` | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `export.movie.frame_sequence.modal` | Frame-sequence modal execution | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `export.movie.frame_sequence.preserve` | Frame-sequence preserve policy | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `export.movie.frame_sequence.range` | Frame-sequence inclusive range | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `export.movie.frame_sequence.render_mode` | Frame-sequence render mode | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `export.movie.frame_sequence.render_mode.mode.default_setting` | Frame-sequence render mode default_setting | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `export.movie.frame_sequence.render_mode.mode.draw` | Frame-sequence render mode draw | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `export.movie.frame_sequence.render_mode.mode.draw` | Frame-sequence render mode draw | `pymol-oss-3.1.0` | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `export.movie.frame_sequence.render_mode.mode.normal` | Frame-sequence render mode normal | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `export.movie.frame_sequence.render_mode.mode.ray` | Frame-sequence render mode ray | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `export.movie.frame_sequence.render_mode.mode.ray` | Frame-sequence render mode ray | `pymol-oss-3.1.0` | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `export.movie.mode_selector` | Legacy/Timeline movie export selector | `pymol-incentive-3.1.8` | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
 | `export.movie.overlay_option` | Include or exclude overlays in movie export | `pymol-incentive-3.1.8` | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `export.movie.video` | Encode movie video | `pymol-oss-3.1.0`, `vmd-plugin-catalog-current` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `export.movie.video.encoder` | Movie encoder selection | `pymol-oss-3.1.0` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `export.movie.video` | Encode movie video | `pymol-oss-3.1.0`, `vmd-plugin-catalog-current` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `export.movie.video.encoder` | Movie encoder selection | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `export.movie.video.encoder.mode.convert` | Movie encoder convert | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `export.movie.video.encoder.mode.ffmpeg` | Movie encoder ffmpeg | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `export.movie.video.encoder.mode.ffmpeg` | Movie encoder ffmpeg | `pymol-oss-3.1.0` | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `export.movie.video.encoder.mode.mpeg_encode` | Movie encoder mpeg_encode | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `export.movie.video.even_dimensions` | Movie even-dimension normalization | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `export.movie.video.format` | Movie output format | `pymol-oss-3.1.0` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `export.movie.video.format.mode.gif` | Movie format gif | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `export.movie.video.format.mode.mov` | Movie format mov | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `export.movie.video.format.mode.mp4` | Movie format mp4 | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `export.movie.video.format.mode.mpeg1` | Movie format mpeg1 | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `export.movie.video.format.mode.webm` | Movie format webm | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `export.movie.video.frame_rate` | Movie frame rate | `pymol-oss-3.1.0` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `export.movie.video.quality` | Movie encoding quality | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `export.movie.video.temp_frames` | Movie temporary-frame lifecycle | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `export.movie.video.even_dimensions` | Movie even-dimension normalization | `pymol-oss-3.1.0` | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `export.movie.video.format` | Movie output format | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `export.movie.video.format.mode.gif` | Movie format gif | `pymol-oss-3.1.0` | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `export.movie.video.format.mode.mov` | Movie format mov | `pymol-oss-3.1.0` | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `export.movie.video.format.mode.mp4` | Movie format mp4 | `pymol-oss-3.1.0` | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `export.movie.video.format.mode.mpeg1` | Movie format mpeg1 | `pymol-oss-3.1.0` | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `export.movie.video.format.mode.webm` | Movie format webm | `pymol-oss-3.1.0` | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `export.movie.video.frame_rate` | Movie frame rate | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `export.movie.video.quality` | Movie encoding quality | `pymol-oss-3.1.0` | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `export.movie.video.temp_frames` | Movie temporary-frame lifecycle | `pymol-oss-3.1.0` | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `export.render.aasamples` | Query or set the number of antialiasing samples to be used by this renderer, if  | `vmd-1.9.3`, `vmd-1.9.4a57` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
 | `export.render.aosamples` | Query or set the number of ambient occlusion lighting samples to be used by this | `vmd-1.9.3`, `vmd-1.9.4a57` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
 | `export.render.art` | render ART | `vmd-1.9.3`, `vmd-1.9.4a57` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
@@ -2803,11 +2803,11 @@ Machine-readable data: [`capability-support-v2.json`](capability-support-v2.json
 | `trajectory.movie.base_matrix.manage` | Movie base camera matrix | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `trajectory.movie.base_matrix.recall` | Base matrix recall | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `trajectory.movie.base_matrix.store` | Base matrix store | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `trajectory.movie.frame_command.append` | Append frame command | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `trajectory.movie.frame_command.dump` | Dump frame commands | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `trajectory.movie.frame_command.manage` | Per-frame command lifecycle | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `trajectory.movie.frame_command.replace` | Replace frame command | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `trajectory.movie.frame_command.security_lock` | Lock restored frame commands | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `trajectory.movie.frame_command.append` | Append frame command | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`excluded`) | — | — | — | `specified` | — | 0 |
+| `trajectory.movie.frame_command.dump` | Dump frame commands | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`excluded`) | — | — | — | `specified` | — | 0 |
+| `trajectory.movie.frame_command.manage` | Per-frame command lifecycle | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`excluded`) | — | — | — | `specified` | — | 0 |
+| `trajectory.movie.frame_command.replace` | Replace frame command | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`excluded`) | — | — | — | `specified` | — | 0 |
+| `trajectory.movie.frame_command.security_lock` | Lock restored frame commands | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`excluded`) | — | — | — | `specified` | — | 0 |
 | `trajectory.movie.image_cache.clear` | Clear rendered-frame cache | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `trajectory.movie.keyframe.camera_scope` | Camera keyframe scope | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `trajectory.movie.keyframe.clear` | Keyframe clear | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
@@ -2848,11 +2848,11 @@ Machine-readable data: [`capability-support-v2.json`](capability-support-v2.json
 | `trajectory.movie.setting.panel_row_height` | Movie panel row height | `pymol-oss-3.1.0` | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `trajectory.movie.setting.rock` | Movie rock override | `pymol-oss-3.1.0` | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `trajectory.movie.setting.scene_restart_delay` | Scene delay restart | `pymol-oss-3.1.0` | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `trajectory.movie.state_mapping.append` | Append state mapping | `pymol-oss-3.1.0` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `trajectory.movie.state_mapping.manage` | Frame-to-state mapping | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
-| `trajectory.movie.state_mapping.range_syntax` | State-range mapping syntax | `pymol-oss-3.1.0` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `trajectory.movie.state_mapping.repeat_syntax` | Repeat-state mapping syntax | `pymol-oss-3.1.0` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `trajectory.movie.state_mapping.replace` | Replace state mapping | `pymol-oss-3.1.0` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `trajectory.movie.state_mapping.append` | Append state mapping | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `trajectory.movie.state_mapping.manage` | Frame-to-state mapping | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `trajectory.movie.state_mapping.range_syntax` | State-range mapping syntax | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `trajectory.movie.state_mapping.repeat_syntax` | Repeat-state mapping syntax | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `trajectory.movie.state_mapping.replace` | Replace state mapping | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `trajectory.movie.stop` | Stop movie playback | `pymol-oss-3.1.0`, `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `trajectory.movie.timeline_edit.copy` | Copy movie frames | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `trajectory.movie.timeline_edit.delete` | Delete movie frames | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |

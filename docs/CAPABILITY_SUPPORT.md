@@ -15,28 +15,28 @@ Baseline: `pymol-oss-3.1.0` commit `f51e58f6b08308c41c85b9d12a23231f49ca325a`; �
 | 상태 | 개수 | 의미 |
 |---|---:|---|
 | 검증됨 | 137 | implementation이 compatible/robust이며 fixture, evidence, module과 public interface가 모두 연결됨 |
-| 진행 중(미검증) | 486 | partial 구현이며 compatibility 완료 주장이 아님 |
+| 진행 중(미검증) | 517 | partial 구현이며 compatibility 완료 주장이 아님 |
 | 인벤토리/계획 | 0 | inventory 또는 acceptance 설계 단계이며 사용자가 실행할 수 없음 |
-| 사용 불가/보류 | 1319 | 보류, 제외, 접근 제한 또는 license 격리 상태 |
+| 사용 불가/보류 | 1288 | 보류, 제외, 접근 제한 또는 license 격리 상태 |
 
 ## Domain 요약
 
 | Domain | 검증됨 | 진행 중 | 계획 | 사용 불가 | 전체 |
 |---|---:|---:|---:|---:|---:|
-| `analysis` | 0 | 29 | 0 | 56 | 85 |
+| `analysis` | 0 | 31 | 0 | 54 | 85 |
 | `automation` | 2 | 28 | 0 | 24 | 54 |
-| `data` | 0 | 0 | 0 | 18 | 18 |
+| `data` | 0 | 6 | 0 | 12 | 18 |
 | `editing` | 0 | 0 | 0 | 100 | 100 |
 | `io` | 0 | 68 | 0 | 118 | 186 |
 | `object_state` | 0 | 41 | 0 | 13 | 54 |
 | `pbc` | 0 | 2 | 0 | 4 | 6 |
 | `performance` | 0 | 0 | 0 | 51 | 51 |
 | `plugin` | 0 | 2 | 0 | 9 | 11 |
-| `rendering` | 3 | 54 | 0 | 233 | 290 |
+| `rendering` | 3 | 73 | 0 | 214 | 290 |
 | `representation` | 101 | 70 | 0 | 469 | 640 |
 | `scene` | 31 | 50 | 0 | 42 | 123 |
 | `selection` | 0 | 120 | 0 | 32 | 152 |
-| `trajectory` | 0 | 22 | 0 | 61 | 83 |
+| `trajectory` | 0 | 26 | 0 | 57 | 83 |
 | `ui` | 0 | 0 | 0 | 89 | 89 |
 
 ## Capability 행
@@ -47,7 +47,7 @@ Baseline: `pymol-oss-3.1.0` commit `f51e58f6b08308c41c85b9d12a23231f49ca325a`; �
 | `analysis.alignment.ce` | Combinatorial Extension alignment | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `analysis.alignment.multi_object` | Align multiple objects to one reference | P1 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
 | `analysis.alignment.residue_structural` | Residue/structure-guided refined alignment | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `analysis.alignment.sequence_refined` | Sequence-guided refined alignment | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `analysis.alignment.sequence_refined` | Sequence-guided refined alignment | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 2 |
 | `analysis.atom_property.iterate` | Iterate atom properties read-only | P1 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
 | `analysis.center.mass` | Selection center of mass | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 2 |
 | `analysis.charge.sum_formal` | Sum formal charges | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
@@ -65,7 +65,7 @@ Baseline: `pymol-oss-3.1.0` commit `f51e58f6b08308c41c85b9d12a23231f49ca325a`; �
 | `analysis.measurement_object.angle` | Angle measurement object | P0 | 진행 중(미검증) (`partial`) | — | — | — | `unwritten` | — | 2 |
 | `analysis.measurement_object.dihedral` | Dihedral measurement object | P0 | 진행 중(미검증) (`partial`) | — | — | — | `unwritten` | — | 2 |
 | `analysis.measurement_object.distance` | Distance measurement object | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `unwritten` | — | 2 |
-| `analysis.measurement_object.distance.all_pairs` | All interatomic distances | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `analysis.measurement_object.distance.all_pairs` | All interatomic distances | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `analysis.measurement_object.distance.bonded` | Bond distances | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `analysis.measurement_object.distance.centroid` | Centroid distance | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `analysis.measurement_object.distance.exclusion_filtered` | Exclusion-filtered distances | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
@@ -182,12 +182,12 @@ Baseline: `pymol-oss-3.1.0` commit `f51e58f6b08308c41c85b9d12a23231f49ca325a`; �
 | `script.shell.system` | Execute shell command | P2 | 사용 불가/보류 (`excluded`) | — | — | — | `specified` | — | 0 |
 | `security.session_prompt.accept` | Accept untrusted session content | P1 | 사용 불가/보류 (`excluded`) | — | — | — | `specified` | — | 0 |
 | `security.session_prompt.decline` | Decline untrusted session content | P1 | 사용 불가/보류 (`excluded`) | — | — | — | `specified` | — | 0 |
-| `volume.map.combine` | Combine maps | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `volume.map.combine.average` | Map combine average | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `volume.map.combine.difference` | Map combine difference | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `volume.map.combine.maximum` | Map combine maximum | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `volume.map.combine.minimum` | Map combine minimum | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `volume.map.combine.sum` | Map combine sum | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `volume.map.combine` | Combine maps | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `volume.map.combine.average` | Map combine average | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `volume.map.combine.difference` | Map combine difference | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `volume.map.combine.maximum` | Map combine maximum | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `volume.map.combine.minimum` | Map combine minimum | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `volume.map.combine.sum` | Map combine sum | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `volume.map.generate` | Generate map from atoms | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `volume.map.generate.coulomb` | Map generator coulomb | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `volume.map.generate.coulomb_local` | Map generator coulomb_local | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
@@ -640,33 +640,33 @@ Baseline: `pymol-oss-3.1.0` commit `f51e58f6b08308c41c85b9d12a23231f49ca325a`; �
 | `export.image.source.mode.viewport_or_draw` | Image source viewport_or_draw | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `export.image.write` | Write rendered image | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 1 |
 | `export.movie.frame_sequence` | Export movie frame sequence | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
-| `export.movie.frame_sequence.dimensions` | Frame-sequence dimensions | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `export.movie.frame_sequence.format` | Frame-sequence image format | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `export.movie.frame_sequence.format.mode.png` | Frame-sequence format png | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `export.movie.frame_sequence.format.mode.ppm` | Frame-sequence format ppm | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `export.movie.frame_sequence.dimensions` | Frame-sequence dimensions | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `export.movie.frame_sequence.format` | Frame-sequence image format | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `export.movie.frame_sequence.format.mode.png` | Frame-sequence format png | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `export.movie.frame_sequence.format.mode.ppm` | Frame-sequence format ppm | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `export.movie.frame_sequence.modal` | Frame-sequence modal execution | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `export.movie.frame_sequence.preserve` | Frame-sequence preserve policy | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `export.movie.frame_sequence.range` | Frame-sequence inclusive range | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `export.movie.frame_sequence.render_mode` | Frame-sequence render mode | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `export.movie.frame_sequence.render_mode.mode.default_setting` | Frame-sequence render mode default_setting | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `export.movie.frame_sequence.render_mode.mode.draw` | Frame-sequence render mode draw | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `export.movie.frame_sequence.render_mode.mode.draw` | Frame-sequence render mode draw | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `export.movie.frame_sequence.render_mode.mode.normal` | Frame-sequence render mode normal | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `export.movie.frame_sequence.render_mode.mode.ray` | Frame-sequence render mode ray | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `export.movie.video` | Encode movie video | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `export.movie.video.encoder` | Movie encoder selection | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `export.movie.frame_sequence.render_mode.mode.ray` | Frame-sequence render mode ray | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `export.movie.video` | Encode movie video | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `export.movie.video.encoder` | Movie encoder selection | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `export.movie.video.encoder.mode.convert` | Movie encoder convert | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `export.movie.video.encoder.mode.ffmpeg` | Movie encoder ffmpeg | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `export.movie.video.encoder.mode.ffmpeg` | Movie encoder ffmpeg | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `export.movie.video.encoder.mode.mpeg_encode` | Movie encoder mpeg_encode | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `export.movie.video.even_dimensions` | Movie even-dimension normalization | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `export.movie.video.format` | Movie output format | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `export.movie.video.format.mode.gif` | Movie format gif | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `export.movie.video.format.mode.mov` | Movie format mov | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `export.movie.video.format.mode.mp4` | Movie format mp4 | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `export.movie.video.format.mode.mpeg1` | Movie format mpeg1 | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `export.movie.video.format.mode.webm` | Movie format webm | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `export.movie.video.frame_rate` | Movie frame rate | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `export.movie.video.quality` | Movie encoding quality | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `export.movie.video.temp_frames` | Movie temporary-frame lifecycle | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `export.movie.video.even_dimensions` | Movie even-dimension normalization | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `export.movie.video.format` | Movie output format | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `export.movie.video.format.mode.gif` | Movie format gif | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `export.movie.video.format.mode.mov` | Movie format mov | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `export.movie.video.format.mode.mp4` | Movie format mp4 | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `export.movie.video.format.mode.mpeg1` | Movie format mpeg1 | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `export.movie.video.format.mode.webm` | Movie format webm | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `export.movie.video.frame_rate` | Movie frame rate | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `export.movie.video.quality` | Movie encoding quality | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `export.movie.video.temp_frames` | Movie temporary-frame lifecycle | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `export.scene.api.string` | Scene serialization string API | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `export.scene.compile_feature_negotiation` | Scene exporter compile-feature negotiation | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `export.scene.dispatch` | Scene export dispatch | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
@@ -1824,11 +1824,11 @@ Baseline: `pymol-oss-3.1.0` commit `f51e58f6b08308c41c85b9d12a23231f49ca325a`; �
 | `trajectory.movie.base_matrix.manage` | Movie base camera matrix | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `trajectory.movie.base_matrix.recall` | Base matrix recall | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `trajectory.movie.base_matrix.store` | Base matrix store | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `trajectory.movie.frame_command.append` | Append frame command | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `trajectory.movie.frame_command.dump` | Dump frame commands | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `trajectory.movie.frame_command.manage` | Per-frame command lifecycle | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `trajectory.movie.frame_command.replace` | Replace frame command | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `trajectory.movie.frame_command.security_lock` | Lock restored frame commands | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `trajectory.movie.frame_command.append` | Append frame command | P1 | 사용 불가/보류 (`excluded`) | — | — | — | `specified` | — | 0 |
+| `trajectory.movie.frame_command.dump` | Dump frame commands | P1 | 사용 불가/보류 (`excluded`) | — | — | — | `specified` | — | 0 |
+| `trajectory.movie.frame_command.manage` | Per-frame command lifecycle | P1 | 사용 불가/보류 (`excluded`) | — | — | — | `specified` | — | 0 |
+| `trajectory.movie.frame_command.replace` | Replace frame command | P1 | 사용 불가/보류 (`excluded`) | — | — | — | `specified` | — | 0 |
+| `trajectory.movie.frame_command.security_lock` | Lock restored frame commands | P1 | 사용 불가/보류 (`excluded`) | — | — | — | `specified` | — | 0 |
 | `trajectory.movie.image_cache.clear` | Clear rendered-frame cache | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `trajectory.movie.keyframe.camera_scope` | Camera keyframe scope | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `trajectory.movie.keyframe.clear` | Keyframe clear | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
@@ -1869,11 +1869,11 @@ Baseline: `pymol-oss-3.1.0` commit `f51e58f6b08308c41c85b9d12a23231f49ca325a`; �
 | `trajectory.movie.setting.panel_row_height` | Movie panel row height | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `trajectory.movie.setting.rock` | Movie rock override | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `trajectory.movie.setting.scene_restart_delay` | Scene delay restart | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `trajectory.movie.state_mapping.append` | Append state mapping | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `trajectory.movie.state_mapping.manage` | Frame-to-state mapping | P0 | 진행 중(미검증) (`partial`) | — | — | — | `specified` | — | 0 |
-| `trajectory.movie.state_mapping.range_syntax` | State-range mapping syntax | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `trajectory.movie.state_mapping.repeat_syntax` | Repeat-state mapping syntax | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `trajectory.movie.state_mapping.replace` | Replace state mapping | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `trajectory.movie.state_mapping.append` | Append state mapping | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `trajectory.movie.state_mapping.manage` | Frame-to-state mapping | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `trajectory.movie.state_mapping.range_syntax` | State-range mapping syntax | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `trajectory.movie.state_mapping.repeat_syntax` | Repeat-state mapping syntax | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `trajectory.movie.state_mapping.replace` | Replace state mapping | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `trajectory.movie.stop` | Stop movie playback | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `trajectory.movie.timeline_edit.copy` | Copy movie frames | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `trajectory.movie.timeline_edit.delete` | Delete movie frames | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |

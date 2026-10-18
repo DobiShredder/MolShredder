@@ -85,6 +85,14 @@ pml::TranslationContext live_context(
     }
     return false;
   };
+  context.is_selection = [workspace](std::string_view name) {
+    for (const auto& object : workspace->objects()) {
+      for (const auto& selection : object.selections.list()) {
+        if (selection.name == name) return true;
+      }
+    }
+    return false;
+  };
   context.list_objects = [workspace] {
     std::vector<std::string> names;
     for (const auto& object : workspace->list_objects()) names.push_back(object.name);

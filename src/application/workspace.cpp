@@ -1,6 +1,10 @@
 #include "molshredder/application/workspace.hpp"
+#include "molshredder/application/movie_mapping.hpp"
+#include "molshredder/application/video_encoder.hpp"
+#include "molshredder/analysis/sequence_alignment.hpp"
 
 #include <algorithm>
+#include <numeric>
 #include <set>
 #include <sstream>
 #include <map>
@@ -1430,6 +1434,56 @@ Workspace::set_movie_keyframe(MovieFrameRecord keyframe) {
       MovieTimelineResult{*movie_, 0U});
 }
 
+operation::Result<MovieTimelineResult>
+Workspace::map_movie_states(std::string_view specification,
+                            std::optional<std::size_t> start_frame) {
+  using R = operation::Result<MovieTimelineResult>;
+  if (start_frame.has_value() && *start_frame == 0U)
+    return R::failure(invalid("movie frames are numbered from 1"));
+  std::size_t current_state = 0;
+  std::optional<std::size_t> available;
+  if (const auto *object = active_object();
+      object != nullptr && object->trajectory.has_value()) {
+    available = object->trajectory->cache->frame_count();
+    current_state = object->trajectory->timeline.snapshot().frame;
+  } else if (object != nullptr) {
+    available = object->system->coordinates()->frame_count();
+  }
+  const auto parsed = parse_movie_state_map(specification, current_state);
+  if (!parsed.has_value()) return R::failure(parsed.error());
+  if (available.has_value()) {
+    for (const auto state : parsed.value())
+      if (state >= *available)
+        return R::failure(invalid(
+            "movie mapping uses state " + std::to_string(state + 1U) +
+                " but the active object has " + std::to_string(*available) + " state(s)",
+            "map only states that exist, or load the trajectory first"));
+  }
+  MovieTimelineState timeline =
+      movie_.value_or(MovieTimelineState{0U, 1U, 30.0, false, false, {}, {}});
+  // Frames defined by `movie configure` without a map count as state 1... keep them unmapped by padding with 0.
+  auto map = timeline.state_map;
+  if (map.size() < timeline.frame_count) map.resize(timeline.frame_count, 0U);
+  const std::size_t keep = start_frame.has_value() ? *start_frame - 1U : map.size();
+  if (keep > kMaxMovieFrames)
+    return R::failure(invalid("movie start frame exceeds the supported length"));
+  map.resize(keep, 0U);
+  if (map.size() + parsed.value().size() > kMaxMovieFrames)
+    return R::failure(invalid("movie mapping exceeds 1000000 frames"));
+  map.insert(map.end(), parsed.value().begin(), parsed.value().end());
+  if (map.empty()) {
+    movie_.reset();
+    return R::success(MovieTimelineResult{MovieTimelineState{}, 0U});
+  }
+  timeline.frame_count = map.size();
+  timeline.state_map = std::move(map);
+  timeline.current_frame = std::min(timeline.current_frame, timeline.frame_count);
+  for (auto it = timeline.keyframes.begin(); it != timeline.keyframes.end();)
+    it = it->first > timeline.frame_count ? timeline.keyframes.erase(it) : std::next(it);
+  movie_ = std::move(timeline);
+  return R::success(MovieTimelineResult{*movie_, 0U});
+}
+
 operation::Result<MovieTimelineResult> Workspace::seek_movie(
     std::size_t frame) {
   if (!movie_.has_value()) {
@@ -1460,6 +1514,17 @@ operation::Result<MovieTimelineResult> Workspace::seek_movie(
             selected.error());
     }
     applied = 1U;
+  }
+  // The state map supplies the trajectory frame unless a keyframe names one explicitly.
+  const bool explicit_trajectory = keyframe != candidate.movie_->keyframes.end() &&
+                                   keyframe->second.trajectory_frame.has_value();
+  const auto *mapped_object = candidate.active_object();
+  if (!explicit_trajectory && frame <= candidate.movie_->state_map.size() &&
+      mapped_object != nullptr && mapped_object->trajectory.has_value()) {
+    const auto selected =
+        candidate.set_trajectory_frame(candidate.movie_->state_map[frame - 1U]);
+    if (!selected.has_value())
+      return operation::Result<MovieTimelineResult>::failure(selected.error());
   }
   candidate.movie_->current_frame = frame;
   *this = std::move(candidate);
@@ -2797,6 +2862,76 @@ Workspace::sum_charge(std::string selection_expression, std::string_view kind) c
   return R::success(std::move(result));
 }
 
+operation::Result<SelectedAtomData>
+Workspace::selected_atom_data(std::string selection_expression, bool need_partial_charges, bool need_masses) const {
+  using R = operation::Result<SelectedAtomData>;
+  const auto *object = active_object();
+  if (object == nullptr) return R::failure(missing_active());
+  const auto mask = selection_mask(*object, selection_expression);
+  if (!mask.has_value()) return R::failure(mask.error());
+  const auto frame = active_frame(*object);
+  if (!frame.has_value()) return R::failure(frame.error());
+  const auto &topology = *object->system->topology();
+  SelectedAtomData data;
+  data.object_id = object->id;
+  data.object_name = object->system->name();
+  data.frame_index = object->trajectory.has_value() ? object->trajectory->timeline.snapshot().frame : 0U;
+  const double scale = frame.value()->metadata().coordinate_unit == operation::LengthUnit::nanometer ? 10.0 : 1.0;
+  data.unit_cell = frame.value()->metadata().unit_cell;
+  if (data.unit_cell.has_value()) {
+    for (auto *vector : {&data.unit_cell->a, &data.unit_cell->b, &data.unit_cell->c}) {
+      vector->x *= scale;
+      vector->y *= scale;
+      vector->z *= scale;
+    }
+  }
+  std::vector<double> all_charges;
+  if (need_partial_charges) {
+    if (topology.properties().find("partial_charge") == nullptr)
+      return R::failure(operation::Error{operation::ErrorCode::not_found, "the active object has no partial_charge property",
+                                         "load a PQR, MOL2, MMOD, MAE or topology file that carries partial charges", {}});
+    const auto expression = selection::parse_numeric_expression("partial_charge");
+    if (!expression.has_value()) return R::failure(expression.error());
+    const selection::EvaluationContext context{frame.value().get(), data.frame_index, object->system->coordinates().get(),
+                                               object->system->name()};
+    const auto values = selection::evaluate_numeric(*expression.value(), topology, context);
+    if (!values.has_value()) return R::failure(values.error());
+    for (const auto &value : values.value()) all_charges.push_back(value.value_or(std::nan("")));
+  }
+  analysis::MassValues masses;
+  if (need_masses) {
+    auto resolved = analysis::masses_from_property(topology);
+    if (!resolved.has_value() && resolved.error().code == operation::ErrorCode::not_found)
+      resolved = analysis::estimated_element_masses(topology);
+    if (!resolved.has_value()) return R::failure(resolved.error());
+    masses = std::move(resolved.value());
+    data.masses_estimated = masses.estimated;
+  }
+  for (std::size_t atom = 0; atom < mask.value().size(); ++atom) {
+    if (mask.value()[atom] == 0U) continue;
+    if (!frame.value()->atom_present(atom))
+      return R::failure(invalid("atom " + std::to_string(atom + 1U) + " is absent in the current frame",
+                                "select only atoms that are present"));
+    const auto position = std::visit(
+        [atom](const auto &values) {
+          return model::Vec3d{static_cast<double>(values[atom].x), static_cast<double>(values[atom].y),
+                              static_cast<double>(values[atom].z)};
+        },
+        frame.value()->positions().values());
+    data.indices.push_back(atom);
+    data.positions.push_back({position.x * scale, position.y * scale, position.z * scale});
+    if (need_partial_charges) {
+      if (std::isnan(all_charges[atom]))
+        return R::failure(invalid("atom " + std::to_string(atom + 1U) + " has no partial charge",
+                                  "select only atoms that carry a partial charge"));
+      data.partial_charges.push_back(all_charges[atom]);
+    }
+    if (need_masses) data.masses.push_back(masses.values[atom]);
+  }
+  if (data.indices.empty()) return R::failure(invalid("the selection matches no atoms"));
+  return R::success(std::move(data));
+}
+
 operation::Result<MassSum>
 Workspace::sum_mass(std::string selection_expression) const {
   using R = operation::Result<MassSum>;
@@ -2841,8 +2976,11 @@ Workspace::backbone_angles(std::string selection_expression) const {
 operation::Result<AlignmentResult>
 Workspace::align_objects(const AlignmentRequest &request) {
   using R = operation::Result<AlignmentResult>;
-  if (request.match != "order" && request.match != "identifier")
-    return R::failure(invalid("alignment match must be order or identifier"));
+  if (request.match != "order" && request.match != "identifier" && request.match != "sequence")
+    return R::failure(invalid("alignment match must be order, identifier or sequence"));
+  if (!(request.cutoff > 0.0) || !std::isfinite(request.cutoff))
+    return R::failure(invalid("alignment cutoff must be positive"));
+  if (request.cycles > 100U) return R::failure(invalid("alignment cycles must not exceed 100"));
   const auto mobile_index = object_index_by_reference(request.mobile_object);
   if (!mobile_index.has_value()) return R::failure(mobile_index.error());
   const auto target_index = object_index_by_reference(request.target_object);
@@ -2864,6 +3002,8 @@ Workspace::align_objects(const AlignmentRequest &request) {
                               "run object free first"));
 
   std::vector<std::size_t> mobile_atoms, target_atoms;
+  double sequence_score = 0.0;
+  std::size_t aligned_residues = 0, identical_residues = 0, initial_pair_count = 0;
   if (!request.pairs.empty()) {
     for (const auto &[from, to] : request.pairs) {
       if (from == 0U || to == 0U ||
@@ -2884,7 +3024,47 @@ Workspace::align_objects(const AlignmentRequest &request) {
       if (mobile_mask.value()[atom] != 0U) from.push_back(atom);
     for (std::size_t atom = 0; atom < target_mask.value().size(); ++atom)
       if (target_mask.value()[atom] != 0U) to.push_back(atom);
-    if (request.match == "order") {
+    if (request.match == "sequence") {
+      // Residues of each selection in atom order, one-letter sequence, BLOSUM62 alignment, then atoms by name.
+      const auto residues_of = [](const WorkspaceObject &object, const std::vector<std::size_t> &atoms) {
+        std::vector<std::size_t> residues;
+        std::string letters;
+        const auto &topology = *object.system->topology();
+        for (const auto atom : atoms) {
+          const auto residue = topology.atoms()[atom].residue.value;
+          if (residues.empty() || residues.back() != residue) {
+            residues.push_back(residue);
+            letters.push_back(analysis::residue_letter(topology.residues()[residue].name));
+          }
+        }
+        return std::pair{std::move(residues), std::move(letters)};
+      };
+      const auto [mobile_residues, mobile_letters] = residues_of(mobile, from);
+      const auto [target_residues, target_letters] = residues_of(target, to);
+      if (mobile_residues.empty() || target_residues.empty())
+        return R::failure(invalid("sequence alignment needs residues in both selections"));
+      const auto sequence = analysis::align_sequences({mobile_letters, target_letters, request.gap_open, request.gap_extend, true});
+      if (!sequence.has_value()) return R::failure(sequence.error());
+      sequence_score = sequence.value().score;
+      aligned_residues = sequence.value().pairs.size();
+      identical_residues = sequence.value().identical;
+      const auto &mobile_topology = *mobile.system->topology();
+      const auto &target_topology = *target.system->topology();
+      std::map<std::size_t, std::vector<std::size_t>> mobile_atoms_of, target_atoms_of;
+      for (const auto atom : from) mobile_atoms_of[mobile_topology.atoms()[atom].residue.value].push_back(atom);
+      for (const auto atom : to) target_atoms_of[target_topology.atoms()[atom].residue.value].push_back(atom);
+      for (const auto &[left, right] : sequence.value().pairs) {
+        const auto &left_atoms = mobile_atoms_of[mobile_residues[left]];
+        std::map<std::string, std::size_t> right_by_name;
+        for (const auto atom : target_atoms_of[target_residues[right]]) right_by_name.emplace(target_topology.atoms()[atom].name, atom);
+        for (const auto atom : left_atoms) {
+          const auto found = right_by_name.find(mobile_topology.atoms()[atom].name);
+          if (found == right_by_name.end()) continue;
+          mobile_atoms.push_back(atom);
+          target_atoms.push_back(found->second);
+        }
+      }
+    } else if (request.match == "order") {
       if (from.size() != to.size())
         return R::failure(invalid(
             "the selections have " + std::to_string(from.size()) + " and " +
@@ -2954,28 +3134,77 @@ Workspace::align_objects(const AlignmentRequest &request) {
   // Paired world-space frames: atom i of both frames is one fitted pair.
   model::FrameMetadata metadata;
   metadata.coordinate_unit = mobile_frame.value()->metadata().coordinate_unit;
-  const std::vector<std::uint8_t> present(mobile_points.value().size(), 1U);
-  const auto reference_frame = model::CoordinateFrame::create(
-      model::CoordinateBuffer{target_points.value()}, std::nullopt, present, metadata);
-  if (!reference_frame.has_value()) return R::failure(reference_frame.error());
-  const auto moving_frame = model::CoordinateFrame::create(
-      model::CoordinateBuffer{mobile_points.value()}, std::nullopt, present, metadata);
-  if (!moving_frame.has_value()) return R::failure(moving_frame.error());
-  std::vector<double> weights;
+  std::vector<double> all_weights;
   if (!request.uniform_weights) {
     // Mass weights per pair: the mobile atom's mass.
     auto masses = analysis::masses_from_property(*mobile.system->topology());
     if (!masses.has_value() && masses.error().code == operation::ErrorCode::not_found)
       masses = analysis::estimated_element_masses(*mobile.system->topology());
     if (!masses.has_value()) return R::failure(masses.error());
-    for (const auto atom : mobile_atoms) weights.push_back(masses.value().values[atom]);
+    for (const auto atom : mobile_atoms) all_weights.push_back(masses.value().values[atom]);
   }
-  analysis::FitRequest fit_request;
-  fit_request.reference = reference_frame.value().get();
-  fit_request.mobile = moving_frame.value().get();
-  fit_request.weights = weights;
-  const auto fit = analysis::fit_rigid(fit_request);
+  const auto fit_active = [&](const std::vector<std::size_t> &active) -> operation::Result<analysis::FitResult> {
+    std::vector<model::Vec3d> reference_points, moving_points;
+    std::vector<double> weights;
+    for (const auto pair : active) {
+      reference_points.push_back(target_points.value()[pair]);
+      moving_points.push_back(mobile_points.value()[pair]);
+      if (!request.uniform_weights) weights.push_back(all_weights[pair]);
+    }
+    const std::vector<std::uint8_t> present(active.size(), 1U);
+    const auto reference_frame = model::CoordinateFrame::create(
+        model::CoordinateBuffer{std::move(reference_points)}, std::nullopt, present, metadata);
+    if (!reference_frame.has_value())
+      return operation::Result<analysis::FitResult>::failure(reference_frame.error());
+    const auto moving_frame = model::CoordinateFrame::create(
+        model::CoordinateBuffer{std::move(moving_points)}, std::nullopt, present, metadata);
+    if (!moving_frame.has_value())
+      return operation::Result<analysis::FitResult>::failure(moving_frame.error());
+    analysis::FitRequest fit_request;
+    fit_request.reference = reference_frame.value().get();
+    fit_request.mobile = moving_frame.value().get();
+    fit_request.weights = weights;
+    return analysis::fit_rigid(fit_request);
+  };
+  std::vector<std::size_t> active(mobile_atoms.size());
+  std::iota(active.begin(), active.end(), std::size_t{0});
+  auto fit = fit_active(active);
   if (!fit.has_value()) return R::failure(fit.error());
+  const double rmsd_before = fit.value().before.rmsd;
+  std::size_t cycles_run = 0;
+  for (std::size_t cycle = 1; cycle <= request.cycles; ++cycle) {
+    const double rms = fit.value().after.rmsd;
+    if (!(rms > 1.0e-4)) break;
+    std::vector<std::size_t> kept;
+    for (const auto pair : active) {
+      const auto moved = fit.value().transform.apply(mobile_points.value()[pair]);
+      const auto& reference = target_points.value()[pair];
+      const double distance = std::sqrt((moved.x - reference.x) * (moved.x - reference.x) +
+                                        (moved.y - reference.y) * (moved.y - reference.y) +
+                                        (moved.z - reference.z) * (moved.z - reference.z));
+      if (distance / rms <= request.cutoff) kept.push_back(pair);
+    }
+    cycles_run = cycle;  // like PyMOL, the final pass that rejects nothing still counts
+    if (kept.size() == active.size()) break;
+    if (kept.size() < 3U)
+      return R::failure(invalid("outlier rejection would leave fewer than three pairs",
+                                "raise --cutoff or lower --cycles"));
+    active = std::move(kept);
+    fit = fit_active(active);
+    if (!fit.has_value()) return R::failure(fit.error());
+  }
+  // Report the pairs that were actually fitted.
+  {
+    std::vector<std::size_t> final_mobile, final_target;
+    for (const auto pair : active) {
+      final_mobile.push_back(mobile_atoms[pair]);
+      final_target.push_back(target_atoms[pair]);
+    }
+    const auto initial_pairs = mobile_atoms.size();
+    mobile_atoms = std::move(final_mobile);
+    target_atoms = std::move(final_target);
+    initial_pair_count = initial_pairs;
+  }
 
   const auto &rotation = fit.value().transform.rotation;  // row-major 3x3
   const auto &translation = fit.value().transform.translation;
@@ -2983,8 +3212,13 @@ Workspace::align_objects(const AlignmentRequest &request) {
   result.mobile_object_id = mobile.id;
   result.target_object_id = target.id;
   result.paired_atom_count = mobile_atoms.size();
+  result.initial_pair_count = initial_pair_count;
+  result.cycles_run = cycles_run;
+  result.aligned_residue_count = aligned_residues;
+  result.identical_residue_count = identical_residues;
+  result.alignment_score = sequence_score;
   result.coordinate_unit = metadata.coordinate_unit;
-  result.rmsd_before = fit.value().before.rmsd;
+  result.rmsd_before = rmsd_before;
   result.rmsd_after = fit.value().after.rmsd;
   result.matrix = {rotation[0], rotation[1], rotation[2], translation.x,
                    rotation[3], rotation[4], rotation[5], translation.y,
@@ -3980,6 +4214,59 @@ Workspace::move_selected_atoms(std::string selection_expression, CoordinateMoveM
   if (!committed.has_value()) return R::failure(committed.error());
   return R::success({committed.value().transaction_id, object->id, atoms.size(), edited_states,
                      committed.value().invalidated_measurements});
+}
+
+operation::Result<CoordinateMoveResult> Workspace::set_unit_cell(std::optional<CellParameters> cell) {
+  using R = operation::Result<CoordinateMoveResult>;
+  auto *object = mutable_active_object();
+  if (object == nullptr) return R::failure(missing_active());
+  if (object->pbc.has_value())
+    return R::failure(invalid("the object is shown with PBC processing", "run pbc mode --mode none before editing the cell"));
+  if (object->fixed)
+    return R::failure(invalid("the object is fixed: " + object->system->name(), "run object free first"));
+  if (object->trajectory.has_value() && object->trajectory->mapping.identity_strength != "embedded-structure-order")
+    return R::failure(operation::Error{operation::ErrorCode::unsupported,
+                                       "the cell cannot be edited while a trajectory is attached",
+                                       "detach or create a static copy before editing", {}});
+  std::optional<model::UnitCell> unit_cell;
+  if (cell.has_value()) {
+    const double pi = std::acos(-1.0);
+    for (const double angle : {cell->alpha, cell->beta, cell->gamma})
+      if (!(angle > 0.0 && angle < 180.0)) return R::failure(invalid("cell angles must be between 0 and 180 degrees"));
+    for (const double length : {cell->a, cell->b, cell->c})
+      if (!(length > 0.0) || !std::isfinite(length)) return R::failure(invalid("cell lengths must be positive"));
+    const double ca = std::cos(cell->alpha * pi / 180.0), cb = std::cos(cell->beta * pi / 180.0), cg = std::cos(cell->gamma * pi / 180.0);
+    const double sg = std::sin(cell->gamma * pi / 180.0);
+    const double cz_square = 1.0 - cb * cb - ((ca - cb * cg) / sg) * ((ca - cb * cg) / sg);
+    if (!(cz_square > 1.0e-9)) return R::failure(invalid("the cell angles do not describe a valid parallelepiped"));
+    model::UnitCell built{{cell->a, 0.0, 0.0},
+                          {cell->b * cg, cell->b * sg, 0.0},
+                          {cell->c * cb, cell->c * (ca - cb * cg) / sg, cell->c * std::sqrt(cz_square)}};
+    unit_cell = built;
+  }
+  const auto frame_count = object->system->coordinates()->frame_count();
+  if (!frame_count.has_value() || *frame_count == 0U) return R::failure(invalid("the object's state count is unknown"));
+  std::vector<std::shared_ptr<const model::CoordinateFrame>> frames;
+  for (std::size_t state = 0; state < *frame_count; ++state) {
+    const auto frame = object->system->coordinates()->read_frame(state);
+    if (!frame.has_value()) return R::failure(frame.error());
+    auto metadata = frame.value()->metadata();
+    if (unit_cell.has_value()) {
+      const double scale = metadata.coordinate_unit == operation::LengthUnit::nanometer ? 0.1 : 1.0;
+      metadata.unit_cell = model::UnitCell{{unit_cell->a.x * scale, unit_cell->a.y * scale, unit_cell->a.z * scale},
+                                           {unit_cell->b.x * scale, unit_cell->b.y * scale, unit_cell->b.z * scale},
+                                           {unit_cell->c.x * scale, unit_cell->c.y * scale, unit_cell->c.z * scale}};
+    } else {
+      metadata.unit_cell.reset();
+    }
+    const auto replaced = model::CoordinateFrame::create(frame.value()->positions(), frame.value()->velocities(), frame.value()->presence(),
+                                                         std::move(metadata));
+    if (!replaced.has_value()) return R::failure(replaced.error());
+    frames.push_back(replaced.value());
+  }
+  const auto committed = commit_coordinate_frames(object, std::move(frames));
+  if (!committed.has_value()) return R::failure(committed.error());
+  return R::success({committed.value().transaction_id, object->id, 0U, *frame_count, committed.value().invalidated_measurements});
 }
 
 operation::Result<StateDeleteResult>
@@ -5527,6 +5814,104 @@ Workspace::save_image(const ImageSaveRequest &request) const {
   return R::success(std::move(result));
 }
 
+operation::Result<MovieVideoResult>
+Workspace::export_movie_video(const MovieVideoRequest &request,
+                              operation::TaskContext &context) {
+  using R = operation::Result<MovieVideoResult>;
+  if (!movie_.has_value() || movie_->frame_count == 0U)
+    return R::failure(operation::Error{operation::ErrorCode::not_found,
+                                       "no movie timeline is configured",
+                                       "run movie configure or movie map first"});
+  if (request.path.empty()) return R::failure(invalid("video output path must not be empty"));
+  auto format = request.format;
+  if (format == "auto") {
+    format = video_format_from_extension(request.path);
+    if (format.empty())
+      return R::failure(invalid("cannot guess the video format from '" + request.path.string() + "'",
+                                "use a .mp4, .mov, .webm, .gif or .mpg name, or pass --video-format"));
+  }
+  if (format != "mp4" && format != "mov" && format != "webm" && format != "gif" && format != "mpeg1")
+    return R::failure(invalid("unsupported video format '" + format + "'", "use mp4, mov, webm, gif or mpeg1"));
+  std::error_code filesystem_error;
+  if (!request.overwrite && std::filesystem::exists(request.path, filesystem_error))
+    return R::failure(invalid("video output exists: " + request.path.string(), "choose another path or pass --overwrite true"));
+  const auto parent = std::filesystem::absolute(request.path).parent_path();
+  if (!std::filesystem::is_directory(parent, filesystem_error))
+    return R::failure(operation::Error{operation::ErrorCode::not_found,
+                                       "output directory does not exist: " + parent.string(), "create it first"});
+  // Fail before rendering when the encoder is missing.
+  const auto encoder = find_ffmpeg(request.encoder_path);
+  if (!encoder.has_value()) return R::failure(encoder.error());
+  const double fps = request.fps.value_or(movie_->frames_per_second);
+
+  // Unique scratch directory for the numbered frames.
+  std::filesystem::path scratch;
+  {
+    const auto base = std::filesystem::temp_directory_path(filesystem_error);
+    if (filesystem_error) return R::failure(operation::Error{operation::ErrorCode::internal, "no temporary directory available", {}});
+    for (std::size_t attempt = 0; attempt < 100U; ++attempt) {
+      const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
+      const auto candidate = base / ("molshredder-movie-" + std::to_string(stamp) + "-" + std::to_string(attempt));
+      if (std::filesystem::create_directory(candidate, filesystem_error)) {
+        scratch = candidate;
+        break;
+      }
+    }
+    if (scratch.empty()) return R::failure(operation::Error{operation::ErrorCode::internal, "could not create a scratch directory", {}});
+  }
+  struct Cleanup {
+    std::filesystem::path path;
+    bool keep{};
+    ~Cleanup() {
+      if (keep || path.empty()) return;
+      std::error_code ignored;
+      std::filesystem::remove_all(path, ignored);
+    }
+  } cleanup{scratch, request.keep_frames};
+
+  MovieExportRequest frames;
+  frames.prefix = scratch / "frame_";
+  frames.first = request.first;
+  frames.last = request.last;
+  frames.overwrite = true;
+  frames.image = request.image;
+  frames.image.format = "png";
+  const auto exported = export_movie_frames(frames);
+  if (!exported.has_value()) return R::failure(exported.error());
+  if (context.cancellation.is_cancelled())
+    return R::failure(operation::Error{operation::ErrorCode::cancelled, "video export cancelled", {}});
+
+  VideoEncodeRequest encode;
+  encode.frames_directory = scratch;
+  encode.frame_pattern = "frame_%04d.png";
+  encode.first_frame_number = exported.value().first_frame;
+  encode.output = request.path;
+  encode.format = format;
+  encode.frames_per_second = fps;
+  encode.quality = request.quality;
+  encode.executable = encoder.value();
+  const auto encoded = encode_video(encode, context);
+  if (!encoded.has_value()) {
+    cleanup.keep = request.keep_frames;
+    return R::failure(encoded.error());
+  }
+  MovieVideoResult result;
+  result.output = request.path;
+  result.format = format;
+  result.frame_count = exported.value().frame_count;
+  result.width = exported.value().width;
+  result.height = exported.value().height;
+  result.frames_per_second = fps;
+  result.bytes = encoded.value().bytes;
+  result.encoder = encoded.value().executable;
+  result.command = encoded.value().command;
+  if (request.keep_frames) result.frames_directory = scratch;
+  result.warnings = exported.value().warnings;
+  if (format != "gif" && (result.width % 2U != 0U || result.height % 2U != 0U))
+    result.warnings.push_back("frame size is odd; the encoder scales it down to even dimensions");
+  return R::success(std::move(result));
+}
+
 operation::Result<MovieExportResult>
 Workspace::export_movie_frames(const MovieExportRequest &request) {
   using R = operation::Result<MovieExportResult>;
@@ -6516,6 +6901,61 @@ Workspace::load_volume(const std::filesystem::path &path,
 }
 
 operation::Result<VolumeLoadResult>
+Workspace::combine_volumes(const std::vector<std::string> &names, std::string_view mode, std::string result_name) {
+  using R = operation::Result<VolumeLoadResult>;
+  if (mode != "sum" && mode != "difference" && mode != "average" && mode != "product" && mode != "maximum" && mode != "minimum")
+    return R::failure(invalid("volume combine mode must be sum, difference, average, product, maximum or minimum"));
+  if (names.size() < 2U) return R::failure(invalid("volume combine needs at least two volumes"));
+  if (names.size() > 64U) return R::failure(invalid("volume combine is limited to 64 volumes"));
+  if (result_name.empty()) return R::failure(invalid("the combined volume needs a name"));
+  std::vector<const WorkspaceVolume *> sources;
+  for (const auto &name : names) {
+    const auto found = std::find_if(volumes_.begin(), volumes_.end(), [&](const auto &volume) { return volume.name == name; });
+    if (found == volumes_.end())
+      return R::failure(operation::Error{operation::ErrorCode::not_found, "no volume named " + name, "use volume list to see the loaded volumes", {}});
+    sources.push_back(&*found);
+  }
+  const auto &first = *sources.front()->grid;
+  const auto close = [](double a, double b) { return std::abs(a - b) <= 1.0e-6 * std::max({1.0, std::abs(a), std::abs(b)}); };
+  for (std::size_t i = 1; i < sources.size(); ++i) {
+    const auto &other = *sources[i]->grid;
+    bool same = other.shape() == first.shape() && other.metadata().coordinate_unit == first.metadata().coordinate_unit &&
+                close(other.origin().x, first.origin().x) && close(other.origin().y, first.origin().y) && close(other.origin().z, first.origin().z);
+    for (std::size_t axis = 0; same && axis < 3U; ++axis)
+      same = close(other.deltas()[axis].x, first.deltas()[axis].x) && close(other.deltas()[axis].y, first.deltas()[axis].y) &&
+             close(other.deltas()[axis].z, first.deltas()[axis].z);
+    if (!same)
+      return R::failure(invalid("volumes " + names.front() + " and " + names[i] + " do not share one grid",
+                                "resample them to a common grid before combining"));
+  }
+  const std::size_t count = first.value_count();
+  std::vector<double> values(count);
+  for (std::size_t v = 0; v < count; ++v) {
+    double result = sources.front()->grid->scalars().value(v);
+    for (std::size_t i = 1; i < sources.size(); ++i) {
+      const double x = sources[i]->grid->scalars().value(v);
+      if (mode == "sum" || mode == "average") result += x;
+      else if (mode == "difference") result -= x;
+      else if (mode == "product") result *= x;
+      else if (mode == "maximum") result = std::max(result, x);
+      else result = std::min(result, x);
+    }
+    if (mode == "average") result /= static_cast<double>(sources.size());
+    values[v] = result;
+  }
+  model::VolumeMetadata metadata = first.metadata();
+  metadata.fields["combine_mode"] = std::string{mode};
+  std::string joined;
+  for (const auto &name : names) joined += (joined.empty() ? "" : ",") + name;
+  metadata.fields["combine_sources"] = joined;
+  const auto grid = model::VolumeGrid::create(first.shape(), first.origin(), first.deltas(), model::VolumeScalarBuffer{std::move(values)}, metadata);
+  if (!grid.has_value()) return R::failure(grid.error());
+  io::VolumeDocument document;
+  document.volumes.push_back({std::move(result_name), grid.value()});
+  return load_volume_document(std::move(document), std::filesystem::path{"<combined>"});
+}
+
+operation::Result<VolumeLoadResult>
 Workspace::load_volume_document(io::VolumeDocument document,
                                 const std::filesystem::path &path) {
   if (document.volumes.size() != 1U) {
@@ -7107,6 +7547,14 @@ Workspace::set_named_selection(std::string name, std::string expression,
                                     topology, context);
   return object->selections.set(std::move(name), parsed.value(), dynamic, topology,
                                 context);
+}
+
+std::optional<operation::Error> Workspace::delete_named_selection(
+    std::string_view name) {
+  auto *object = mutable_active_object();
+  if (object == nullptr)
+    return missing_active();
+  return object->selections.erase(name);
 }
 
 std::optional<operation::Error> Workspace::set_render_setting(

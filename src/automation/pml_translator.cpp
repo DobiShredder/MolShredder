@@ -162,7 +162,7 @@ const std::map<std::string, std::string, std::less<>>& unsupported_reasons() {
          "volume_color", "map_new", "map_double", "map_halve", "map_trim",
          "ramp_new"},
         "map and ramp construction is available through the native volume and ramp commands");
-    add({"ray", "mpng", "mdo", "mappend", "mset", "mclear", "madd", "mmatrix",
+    add({"ray", "mpng", "mdo", "mappend", "mmatrix",
          "mview", "mtoggle", "mdump", "mcopy", "rock", "viewport", "stereo",
          "full_screen", "window", "wizard", "set_key", "button", "mouse"},
         "interactive, animation-script or window state has no native equivalent");
@@ -362,6 +362,10 @@ class StatementTranslation {
   void translate_png();
   void translate_label();
   void translate_delete();
+  void translate_enable_disable(bool enable);
+  void translate_group();
+  void translate_enable() { translate_enable_disable(true); }
+  void translate_disable() { translate_enable_disable(false); }
   void translate_spectrum();
   void translate_distance();
   void translate_angle();
@@ -373,6 +377,10 @@ class StatementTranslation {
   void translate_get_view();
   void translate_frame();
   void translate_mplay();
+  void translate_movie_map(bool append);
+  void translate_mset() { translate_movie_map(false); }
+  void translate_madd() { translate_movie_map(true); }
+  void translate_mclear();
   void translate_mstop();
   void translate_quit();
   void translate_refresh();
@@ -861,6 +869,48 @@ void StatementTranslation::translate_label() {
   }
 }
 
+void StatementTranslation::translate_group() {
+  if (!bind({"name", "members", "action", "quiet"}) || !require("name")) return;
+  const std::string name = *text("name");
+  const std::string members = given("members") ? *text("members") : std::string{};
+  std::string action = given("action") ? *text("action") : std::string{"auto"};
+  if (action == "auto") action = members.empty() ? "toggle" : "add";
+  if (action == "add") {
+    if (members.empty()) {
+      error("missing_argument", "group add needs members");
+      return;
+    }
+    emit("group add", {{"name", name}, {"members", members}});
+  } else if (action == "remove") {
+    if (members.empty()) {
+      error("missing_argument", "group remove needs members");
+      return;
+    }
+    emit("group remove", {{"name", name}, {"members", members}});
+  } else if (action == "ungroup") {
+    emit("group ungroup", {{"members", members.empty() ? name : members}});
+  } else if (action == "open" || action == "close" || action == "toggle" || action == "empty" ||
+             action == "purge" || action == "excise") {
+    emit("group " + action, {{"name", name}});
+  } else {
+    error("unsupported_argument", "group action '" + action + "' has no native equivalent");
+  }
+}
+
+void StatementTranslation::translate_enable_disable(bool enable) {
+  if (!bind({"name", "parents"})) return;
+  require_default("parents", {"0"});
+  std::string name = given("name") ? *text("name") : std::string{"all"};
+  const std::string command = enable ? "object enable" : "object disable";
+  if (name == "all" || name == "*") {
+    emit(command, {{"pattern", "*"}});
+  } else if (translator_.is_selection(name) && !translator_.is_object(name)) {
+    emit(command, {{"selection", "@" + name}});
+  } else {
+    emit(command, {{"pattern", name}});
+  }
+}
+
 void StatementTranslation::translate_delete() {
   if (!bind({"name"}) || !require("name")) return;
   const auto name = *text("name");
@@ -882,8 +932,7 @@ void StatementTranslation::translate_delete() {
   }
   if (translator_.is_selection(name) && !translator_.is_object(name)) {
     translator_.selections_.erase(name);
-    warning("selection_delete_not_applied",
-            "named selections cannot be deleted; the selection '" + name + "' stays defined");
+    emit("select delete", {{"name", name}});
     return;
   }
   if (!translator_.is_object(name)) {
@@ -1068,6 +1117,29 @@ void StatementTranslation::translate_frame() {
   emit("traj frame", {{"frame", format_number(*number - 1.0)}});
 }
 
+void StatementTranslation::translate_movie_map(bool append) {
+  if (!bind({"specification", "frame", "freeze"})) return;
+  require_default("freeze", {"0"});
+  Arguments arguments{{"spec", text("specification").value_or("")}};
+  if (const auto frame = text("frame"); frame.has_value()) {
+    const auto number = parse_number(*frame);
+    if (!number.has_value() || *number < 0.0 || *number != std::floor(*number)) {
+      error("invalid_argument", "frame must be a non-negative integer");
+      return;
+    }
+    // mset defaults to frame 1 (replace); madd defaults to 0 (append). 0 always means append.
+    if (*number > 0.0) arguments["frame"] = format_number(*number);
+    else append = true;
+  }
+  if (append) arguments["append"] = "true";
+  emit("movie map", arguments);
+}
+
+void StatementTranslation::translate_mclear() {
+  if (!bind({})) return;
+  emit("movie clear", {});
+}
+
 void StatementTranslation::translate_mplay() {
   if (!bind({})) return;
   emit("movie play", {});
@@ -1175,6 +1247,9 @@ void StatementTranslation::run() {
       {"png", &StatementTranslation::translate_png},
       {"label", &StatementTranslation::translate_label},
       {"delete", &StatementTranslation::translate_delete},
+      {"group", &StatementTranslation::translate_group},
+      {"enable", &StatementTranslation::translate_enable},
+      {"disable", &StatementTranslation::translate_disable},
       {"spectrum", &StatementTranslation::translate_spectrum},
       {"distance", &StatementTranslation::translate_distance},
       {"angle", &StatementTranslation::translate_angle},
@@ -1186,6 +1261,9 @@ void StatementTranslation::run() {
       {"get_view", &StatementTranslation::translate_get_view},
       {"frame", &StatementTranslation::translate_frame},
       {"mplay", &StatementTranslation::translate_mplay},
+      {"mset", &StatementTranslation::translate_mset},
+      {"madd", &StatementTranslation::translate_madd},
+      {"mclear", &StatementTranslation::translate_mclear},
       {"mstop", &StatementTranslation::translate_mstop},
       {"quit", &StatementTranslation::translate_quit},
       {"exit", &StatementTranslation::translate_quit},
