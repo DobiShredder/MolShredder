@@ -22,6 +22,7 @@
 #include "molshredder/analysis/secondary_structure.hpp"
 #include "molshredder/analysis/time_series.hpp"
 #include "molshredder/application/analysis_result.hpp"
+#include "molshredder/application/rep_instance.hpp"
 #include "molshredder/application/representation_visibility.hpp"
 #include "molshredder/command/registry.hpp"
 #include "molshredder/io/structure_reader.hpp"
@@ -111,6 +112,10 @@ struct WorkspaceObject {
   // VMD `mol fix`: the object's scene placement is not changed by align,
   // placement copy or placement reset until it is freed.
   bool fixed{false};
+  // VMD representation instances (Q-038 a), drawn in addition to the
+  // PyMOL-style show/hide representations.
+  std::vector<RepInstance> rep_instances;
+  std::uint64_t next_rep_serial{0U};
 };
 
 struct MolecularSurfaceResult {
@@ -451,6 +456,8 @@ struct LoadResult {
   std::size_t frame_count{};
   io::StructureFormat format{io::StructureFormat::auto_detect};
   std::vector<LoadedObjectResult> objects;
+  // Session imports (PSE): what the file held but was not applied, and failures while applying extras.
+  std::vector<std::string> import_notes{};
 };
 
 struct StructureLoadRequest {
@@ -609,6 +616,47 @@ struct StateAppendResult {
   std::size_t previous_state_count{};
   std::size_t appended_state_count{};
   std::size_t state_count{};
+};
+
+// How edit move-atoms combines its values with the selected atoms: `set`
+// assigns positions, `add` offsets them, `transform` applies a row-major 4x4
+// affine matrix (VMD atomselect moveto/moveby/lmoveto/lmoveby/move, PyMOL
+// translate/transform_selection).
+enum class CoordinateMoveMode { set, add, transform };
+
+struct CoordinateMoveResult {
+  std::uint64_t transaction_id{};
+  std::uint64_t object_id{};
+  std::size_t moved_atom_count{};
+  std::size_t state_count{};
+  std::size_t invalidated_measurement_count{};
+};
+
+// One representation instance with its drawn primitive count.
+struct RepInstanceInfo {
+  std::size_t index{};
+  RepInstance instance;
+  bool renderable{};
+  bool color_renderable{};
+  std::size_t primitive_count{};
+};
+
+// Fields to change on a representation instance; unset fields stay.
+struct RepInstanceChange {
+  std::optional<std::string> style;
+  std::optional<std::vector<double>> params;
+  std::optional<std::string> selection;
+  std::optional<std::string> color;
+  std::optional<std::int32_t> color_id;
+  std::optional<std::string> material;
+  std::optional<bool> visible;
+  std::optional<std::string> name;
+  std::optional<bool> selection_update;
+  std::optional<bool> color_update;
+  std::optional<std::int64_t> smooth_window;
+  std::optional<std::string> draw_frames;
+  std::optional<std::pair<double, double>> scale_range;
+  bool scale_auto{false};
 };
 
 struct StateDeleteResult {
@@ -1420,11 +1468,36 @@ public:
   // refused. Either every state is appended or the object is unchanged.
   [[nodiscard]] operation::Result<StateAppendResult>
   append_states(std::string_view object_reference, const io::StructureDocument &document);
+  // Moves the selected atoms of the active static object. `values` holds one
+  // 3-vector (applied to every atom), one 3-vector per selected atom (set/add)
+  // or 16 matrix numbers (transform). `state_scope` is "current", "all" or a
+  // 1-based state number. One undoable edit; measurements of the object are
+  // dropped like other coordinate edits.
+  [[nodiscard]] operation::Result<CoordinateMoveResult>
+  move_selected_atoms(std::string selection_expression, CoordinateMoveMode mode,
+                      const std::vector<double> &values, std::string_view state_scope);
+  // VMD representation instances of an object (index = position, from 0).
+  [[nodiscard]] operation::Result<std::vector<RepInstanceInfo>>
+  list_rep_instances(std::string_view object_reference) const;
+  [[nodiscard]] operation::Result<RepInstanceInfo>
+  add_rep_instance(std::string_view object_reference, const RepInstanceChange &overrides);
+  [[nodiscard]] operation::Result<RepInstanceInfo>
+  modify_rep_instance(std::string_view object_reference, std::string_view rep_reference,
+                      const RepInstanceChange &change);
+  [[nodiscard]] operation::Result<std::size_t>
+  delete_rep_instance(std::string_view object_reference, std::string_view rep_reference);
+  [[nodiscard]] operation::Result<std::int64_t>
+  rep_instance_index(std::string_view object_reference, std::string_view name) const;
+  [[nodiscard]] const RepDefaults &rep_defaults() const noexcept { return rep_defaults_; }
+  // category: style, color, selection or material (VMD mol default).
+  [[nodiscard]] std::optional<operation::Error>
+  set_rep_default(std::string_view category, std::string_view value);
   // Creates one single-state object per state of a multi-state object (PyMOL
   // split_states). States are numbered from 1; `last` 0 means the final
   // state. Objects are named <prefix><state:04d> (prefix defaults to
   // "<object>_"). The source is kept. All objects are created or none.
   using StateJoinMode = application::StateJoinMode;
+  using CoordinateMoveMode = application::CoordinateMoveMode;
   [[nodiscard]] operation::Result<ObjectSplitResult>
   split_states(std::string_view object_reference, std::size_t first,
                std::size_t last, std::string prefix);
@@ -1453,6 +1526,10 @@ public:
   [[nodiscard]] operation::Result<AtomListing>
   list_atoms(std::string selection_expression,
              const std::vector<std::string> &properties, std::size_t limit) const;
+  // Bonds with at least one atom in the selection (VMD atomselect getbonds /
+  // getbondorders / getbondtypes): atom indices are 1-based.
+  [[nodiscard]] operation::Result<AtomListing>
+  list_bonds(std::string selection_expression, std::size_t limit) const;
   [[nodiscard]] operation::Result<std::vector<std::string>>
   list_chains(std::string selection_expression) const;
   [[nodiscard]] operation::Result<ChargeSum>
@@ -2064,6 +2141,24 @@ private:
       std::vector<std::shared_ptr<const model::CoordinateFrame>> frames,
       std::size_t current_frame);
   [[nodiscard]] bool object_name_in_use(std::string_view name) const;
+  [[nodiscard]] operation::Result<std::size_t>
+  resolve_rep_reference(const WorkspaceObject &object, std::string_view reference) const;
+  [[nodiscard]] std::optional<operation::Error>
+  commit_rep_instances(std::size_t object_index, WorkspaceObject candidate);
+  RepDefaults rep_defaults_;
+  struct CommittedCoordinateEdit {
+    std::uint64_t transaction_id{};
+    std::uint64_t previous_source_revision{};
+    std::uint64_t previous_coordinate_revision{};
+    std::size_t invalidated_measurements{};
+    std::size_t memory_bytes{};
+    std::size_t evicted{};
+  };
+  // Replaces an object's states with edited frames, records one undo entry,
+  // rebuilds representations/scene and drops the object's measurements.
+  [[nodiscard]] operation::Result<CommittedCoordinateEdit> commit_coordinate_frames(
+      WorkspaceObject *object,
+      std::vector<std::shared_ptr<const model::CoordinateFrame>> frames);
   [[nodiscard]] const GroupRecord *find_group(std::string_view name) const;
   [[nodiscard]] const GroupRecord *parent_group_of_object(std::uint64_t id) const;
   [[nodiscard]] const GroupRecord *parent_group_of_group(std::string_view name) const;

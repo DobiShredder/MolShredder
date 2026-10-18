@@ -13,7 +13,7 @@
 
 namespace molshredder::io {
 
-enum class VolumeFormat { auto_detect, opendx, mrc };
+enum class VolumeFormat { auto_detect, opendx, mrc, xplor, brix, phi, grd, fld, acnt };
 
 struct VolumeData {
   std::string name;

@@ -48,14 +48,14 @@ def main() -> int:
     )
     writable_contract = (writable["status"] == "ok" and
             writable["data"]["capability_schema_version"] == 3 and
-            writable["data"]["format_count"] == 10 and
+            writable["data"]["format_count"] == 13 and
             writable["data"]["provider"]["id"] == "native" and
             writable["data"]["provider"]["origin"] == "native_builtin" and
             writable["data"]["formats"][0]["provider"]["license_status"] == "approved" and
             writable["data"]["formats"][0]["directions"]["write"]["available"] and
             writable["data"]["formats"][0]["directions"]["write"]["typed_loss_reporting"] and
             [item["id"] for item in writable["data"]["formats"]] ==
-            ["pdb", "mmcif", "pqr", "mol", "sdf", "mol2", "psf", "gro", "g96", "xyz"] and
+            ["pdb", "mmcif", "pqr", "mol", "sdf", "mol2", "psf", "gro", "g96", "xyz", "mmtf", "mmod", "mae"] and
             "presence" in writable["data"]["formats"][0]["channels"] and
             "partial_charge" in writable["data"]["formats"][2]["channels"] and
             "pqr_radius" in writable["data"]["formats"][2]["channels"] and
@@ -78,7 +78,7 @@ def main() -> int:
     xtc_capability = next(item for item in readable["data"]["formats"]
                           if item["id"] == "xtc")
     require(readable["status"] == "ok" and
-            readable["data"]["format_count"] == 24 and
+            readable["data"]["format_count"] == 39 and
             [item["id"] for item in readable["data"]["formats"]][-5:] ==
             ["lammps", "netcdf", "h5md", "binpos", "rst7"] and
             next(item for item in readable["data"]["formats"]

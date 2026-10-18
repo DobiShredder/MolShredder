@@ -6,17 +6,17 @@
 
 Machine-readable data: [`capability-support-v2.json`](capability-support-v2.json)
 
-검토일 `2026-10-14`.
+검토일 `2026-10-18`.
 
 ## Baseline별 분모
 
 | Baseline | 버전/commit | 기준일 | 분모 | 검증됨 | 진행 중 | 계획 | 사용 불가 |
 |---|---|---|---:|---:|---:|---:|---:|
-| `pymol-incentive-3.1.8` | `3.1.8` | 2026-10-02 | 35 | 0 | 5 | 0 | 30 |
-| `pymol-oss-3.1.0` | `f51e58f6b08308c41c85b9d12a23231f49ca325a` | 2026-10-03 | 1942 | 137 | 467 | 0 | 1338 |
-| `source-audit-2026-10` | `—` | 2026-10-17 | 522 | 0 | 72 | 0 | 450 |
-| `vmd-1.9.3` | `1.9.3` | 2026-10-02 | 533 | 23 | 172 | 0 | 338 |
-| `vmd-1.9.4a57` | `1.9.4a48` | 2026-10-02 | 573 | 23 | 172 | 0 | 378 |
+| `pymol-incentive-3.1.8` | `3.1.8` | 2026-10-02 | 35 | 0 | 6 | 0 | 29 |
+| `pymol-oss-3.1.0` | `f51e58f6b08308c41c85b9d12a23231f49ca325a` | 2026-10-03 | 1942 | 137 | 486 | 0 | 1319 |
+| `source-audit-2026-10` | `—` | 2026-10-17 | 522 | 0 | 83 | 0 | 439 |
+| `vmd-1.9.3` | `1.9.3` | 2026-10-02 | 533 | 23 | 200 | 0 | 310 |
+| `vmd-1.9.4a57` | `1.9.4a48` | 2026-10-02 | 573 | 23 | 199 | 0 | 351 |
 | `vmd-plugin-catalog-current` | `—` | 2026-10-02 | 109 | 2 | 14 | 0 | 93 |
 
 ## 전체 상태 요약(중복 제거)
@@ -24,9 +24,9 @@ Machine-readable data: [`capability-support-v2.json`](capability-support-v2.json
 | 상태 | 개수 | 의미 |
 |---|---:|---|
 | 검증됨 | 137 | implementation이 compatible/robust이며 fixture, evidence, module과 public interface가 모두 연결됨 |
-| 진행 중(미검증) | 621 | partial 구현이며 compatibility 완료 주장이 아님 |
+| 진행 중(미검증) | 679 | partial 구현이며 compatibility 완료 주장이 아님 |
 | 인벤토리/계획 | 0 | inventory 또는 acceptance 설계 단계이며 사용자가 실행할 수 없음 |
-| 사용 불가/보류 | 2225 | 보류, 제외, 접근 제한 또는 license 격리 상태 |
+| 사용 불가/보류 | 2167 | 보류, 제외, 접근 제한 또는 license 격리 상태 |
 
 ## Domain 요약
 
@@ -36,15 +36,15 @@ Machine-readable data: [`capability-support-v2.json`](capability-support-v2.json
 | `automation` | 2 | 39 | 0 | 142 | 183 |
 | `data` | 0 | 0 | 0 | 43 | 43 |
 | `editing` | 0 | 1 | 0 | 172 | 173 |
-| `io` | 0 | 54 | 0 | 173 | 227 |
-| `object_state` | 0 | 71 | 0 | 71 | 142 |
+| `io` | 0 | 74 | 0 | 153 | 227 |
+| `object_state` | 0 | 88 | 0 | 54 | 142 |
 | `pbc` | 0 | 2 | 0 | 59 | 61 |
 | `performance` | 0 | 0 | 0 | 60 | 60 |
 | `plugin` | 0 | 2 | 0 | 40 | 42 |
 | `rendering` | 3 | 55 | 0 | 296 | 354 |
-| `representation` | 101 | 70 | 0 | 537 | 708 |
+| `representation` | 101 | 71 | 0 | 536 | 708 |
 | `scene` | 31 | 57 | 0 | 121 | 209 |
-| `selection` | 0 | 172 | 0 | 86 | 258 |
+| `selection` | 0 | 192 | 0 | 66 | 258 |
 | `trajectory` | 0 | 31 | 0 | 84 | 115 |
 | `ui` | 0 | 0 | 0 | 144 | 144 |
 
@@ -728,18 +728,18 @@ Machine-readable data: [`capability-support-v2.json`](capability-support-v2.json
 | `io.fetch.type.pdb` | Fetch type pdb | `pymol-oss-3.1.0`, `vmd-1.9.3`, `vmd-1.9.4a57` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.fetch.type.pdb1` | Fetch type pdb1 | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.fetch.type.sid` | Fetch type sid | `pymol-oss-3.1.0` | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `io.format.acnt.read` | ACNT read | `pymol-oss-3.1.0` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `io.format.acnt.read` | ACNT read | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `io.format.aln.read` | ALN read | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.format.aln.write` | ALN write | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.format.bcif.read` | BCIF read | `pymol-incentive-3.1.8`, `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
-| `io.format.brix.read` | BRIX read | `pymol-oss-3.1.0` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `io.format.cc1.read` | CC1 read | `pymol-oss-3.1.0` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `io.format.brix.read` | BRIX read | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `io.format.cc1.read` | CC1 read | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `io.format.ccp4.read` | CCP4 read | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `io.format.ccp4.write` | CCP4 write | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `io.format.cif.read` | CIF read | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `io.format.cif.write` | CIF write | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
-| `io.format.cml.read` | CML read | `pymol-oss-3.1.0` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `io.format.crd.read` | CRD read | `pymol-oss-3.1.0` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `io.format.cml.read` | CML read | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `io.format.crd.read` | CRD read | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 2 |
 | `io.format.cube.read` | PyMOL load of CUBE files through the molfile plugin | `source-audit-2026-10` | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
 | `io.format.dae.read` | DAE read | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`blocked_access`) | — | — | — | `specified` | — | 0 |
 | `io.format.dcd.read` | PyMOL load of DCD files through the molfile plugin | `source-audit-2026-10` | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
@@ -747,19 +747,19 @@ Machine-readable data: [`capability-support-v2.json`](capability-support-v2.json
 | `io.format.dx.read` | DX read | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `io.format.fasta.read` | FASTA read | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.format.fasta.write` | FASTA write | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `io.format.fld.read` | FLD read | `pymol-oss-3.1.0` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `io.format.fld.read` | FLD read | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `io.format.g96.read` | PyMOL load of G96 files through the molfile plugin | `source-audit-2026-10` | P2 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
-| `io.format.grd.read` | GRD read | `pymol-oss-3.1.0` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `io.format.grd.read` | GRD read | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `io.format.gro.read` | PyMOL load of GRO files through the molfile plugin | `source-audit-2026-10` | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
 | `io.format.idx.read` | IDX read | `pymol-oss-3.1.0` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `io.format.mae.read` | MAE read | `pymol-incentive-3.1.8`, `pymol-oss-3.1.0` | P0 | 사용 불가/보류 (`blocked_access`) | — | — | — | `specified` | — | 0 |
-| `io.format.mae.write` | MAE write | `pymol-oss-3.1.0` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `io.format.mae.read` | MAE read | `pymol-incentive-3.1.8`, `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `io.format.mae.write` | MAE write | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `io.format.map.read` | MAP read | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `io.format.map.write` | MAP write | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
-| `io.format.mmod.read` | MMOD read | `pymol-oss-3.1.0` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `io.format.mmod.write` | MMOD write | `pymol-oss-3.1.0` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `io.format.mmtf.read` | MMTF read | `pymol-oss-3.1.0` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `io.format.mmtf.write` | MMTF write | `pymol-oss-3.1.0` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `io.format.mmod.read` | MMOD read | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `io.format.mmod.write` | MMOD write | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `io.format.mmtf.read` | MMTF read | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `io.format.mmtf.write` | MMTF write | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `io.format.moe.read` | MOE read | `pymol-oss-3.1.0` | P0 | 사용 불가/보류 (`blocked_access`) | — | — | — | `specified` | — | 0 |
 | `io.format.mol.read` | MOL read | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `io.format.mol.write` | MOL write | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
@@ -771,15 +771,15 @@ Machine-readable data: [`capability-support-v2.json`](capability-support-v2.json
 | `io.format.p1m.read` | P1M read | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.format.pdb.read` | PDB read | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `io.format.pdb.write` | PDB write | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
-| `io.format.pdbml.read` | PDBML read | `pymol-oss-3.1.0` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `io.format.pdbqt.read` | PDBQT read | `pymol-oss-3.1.0` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `io.format.phi.read` | PHI read | `pymol-oss-3.1.0` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `io.format.pdbml.read` | PDBML read | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `io.format.pdbqt.read` | PDBQT read | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `io.format.phi.read` | PHI read | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `io.format.phypo.read` | PHYPO read | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`blocked_access`) | — | — | — | `specified` | — | 0 |
 | `io.format.pkl.write` | PKL write | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.format.pkla.write` | PKLA write | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.format.ply.read` | PLY read | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.format.pml.read` | PML read | `pymol-oss-3.1.0` | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | macos | 4 |
-| `io.format.pmo.read` | PMO read | `pymol-oss-3.1.0` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `io.format.pmo.read` | PMO read | `pymol-oss-3.1.0` | P0 | 사용 불가/보류 (`excluded`) | — | — | — | `specified` | — | 0 |
 | `io.format.pqr.read` | PQR read | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `io.format.pqr.write` | PQR write | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `io.format.pwg.read` | PWG read | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
@@ -793,9 +793,9 @@ Machine-readable data: [`capability-support-v2.json`](capability-support-v2.json
 | `io.format.top.read` | TOP read | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `io.format.trj.read` | TRJ read | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `io.format.trr.read` | PyMOL load of TRR files through the molfile plugin | `source-audit-2026-10` | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
-| `io.format.vdb.read` | VDB read | `pymol-oss-3.1.0` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `io.format.vdb.read` | VDB read | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `io.format.vis.read` | VIS read | `pymol-oss-3.1.0` | P0 | 사용 불가/보류 (`blocked_access`) | — | — | — | `specified` | — | 0 |
-| `io.format.xplor.read` | XPLOR read | `pymol-oss-3.1.0` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `io.format.xplor.read` | XPLOR read | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `io.format.xtc.read` | PyMOL load of XTC files through the molfile plugin | `source-audit-2026-10` | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
 | `io.format.xyz.read` | XYZ read | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `io.format.xyz.write` | XYZ write | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
@@ -851,7 +851,7 @@ Machine-readable data: [`capability-support-v2.json`](capability-support-v2.json
 | `io.pymol_importing.load_coords` | PyMOL cmd.load_coords | `source-audit-2026-10` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
 | `io.pymol_importing.load_coordset` | PyMOL cmd.load_coordset | `source-audit-2026-10` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
 | `io.pymol_importing.load_map` | PyMOL cmd.load_map | `source-audit-2026-10` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `io.pymol_importing.load_mmtf` | PyMOL cmd.load_mmtf | `source-audit-2026-10` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
+| `io.pymol_importing.load_mmtf` | PyMOL cmd.load_mmtf | `source-audit-2026-10` | P1 | 진행 중(미검증) (`partial`) | — | — | — | `unwritten` | — | 0 |
 | `io.pymol_importing.load_object` | PyMOL cmd.load_object | `source-audit-2026-10` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
 | `io.pymol_importing.read_mmodstr` | PyMOL cmd.read_mmodstr | `source-audit-2026-10` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
 | `io.pymol_importing.read_mol2str` | PyMOL cmd.read_mol2str | `source-audit-2026-10` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
@@ -930,8 +930,8 @@ Machine-readable data: [`capability-support-v2.json`](capability-support-v2.json
 | `session.embed.data` | Session embedded-data policy | `pymol-oss-3.1.0` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `session.export.compatibility` | Export sessions for older PyMOL versions | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`excluded`) | — | — | — | `specified` | — | 0 |
 | `session.extension.hooks` | Extension session save and restore hooks | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `session.file.load.pse` | Load a PSE session file | `pymol-oss-3.1.0` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `session.file.save.pse` | Save a PSE session file | `pymol-oss-3.1.0` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `session.file.load.pse` | Load a PSE session file | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `session.file.save.pse` | Save a PSE session file | `pymol-oss-3.1.0` | P0 | 사용 불가/보류 (`excluded`) | — | — | — | `specified` | — | 0 |
 | `session.migration` | Session version check and migration | `pymol-oss-3.1.0` | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | macos | 2 |
 | `session.partial` | Partial session export and restore | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `session.path.current` | Current session-file path tracking | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
@@ -1060,30 +1060,30 @@ Machine-readable data: [`capability-support-v2.json`](capability-support-v2.json
 | `object_state.vmd_tcl_library.save_reps` | VMD Tcl library procedure save_reps | `source-audit-2026-10` | P1 | 진행 중(미검증) (`partial`) | — | — | — | `unwritten` | — | 0 |
 | `object_state.vmd_tcl_library.save_state` | VMD Tcl library procedure save_state | `source-audit-2026-10` | P1 | 진행 중(미검증) (`partial`) | — | — | — | `unwritten` | — | 0 |
 | `object_state.vmd_tcl_library.save_viewpoint` | VMD Tcl library procedure save_viewpoint | `source-audit-2026-10` | P1 | 진행 중(미검증) (`partial`) | — | — | — | `unwritten` | — | 0 |
-| `representation.instance.addrep` | molecule_number : Using the current default settings for the atom selection, col | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `representation.instance.colupdate` | Update the calculated color for the specified rep each time the molecule's times | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `representation.instance.delrep` | Deletes the given representation from the specified molecule | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
+| `representation.instance.addrep` | molecule_number : Using the current default settings for the atom selection, col | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
+| `representation.instance.colupdate` | Update the calculated color for the specified rep each time the molecule's times | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
+| `representation.instance.delrep` | Deletes the given representation from the specified molecule | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
 | `representation.instance.drawframes` | Draw multiple trajectory frames or coordinate sets simultaneously | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `representation.instance.modcolor` | Change the current coloring method for the given representation in the specified | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
+| `representation.instance.modcolor` | Change the current coloring method for the given representation in the specified | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
 | `representation.instance.modmaterial` | Change the current material for the given representation in the specified molecu | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `representation.instance.modrep` | Using the current default settings for the atom selection, coloring, and renderi | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `representation.instance.modselect` | Change the current selection for the given representation in the specified molec | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `representation.instance.modstyle` | Change the current rendering method (style) for the given representation in the  | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `representation.instance.repindex` | Return the rep_number for the rep with the given name, or -1 if no rep with that | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `representation.instance.repname` | Returns the name of the given rep | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `representation.instance.scaleminmax` | molecule_number rep_number [min max \| auto] : Get/set the color scale range for  | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `representation.instance.selupdate` | Update the selection for the specified rep each time the molecule's timestep cha | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `representation.instance.showrep` | molecule_number rep_number [on \| off] : Get/set whether the given rep is shown o | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
+| `representation.instance.modrep` | Using the current default settings for the atom selection, coloring, and renderi | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
+| `representation.instance.modselect` | Change the current selection for the given representation in the specified molec | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
+| `representation.instance.modstyle` | Change the current rendering method (style) for the given representation in the  | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
+| `representation.instance.repindex` | Return the rep_number for the rep with the given name, or -1 if no rep with that | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
+| `representation.instance.repname` | Returns the name of the given rep | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
+| `representation.instance.scaleminmax` | molecule_number rep_number [min max \| auto] : Get/set the color scale range for  | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
+| `representation.instance.selupdate` | Update the selection for the specified rep each time the molecule's timestep cha | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
+| `representation.instance.showrep` | molecule_number rep_number [on \| off] : Get/set whether the given rep is shown o | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
 | `representation.instance.smoothrep` | molecule_number rep_number [n] : Get/set the window size for on-the-fly smoothin | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
 | `representation.instance_clip.clipplane` | mol clipplane center clipplane_id rep_number molecule_number [ vector ] | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
 | `representation.instance_clip.clipplane_color` | mol clipplane color clipplane_id rep_number molecule_number [ vector ] | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
 | `representation.instance_clip.clipplane_normal` | mol clipplane normal clipplane_id rep_number molecule_number [ vector ] | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
 | `representation.instance_clip.clipplane_status` | mol clipplane status clipplane_id rep_number molecule_number [ boolean ] | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `representation.instance_default.color` | Change the default atom coloring method setting | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `representation.instance_default.default` | Set the default settings for color, style, selection, or material to the supplie | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `representation.instance_default.material` | Change the default material setting | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `representation.instance_default.representation` | Change the default rendering method setting | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `representation.instance_default.selection` | Change the default atom selection setting | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
+| `representation.instance_default.color` | Change the default atom coloring method setting | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
+| `representation.instance_default.default` | Set the default settings for color, style, selection, or material to the supplie | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
+| `representation.instance_default.material` | Change the default material setting | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
+| `representation.instance_default.representation` | Change the default rendering method setting | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
+| `representation.instance_default.selection` | Change the default atom selection setting | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
 | `pbc.box_draw` | Draw periodic box | `source-audit-2026-10`, `vmd-plugin-catalog-current` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
 | `pbc.symmetry.copy` | Copy crystal symmetry | `pymol-oss-3.1.0` | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `pbc.symmetry.expand` | Generate symmetry mates | `pymol-oss-3.1.0` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
@@ -1974,7 +1974,7 @@ Machine-readable data: [`capability-support-v2.json`](capability-support-v2.json
 | `representation.glycan_snfg` | 3D-SNFG glycan symbols | `vmd-plugin-catalog-current` | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
 | `representation.helix_cylinders` | Helix axis cylinders | `vmd-plugin-catalog-current` | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
 | `representation.instance.clone` | Clone representations | `vmd-plugin-catalog-current` | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `representation.instance.num` | num(molid) : Returns the number of representations in the given molecule | `vmd-1.9.3`, `vmd-1.9.4a57` | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
+| `representation.instance.num` | num(molid) : Returns the number of representations in the given molecule | `vmd-1.9.3`, `vmd-1.9.4a57` | P2 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
 | `representation.instance_clip.manage` | Per-representation clipping planes | `vmd-plugin-catalog-current` | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
 | `representation.interaction_surface` | Interaction surface between groups | `vmd-plugin-catalog-current` | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
 | `representation.label.atom` | PyMOL-compatible labels representation | `pymol-oss-3.1.0`, `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | macos | 4 |
@@ -2674,18 +2674,18 @@ Machine-readable data: [`capability-support-v2.json`](capability-support-v2.json
 | `selection.numeric.partial_charge` | Partial-charge selector | `pymol-oss-3.1.0`, `vmd-1.9.3`, `vmd-1.9.4a57` | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `selection.numeric.user_property` | User numeric-property selector | `pymol-oss-3.1.0`, `vmd-1.9.3`, `vmd-1.9.4a57` | P1 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `selection.object.create` | Creates a new atom selection and returns its name | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | — | — | — | `unwritten` | — | 0 |
-| `selection.object.delmacro` | name : Delete the macro corresponding to name  | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `selection.object.frame_get` | Returns the animation frame associated with this selection | `vmd-1.9.3` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `selection.object.frame_set` | frame : Set the frame for the selection | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `selection.object.getbonds` | returns a list of bondlists | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `selection.object.keywords` | Return a list of all recognized keywords in an atom selection text | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `selection.object.lmoveby` | move each atom by an offset given in the list | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `selection.object.lmoveto` | move each atom to a point given by the appropriate list element | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `selection.object.macro` | name selection : Create a new singleword atom selection out of existing atom sel | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
+| `selection.object.delmacro` | name : Delete the macro corresponding to name  | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | — | — | — | `unwritten` | — | 0 |
+| `selection.object.frame_get` | Returns the animation frame associated with this selection | `vmd-1.9.3` | P0 | 진행 중(미검증) (`partial`) | — | — | — | `unwritten` | — | 0 |
+| `selection.object.frame_set` | frame : Set the frame for the selection | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | — | — | — | `unwritten` | — | 0 |
+| `selection.object.getbonds` | returns a list of bondlists | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
+| `selection.object.keywords` | Return a list of all recognized keywords in an atom selection text | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
+| `selection.object.lmoveby` | move each atom by an offset given in the list | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
+| `selection.object.lmoveto` | move each atom to a point given by the appropriate list element | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
+| `selection.object.macro` | name selection : Create a new singleword atom selection out of existing atom sel | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | — | — | — | `unwritten` | — | 0 |
 | `selection.object.manage` | atomselect command family | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | — | — | — | `unwritten` | — | 0 |
-| `selection.object.moveto` | move all the atoms to a given location | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
+| `selection.object.moveto` | move all the atoms to a given location | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
 | `selection.object.setbonds` | Set the bonds for the atoms in the selection | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `selection.object.transform` | Applies the given transformation matrix to the coordinates of each atom in the s | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
+| `selection.object.transform` | Applies the given transformation matrix to the coordinates of each atom in the s | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
 | `selection.object.update` | Update the atom selection based on the frame for the selection (the frame can be | `vmd-1.9.3`, `vmd-1.9.4a57` | P0 | 진행 중(미검증) (`partial`) | — | — | — | `unwritten` | — | 0 |
 | `selection.pickability.mask` | Mask atoms from mouse picking | `pymol-oss-3.1.0` | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `selection.pickability.unmask` | Restore mouse pickability | `pymol-oss-3.1.0` | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
@@ -2746,8 +2746,8 @@ Machine-readable data: [`capability-support-v2.json`](capability-support-v2.json
 | `selection.vmd_atomsel_method.functions` | VMD Python atomsel.functions | `source-audit-2026-10` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
 | `selection.vmd_atomsel_method.get` | VMD Python atomsel.get | `source-audit-2026-10` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
 | `selection.vmd_atomsel_method.inverse` | VMD Python atomsel.inverse | `source-audit-2026-10` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `selection.vmd_atomsel_method.keywords` | VMD Python atomsel.keywords | `source-audit-2026-10` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `selection.vmd_atomsel_method.macro` | VMD Python atomsel.macro | `source-audit-2026-10` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
+| `selection.vmd_atomsel_method.keywords` | VMD Python atomsel.keywords | `source-audit-2026-10` | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
+| `selection.vmd_atomsel_method.macro` | VMD Python atomsel.macro | `source-audit-2026-10` | P1 | 진행 중(미검증) (`partial`) | — | — | — | `unwritten` | — | 0 |
 | `selection.vmd_atomsel_method.minmax` | VMD Python atomsel.minmax | `source-audit-2026-10` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
 | `selection.vmd_atomsel_method.move` | VMD Python atomsel.move | `source-audit-2026-10` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
 | `selection.vmd_atomsel_method.moveby` | VMD Python atomsel.moveby | `source-audit-2026-10` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
@@ -2759,21 +2759,21 @@ Machine-readable data: [`capability-support-v2.json`](capability-support-v2.json
 | `selection.vmd_atomsel_method.stringfunctions` | VMD Python atomsel.stringfunctions | `source-audit-2026-10` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
 | `selection.vmd_atomsel_method.update` | VMD Python atomsel.update | `source-audit-2026-10` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
 | `selection.vmd_atomsel_method.write` | VMD Python atomsel.write | `source-audit-2026-10` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `selection.vmd_atomselect_method.getbondorders` | VMD atomselect getbondorders | `source-audit-2026-10` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
+| `selection.vmd_atomselect_method.getbondorders` | VMD atomselect getbondorders | `source-audit-2026-10` | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
 | `selection.vmd_atomselect_method.getbondtypes` | VMD atomselect getbondtypes | `source-audit-2026-10` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
 | `selection.vmd_atomselect_method.setbondorders` | VMD atomselect setbondorders | `source-audit-2026-10` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
 | `selection.vmd_atomselect_method.setbondtypes` | VMD atomselect setbondtypes | `source-audit-2026-10` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
 | `selection.vmd_atomselect_method.symboltable` | VMD atomselect symboltable | `source-audit-2026-10` | P1 | 사용 불가/보류 (`excluded`) | — | — | — | `unwritten` | — | 0 |
-| `selection.vmd_keyword.backbonetype` | VMD selection keyword backbonetype | `source-audit-2026-10` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `selection.vmd_keyword.beta_sheet` | VMD selection keyword beta_sheet | `source-audit-2026-10` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `selection.vmd_keyword.betasheet` | VMD selection keyword betasheet | `source-audit-2026-10` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
+| `selection.vmd_keyword.backbonetype` | VMD selection keyword backbonetype | `source-audit-2026-10` | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
+| `selection.vmd_keyword.beta_sheet` | VMD selection keyword beta_sheet | `source-audit-2026-10` | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
+| `selection.vmd_keyword.betasheet` | VMD selection keyword betasheet | `source-audit-2026-10` | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
 | `selection.vmd_keyword.pucker` | VMD selection keyword pucker | `source-audit-2026-10` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `selection.vmd_keyword.residuetype` | VMD selection keyword residuetype | `source-audit-2026-10` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `selection.vmd_keyword.vmd_fast_hydrogen` | VMD selection keyword vmd_fast_hydrogen | `source-audit-2026-10` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
+| `selection.vmd_keyword.residuetype` | VMD selection keyword residuetype | `source-audit-2026-10` | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
+| `selection.vmd_keyword.vmd_fast_hydrogen` | VMD selection keyword vmd_fast_hydrogen | `source-audit-2026-10` | P1 | 사용 불가/보류 (`excluded`) | — | — | — | `unwritten` | — | 0 |
 | `selection.vmd_keyword.volume_sampled` | VMD volume-sampled selection keywords vol0..vol7, volindex0..volindex7, interpvol0..interpvol7 | `source-audit-2026-10` | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `selection.vmd_keyword.vx` | VMD selection keyword vx | `source-audit-2026-10` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `selection.vmd_keyword.vy` | VMD selection keyword vy | `source-audit-2026-10` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
-| `selection.vmd_keyword.vz` | VMD selection keyword vz | `source-audit-2026-10` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
+| `selection.vmd_keyword.vx` | VMD selection keyword vx | `source-audit-2026-10` | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
+| `selection.vmd_keyword.vy` | VMD selection keyword vy | `source-audit-2026-10` | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
+| `selection.vmd_keyword.vz` | VMD selection keyword vz | `source-audit-2026-10` | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `unwritten` | — | 1 |
 | `selection.volume.interpvol` | interpvol | `vmd-1.9.3`, `vmd-1.9.4a57` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
 | `selection.volume.vol` | vol | `vmd-1.9.3`, `vmd-1.9.4a57` | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |
 | `interactive_md.imd.connect` | host port : connect to an MD simulation running on the machine named host and li | `vmd-1.9.3`, `vmd-1.9.4a57` | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `unwritten` | — | 0 |

@@ -127,6 +127,34 @@ frame_with_coordinate(const model::CoordinateFrame &frame,
       frame.metadata());
 }
 
+operation::Result<std::shared_ptr<const model::CoordinateFrame>>
+frame_with_coordinates(const model::CoordinateFrame &frame,
+                       const std::vector<std::size_t> &atoms,
+                       const std::vector<model::Vec3d> &positions) {
+  using R = operation::Result<std::shared_ptr<const model::CoordinateFrame>>;
+  if (atoms.size() != positions.size())
+    return R::failure(invalid("coordinate edit needs one position per atom"));
+  model::CoordinateBuffer buffer = std::visit(
+      [&](const auto &source) -> model::CoordinateBuffer {
+        using Vector = std::decay_t<decltype(source)>;
+        using Scalar = typename Vector::value_type;
+        using Component = decltype(Scalar{}.x);
+        auto values = source;
+        for (std::size_t i = 0; i < atoms.size(); ++i)
+          if (atoms[i] < values.size())
+            values[atoms[i]] = Scalar{static_cast<Component>(positions[i].x),
+                                      static_cast<Component>(positions[i].y),
+                                      static_cast<Component>(positions[i].z)};
+        return model::CoordinateBuffer{std::move(values)};
+      },
+      frame.positions().values());
+  if (!buffer.all_finite())
+    return R::failure(invalid("coordinate edit overflows the source precision",
+                              "use finite values representable by the coordinate source"));
+  return model::CoordinateFrame::create(std::move(buffer), frame.velocities(),
+                                        frame.presence(), frame.metadata());
+}
+
 std::size_t coordinate_source_payload_bytes(
     const model::CoordinateSource &source) {
   const auto count = source.frame_count();
@@ -634,6 +662,64 @@ operation::Result<std::vector<RepresentationRecord>> rebuild_representations(
     }
     rebuilt.push_back(
         RepresentationRecord{kind, "<visibility-state>", packet.value()});
+  }
+  // VMD representation instances: each draws its own selection with its own
+  // style and coloring on top of the show/hide representations.
+  for (const auto &instance : object.rep_instances) {
+    if (!instance.visible) continue;
+    const auto info = find_vmd_style(instance.style);
+    if (!info.has_value() || !info->renderable) continue;
+    std::vector<std::uint8_t> mask(system->topology()->atom_count(), 0U);
+    if (instance.frozen && !instance.selection_update) {
+      for (const auto id : instance.frozen_atoms)
+        if (const auto atom = system->topology()->atom_index(model::AtomId{id}); atom.has_value())
+          mask[atom->value] = 1U;
+    } else {
+      const auto parsed = selection::Expression::parse(instance.selection);
+      if (!parsed.has_value()) continue;
+      const selection::EvaluationContext selection_context{
+          &frame, frame_index, system->coordinates().get(), system->name()};
+      const auto evaluated = selection::evaluate(
+          parsed.value(), *system->topology(),
+          [&](std::string_view name) {
+            return object.selections.evaluate(name, *system->topology(), selection_context);
+          },
+          selection_context);
+      if (!evaluated.has_value()) continue;
+      mask = evaluated.value();
+    }
+    if (std::none_of(mask.begin(), mask.end(), [](std::uint8_t value) { return value != 0U; }))
+      continue;
+    auto instance_visuals = visuals.value();
+    const auto instance_colors = vmd_atom_colors(
+        instance, *system->topology(), frame,
+        static_cast<std::int32_t>((object.id + 32U) % 33U));
+    for (std::size_t atom = 0; atom < instance_visuals.size() && atom < instance_colors.size(); ++atom)
+      instance_visuals[atom].color = instance_colors[atom];
+    for (const auto kind : info->kinds) {
+      render::RepresentationRequest request{system->topology().get(),
+                                            &frame,
+                                            frame_index,
+                                            object.scene_node.value,
+                                            instance_visuals,
+                                            mask,
+                                            {},
+                                            {},
+                                            &settings,
+                                            object.id,
+                                            {},
+                                            &colors,
+                                            object.object_color,
+                                            object.atom_labels.get(),
+                                            object.cartoon_types.get()};
+      request.style.kind = kind;
+      double sphere_scale = 1.0;
+      apply_vmd_style_parameters(instance, kind, request.style, sphere_scale);
+      request.style.sphere_scale = sphere_scale;
+      const auto packet = render::build_representation(request);
+      if (!packet.has_value()) continue;
+      rebuilt.push_back(RepresentationRecord{kind, "<rep:" + instance.name + ">", packet.value()});
+    }
   }
   return operation::Result<std::vector<RepresentationRecord>>::success(
       std::move(rebuilt));
@@ -2602,6 +2688,48 @@ Workspace::list_atoms(std::string selection_expression,
   return R::success(std::move(listing));
 }
 
+operation::Result<AtomListing>
+Workspace::list_bonds(std::string selection_expression, std::size_t limit) const {
+  using R = operation::Result<AtomListing>;
+  const auto *object = active_object();
+  if (object == nullptr) return R::failure(missing_active());
+  const auto mask = selection_mask(*object, selection_expression);
+  if (!mask.has_value()) return R::failure(mask.error());
+  const auto &topology = *object->system->topology();
+  const auto order_name = [](model::BondOrder order) -> std::string {
+    switch (order) {
+      case model::BondOrder::single: return "single";
+      case model::BondOrder::double_bond: return "double";
+      case model::BondOrder::triple: return "triple";
+      case model::BondOrder::aromatic: return "aromatic";
+      case model::BondOrder::amide: return "amide";
+      case model::BondOrder::zero: return "zero";
+      case model::BondOrder::query: return "query";
+      case model::BondOrder::unknown: break;
+    }
+    return "unknown";
+  };
+  AtomListing listing;
+  listing.columns = {"index1", "index2", "id1", "id2", "name1", "name2", "order"};
+  for (const auto selected : mask.value()) listing.selected_atom_count += selected != 0U ? 1U : 0U;
+  for (const auto &bond : topology.bonds()) {
+    if (mask.value()[bond.first.value] == 0U && mask.value()[bond.second.value] == 0U) continue;
+    if (listing.rows.size() >= limit) {
+      listing.truncated = true;
+      break;
+    }
+    const auto first_id = topology.atom_id(bond.first);
+    const auto second_id = topology.atom_id(bond.second);
+    listing.rows.push_back({static_cast<std::uint64_t>(bond.first.value + 1U),
+                            static_cast<std::uint64_t>(bond.second.value + 1U),
+                            first_id.has_value() ? first_id->value : std::uint64_t{0},
+                            second_id.has_value() ? second_id->value : std::uint64_t{0},
+                            topology.atoms()[bond.first.value].name,
+                            topology.atoms()[bond.second.value].name, order_name(bond.order)});
+  }
+  return R::success(std::move(listing));
+}
+
 operation::Result<std::vector<std::string>>
 Workspace::list_chains(std::string selection_expression) const {
   using R = operation::Result<std::vector<std::string>>;
@@ -3387,6 +3515,270 @@ Workspace::copy_object_transform(std::string_view source_reference,
   return R::success(std::move(result));
 }
 
+namespace {
+
+// Resolves an atom mask of a selection expression for the object's current frame.
+operation::Result<std::vector<std::uint8_t>>
+instance_selection_mask_now(const WorkspaceObject &object, std::string_view expression) {
+  return selection_mask(object, expression);
+}
+
+std::size_t instance_primitive_count(const WorkspaceObject &object, const std::string &name) {
+  std::size_t total = 0;
+  const auto tag = "<rep:" + name + ">";
+  for (const auto &record : object.representations) {
+    if (record.selection_expression != tag) continue;
+    const auto &packet = record.packet;
+    total += packet.lines.size() + packet.cylinders.size() + packet.spheres.size() +
+             packet.mesh_triangles.size() + packet.labels.size();
+  }
+  return total;
+}
+
+} // namespace
+
+operation::Result<std::size_t>
+Workspace::resolve_rep_reference(const WorkspaceObject &object, std::string_view reference) const {
+  using R = operation::Result<std::size_t>;
+  const auto &list = object.rep_instances;
+  if (!reference.empty() &&
+      std::all_of(reference.begin(), reference.end(), [](unsigned char c) { return std::isdigit(c) != 0; })) {
+    const auto number = static_cast<std::size_t>(std::stoul(std::string{reference}));
+    if (number >= list.size())
+      return R::failure(invalid("representation " + std::string{reference} + " does not exist",
+                                "the object has " + std::to_string(list.size()) + " representation(s), numbered from 0"));
+    return R::success(number);
+  }
+  for (std::size_t i = 0; i < list.size(); ++i)
+    if (list[i].name == reference) return R::success(i);
+  return R::failure(invalid("no representation named " + std::string{reference}));
+}
+
+std::optional<operation::Error>
+Workspace::commit_rep_instances(std::size_t object_index, WorkspaceObject candidate) {
+  const auto frame = active_frame(candidate);
+  if (!frame.has_value()) return frame.error();
+  const auto frame_index =
+      candidate.trajectory.has_value() ? candidate.trajectory->timeline.snapshot().frame : 0U;
+  const auto rebuilt = rebuild_representations(candidate, candidate.system, *frame.value(),
+                                               frame_index, render_settings_, color_table_);
+  if (!rebuilt.has_value()) return rebuilt.error();
+  candidate.representations = rebuilt.value();
+  objects_[object_index] = std::move(candidate);
+  return std::nullopt;
+}
+
+operation::Result<std::vector<RepInstanceInfo>>
+Workspace::list_rep_instances(std::string_view object_reference) const {
+  using R = operation::Result<std::vector<RepInstanceInfo>>;
+  const auto index = object_index_by_reference(object_reference);
+  if (!index.has_value()) return R::failure(index.error());
+  const auto &object = objects_[index.value()];
+  std::vector<RepInstanceInfo> out;
+  for (std::size_t i = 0; i < object.rep_instances.size(); ++i) {
+    const auto &instance = object.rep_instances[i];
+    const auto style = find_vmd_style(instance.style);
+    out.push_back({i, instance, style.has_value() && style->renderable,
+                   coloring_renderable(instance.color),
+                   instance_primitive_count(object, instance.name)});
+  }
+  return R::success(std::move(out));
+}
+
+namespace {
+
+std::optional<operation::Error> apply_rep_change(RepInstance &instance, const RepInstanceChange &change) {
+  if (change.style.has_value()) {
+    const auto style = find_vmd_style(*change.style);
+    if (!style.has_value())
+      return invalid("unknown representation style: " + *change.style, "see rep styles");
+    instance.style = style->name;
+  }
+  if (change.params.has_value()) {
+    for (const auto value : *change.params)
+      if (!std::isfinite(value)) return invalid("style parameters must be finite numbers");
+    instance.params = *change.params;
+  }
+  if (change.selection.has_value()) {
+    if (const auto parsed = selection::Expression::parse(*change.selection); !parsed.has_value())
+      return parsed.error();
+    instance.selection = *change.selection;
+  }
+  if (change.color.has_value()) {
+    const auto color = canonical_vmd_coloring(*change.color);
+    if (!color.has_value())
+      return invalid("unknown coloring method: " + *change.color, "see rep colorings");
+    instance.color = *color;
+  }
+  if (change.color_id.has_value()) {
+    if (*change.color_id < 0 || *change.color_id > 32)
+      return invalid("color ids run from 0 to 32");
+    instance.color_id = *change.color_id;
+    if (!change.color.has_value()) instance.color = "ColorID";
+  }
+  if (change.material.has_value()) {
+    const auto material = canonical_vmd_material(*change.material);
+    if (!material.has_value())
+      return invalid("unknown material: " + *change.material, "see rep materials");
+    instance.material = *material;
+  }
+  if (change.visible.has_value()) instance.visible = *change.visible;
+  if (change.name.has_value()) {
+    if (change.name->empty() ||
+        std::all_of(change.name->begin(), change.name->end(), [](unsigned char c) { return std::isdigit(c) != 0; }))
+      return invalid("a representation name must not be empty or only digits");
+    instance.name = *change.name;
+  }
+  if (change.selection_update.has_value()) instance.selection_update = *change.selection_update;
+  if (change.color_update.has_value()) instance.color_update = *change.color_update;
+  if (change.smooth_window.has_value()) {
+    if (*change.smooth_window < 0) return invalid("the smoothing window must not be negative");
+    instance.smooth_window = *change.smooth_window;
+  }
+  if (change.draw_frames.has_value()) instance.draw_frames = *change.draw_frames;
+  if (change.scale_auto) instance.scale_range.reset();
+  if (change.scale_range.has_value()) {
+    if (!(change.scale_range->first < change.scale_range->second))
+      return invalid("scale minimum must be below maximum");
+    instance.scale_range = change.scale_range;
+  }
+  return std::nullopt;
+}
+
+} // namespace
+
+operation::Result<RepInstanceInfo>
+Workspace::add_rep_instance(std::string_view object_reference, const RepInstanceChange &overrides) {
+  using R = operation::Result<RepInstanceInfo>;
+  const auto index = object_index_by_reference(object_reference);
+  if (!index.has_value()) return R::failure(index.error());
+  WorkspaceObject candidate = objects_[index.value()];
+  RepInstance instance;
+  instance.name = "rep" + std::to_string(candidate.next_rep_serial);
+  instance.style = rep_defaults_.style;
+  instance.color = rep_defaults_.color;
+  instance.color_id = rep_defaults_.color_id;
+  instance.selection = rep_defaults_.selection;
+  instance.material = rep_defaults_.material;
+  if (const auto error = apply_rep_change(instance, overrides); error.has_value()) return R::failure(*error);
+  if (std::any_of(candidate.rep_instances.begin(), candidate.rep_instances.end(),
+                  [&](const RepInstance &other) { return other.name == instance.name; }))
+    return R::failure(invalid("a representation named " + instance.name + " already exists"));
+  const auto mask = instance_selection_mask_now(candidate, instance.selection);
+  if (!mask.has_value()) return R::failure(mask.error());
+  if (!instance.selection_update) {
+    const auto &topology = *candidate.system->topology();
+    instance.frozen = true;
+    for (std::size_t atom = 0; atom < mask.value().size(); ++atom)
+      if (mask.value()[atom] != 0U) {
+        const auto id = topology.atom_id(model::AtomIndex{atom});
+        if (id.has_value()) instance.frozen_atoms.push_back(id->value);
+      }
+  }
+  ++candidate.next_rep_serial;
+  candidate.rep_instances.push_back(std::move(instance));
+  const auto position = candidate.rep_instances.size() - 1U;
+  if (const auto error = commit_rep_instances(index.value(), std::move(candidate)); error.has_value())
+    return R::failure(*error);
+  const auto listed = list_rep_instances(std::to_string(objects_[index.value()].id));
+  if (!listed.has_value()) return R::failure(listed.error());
+  return R::success(listed.value()[position]);
+}
+
+operation::Result<RepInstanceInfo>
+Workspace::modify_rep_instance(std::string_view object_reference, std::string_view rep_reference,
+                               const RepInstanceChange &change) {
+  using R = operation::Result<RepInstanceInfo>;
+  const auto index = object_index_by_reference(object_reference);
+  if (!index.has_value()) return R::failure(index.error());
+  WorkspaceObject candidate = objects_[index.value()];
+  const auto position = resolve_rep_reference(candidate, rep_reference);
+  if (!position.has_value()) return R::failure(position.error());
+  auto &instance = candidate.rep_instances[position.value()];
+  if (change.name.has_value() &&
+      std::any_of(candidate.rep_instances.begin(), candidate.rep_instances.end(),
+                  [&](const RepInstance &other) { return &other != &instance && other.name == *change.name; }))
+    return R::failure(invalid("a representation named " + *change.name + " already exists"));
+  if (const auto error = apply_rep_change(instance, change); error.has_value()) return R::failure(*error);
+  const bool refreeze = change.selection.has_value() || change.selection_update.has_value();
+  if (refreeze) {
+    const auto mask = instance_selection_mask_now(candidate, instance.selection);
+    if (!mask.has_value()) return R::failure(mask.error());
+    instance.frozen_atoms.clear();
+    instance.frozen = !instance.selection_update;
+    if (instance.frozen) {
+      const auto &topology = *candidate.system->topology();
+      for (std::size_t atom = 0; atom < mask.value().size(); ++atom)
+        if (mask.value()[atom] != 0U) {
+          const auto id = topology.atom_id(model::AtomIndex{atom});
+          if (id.has_value()) instance.frozen_atoms.push_back(id->value);
+        }
+    }
+  }
+  if (const auto error = commit_rep_instances(index.value(), std::move(candidate)); error.has_value())
+    return R::failure(*error);
+  const auto listed = list_rep_instances(std::to_string(objects_[index.value()].id));
+  if (!listed.has_value()) return R::failure(listed.error());
+  return R::success(listed.value()[position.value()]);
+}
+
+operation::Result<std::size_t>
+Workspace::delete_rep_instance(std::string_view object_reference, std::string_view rep_reference) {
+  using R = operation::Result<std::size_t>;
+  const auto index = object_index_by_reference(object_reference);
+  if (!index.has_value()) return R::failure(index.error());
+  WorkspaceObject candidate = objects_[index.value()];
+  const auto position = resolve_rep_reference(candidate, rep_reference);
+  if (!position.has_value()) return R::failure(position.error());
+  candidate.rep_instances.erase(candidate.rep_instances.begin() +
+                                static_cast<std::ptrdiff_t>(position.value()));
+  const auto remaining = candidate.rep_instances.size();
+  if (const auto error = commit_rep_instances(index.value(), std::move(candidate)); error.has_value())
+    return R::failure(*error);
+  return R::success(remaining);
+}
+
+operation::Result<std::int64_t>
+Workspace::rep_instance_index(std::string_view object_reference, std::string_view name) const {
+  using R = operation::Result<std::int64_t>;
+  const auto index = object_index_by_reference(object_reference);
+  if (!index.has_value()) return R::failure(index.error());
+  const auto &list = objects_[index.value()].rep_instances;
+  for (std::size_t i = 0; i < list.size(); ++i)
+    if (list[i].name == name) return R::success(static_cast<std::int64_t>(i));
+  return R::success(-1);
+}
+
+std::optional<operation::Error>
+Workspace::set_rep_default(std::string_view category, std::string_view value) {
+  if (category == "style" || category == "representation") {
+    const auto style = find_vmd_style(value);
+    if (!style.has_value()) return invalid("unknown representation style: " + std::string{value});
+    rep_defaults_.style = style->name;
+  } else if (category == "color") {
+    if (!value.empty() && std::all_of(value.begin(), value.end(), [](unsigned char ch) { return std::isdigit(ch) != 0; })) {
+      const auto id = std::stoi(std::string{value});
+      if (id > 32) return invalid("color ids run from 0 to 32");
+      rep_defaults_.color = "ColorID";
+      rep_defaults_.color_id = id;
+    } else {
+      const auto color = canonical_vmd_coloring(value);
+      if (!color.has_value()) return invalid("unknown coloring method: " + std::string{value});
+      rep_defaults_.color = *color;
+    }
+  } else if (category == "selection") {
+    if (const auto parsed = selection::Expression::parse(value); !parsed.has_value()) return parsed.error();
+    rep_defaults_.selection = std::string{value};
+  } else if (category == "material") {
+    const auto material = canonical_vmd_material(value);
+    if (!material.has_value()) return invalid("unknown material: " + std::string{value});
+    rep_defaults_.material = *material;
+  } else {
+    return invalid("default category must be style, color, selection or material");
+  }
+  return std::nullopt;
+}
+
 bool Workspace::object_name_in_use(std::string_view name) const {
   return std::any_of(objects_.begin(), objects_.end(),
                      [&](const auto &object) { return object.system->name() == name; }) ||
@@ -3499,6 +3891,95 @@ Workspace::split_states(std::string_view object_reference, std::size_t first,
                               0U});
   }
   return R::success(std::move(result));
+}
+
+operation::Result<CoordinateMoveResult>
+Workspace::move_selected_atoms(std::string selection_expression, CoordinateMoveMode mode,
+                               const std::vector<double> &values, std::string_view state_scope) {
+  using R = operation::Result<CoordinateMoveResult>;
+  auto *object = mutable_active_object();
+  if (object == nullptr) return R::failure(missing_active());
+  if (object->pbc.has_value())
+    return R::failure(invalid("the object is shown with PBC processing",
+                              "run pbc mode --mode none before editing atoms or states"));
+  if (object->fixed)
+    return R::failure(invalid("the object is fixed: " + object->system->name(),
+                              "run object free first"));
+  if (object->trajectory.has_value())
+    return R::failure(operation::Error{
+        operation::ErrorCode::unsupported,
+        "coordinate editing is not available while a trajectory is attached",
+        "detach or create a static copy before editing"});
+  for (const auto value : values)
+    if (!std::isfinite(value)) return R::failure(invalid("coordinate edit values must be finite"));
+  const auto mask = selection_mask(*object, selection_expression);
+  if (!mask.has_value()) return R::failure(mask.error());
+  std::vector<std::size_t> atoms;
+  for (std::size_t atom = 0; atom < mask.value().size(); ++atom)
+    if (mask.value()[atom] != 0U) atoms.push_back(atom);
+  if (atoms.empty()) return R::failure(invalid("selection matches no atoms"));
+  const bool per_atom = mode != CoordinateMoveMode::transform && values.size() == 3U * atoms.size() &&
+                        atoms.size() > 1U;
+  if (mode == CoordinateMoveMode::transform) {
+    if (values.size() != 16U) return R::failure(invalid("a transform needs 16 matrix numbers (row-major 4x4)"));
+    if (values[12] != 0.0 || values[13] != 0.0 || values[14] != 0.0 || values[15] != 1.0)
+      return R::failure(invalid("only affine matrices are supported (last row 0 0 0 1)"));
+  } else if (!per_atom && values.size() != 3U) {
+    return R::failure(invalid("provide 3 numbers or 3 numbers per selected atom",
+                              "selected " + std::to_string(atoms.size()) + " atom(s)"));
+  }
+  const auto frame_count = object->system->coordinates()->frame_count();
+  if (!frame_count.has_value() || *frame_count == 0U)
+    return R::failure(operation::Error{operation::ErrorCode::unsupported,
+                                       "coordinate editing requires a finite in-memory frame set", {}});
+  std::optional<std::size_t> only_state;
+  if (state_scope != "all" && state_scope != "current") {
+    try {
+      const auto number = std::stoul(std::string{state_scope});
+      if (number == 0U || number > *frame_count) throw std::out_of_range("state");
+      only_state = static_cast<std::size_t>(number - 1U);
+    } catch (const std::exception &) {
+      return R::failure(invalid("state must be current, all or a state number from 1"));
+    }
+  } else if (state_scope == "current") {
+    only_state = 0U;
+  }
+  std::vector<std::shared_ptr<const model::CoordinateFrame>> frames;
+  frames.reserve(*frame_count);
+  for (std::size_t state = 0; state < *frame_count; ++state) {
+    const auto frame = object->system->coordinates()->read_frame(state);
+    if (!frame.has_value()) return R::failure(frame.error());
+    if (only_state.has_value() && *only_state != state) {
+      frames.push_back(frame.value());
+      continue;
+    }
+    std::vector<model::Vec3d> next;
+    next.reserve(atoms.size());
+    for (std::size_t i = 0; i < atoms.size(); ++i) {
+      if (!frame.value()->atom_present(atoms[i]))
+        return R::failure(invalid("an atom is missing from state " + std::to_string(state + 1U)));
+      const auto at = coordinate_at(*frame.value(), atoms[i]);
+      if (mode == CoordinateMoveMode::transform) {
+        next.push_back({values[0] * at.x + values[1] * at.y + values[2] * at.z + values[3],
+                        values[4] * at.x + values[5] * at.y + values[6] * at.z + values[7],
+                        values[8] * at.x + values[9] * at.y + values[10] * at.z + values[11]});
+      } else {
+        const auto base = per_atom ? 3U * i : 0U;
+        const model::Vec3d given{values[base], values[base + 1U], values[base + 2U]};
+        next.push_back(mode == CoordinateMoveMode::set
+                           ? given
+                           : model::Vec3d{at.x + given.x, at.y + given.y, at.z + given.z});
+      }
+    }
+    const auto replaced = frame_with_coordinates(*frame.value(), atoms, next);
+    if (!replaced.has_value()) return R::failure(replaced.error());
+    frames.push_back(replaced.value());
+  }
+  const auto edited_states = only_state.has_value() ? std::size_t{1U} : *frame_count;
+  const auto committed = commit_coordinate_frames(object, std::move(frames));
+  if (!committed.has_value()) return R::failure(committed.error());
+  return R::success({committed.value().transaction_id, object->id, atoms.size(), edited_states,
+                     committed.value().invalidated_measurements});
 }
 
 operation::Result<StateDeleteResult>
@@ -3945,20 +4426,48 @@ operation::Result<CoordinateEditResult> Workspace::set_active_atom_position(
       return operation::Result<CoordinateEditResult>::failure(replaced.error());
     frames.push_back(replaced.value());
   }
+  auto committed = commit_coordinate_frames(object, std::move(frames));
+  if (!committed.has_value())
+    return operation::Result<CoordinateEditResult>::failure(committed.error());
+  const auto &done = committed.value();
+  return operation::Result<CoordinateEditResult>::success(
+      {done.transaction_id, object->id, atom_id, 0U, previous, position,
+       done.previous_source_revision, done.previous_coordinate_revision,
+       object->coordinate_source_revision, object->coordinate_revision,
+       *frame_count, done.invalidated_measurements, done.memory_bytes, done.evicted});
+}
+
+operation::Result<Workspace::CommittedCoordinateEdit>
+Workspace::commit_coordinate_frames(
+    WorkspaceObject *object,
+    std::vector<std::shared_ptr<const model::CoordinateFrame>> frames) {
+  using R = operation::Result<CommittedCoordinateEdit>;
+  const auto &topology = *object->system->topology();
+  const auto memory_bytes = saturated_add(
+      coordinate_source_payload_bytes(*object->system->coordinates()),
+      sizeof(EditRecord));
+  if (memory_bytes > edit_history_memory_budget_bytes_)
+    return R::failure(operation::Error{
+        operation::ErrorCode::resource_exhausted,
+        "coordinate edit cannot retain an undo snapshot within the budget",
+        "increase the edit history budget or edit a smaller object",
+        {{"memory_required_bytes", std::to_string(memory_bytes)},
+         {"memory_budget_bytes",
+          std::to_string(edit_history_memory_budget_bytes_)}}});
   const auto coordinates = model::InMemoryCoordinateSource::create(
       topology.atom_count(), std::move(frames));
   if (!coordinates.has_value())
-    return operation::Result<CoordinateEditResult>::failure(coordinates.error());
+    return R::failure(coordinates.error());
   const auto system = model::MolecularSystem::create(
       object->id, object->system->name(), object->system->topology(),
       coordinates.value());
   if (!system.has_value())
-    return operation::Result<CoordinateEditResult>::failure(system.error());
+    return R::failure(system.error());
   if (object->coordinate_source_revision ==
           std::numeric_limits<std::uint64_t>::max() ||
       object->coordinate_revision == std::numeric_limits<std::uint64_t>::max() ||
       next_edit_transaction_id_ == std::numeric_limits<std::uint64_t>::max())
-    return operation::Result<CoordinateEditResult>::failure(operation::Error{
+    return R::failure(operation::Error{
         operation::ErrorCode::resource_exhausted,
         "coordinate edit revision or transaction space is exhausted", {}});
 
@@ -3969,21 +4478,21 @@ operation::Result<CoordinateEditResult> Workspace::set_active_atom_position(
   candidate.molecular_surface.reset();
   const auto frame = candidate.system->coordinates()->read_frame(0U);
   if (!frame.has_value())
-    return operation::Result<CoordinateEditResult>::failure(frame.error());
+    return R::failure(frame.error());
   const auto rebuilt = rebuild_representations(
       candidate, candidate.system, *frame.value(), 0U, render_settings_,
       color_table_);
   if (!rebuilt.has_value())
-    return operation::Result<CoordinateEditResult>::failure(rebuilt.error());
+    return R::failure(rebuilt.error());
   candidate.representations = rebuilt.value();
   auto scene_builder = scene::SceneBuilder::from(*scene_);
   if (const auto error =
           scene_builder.replace_system(candidate.scene_node, candidate.system);
       error.has_value())
-    return operation::Result<CoordinateEditResult>::failure(*error);
+    return R::failure(*error);
   const auto next_scene = scene_builder.build();
   if (!next_scene.has_value())
-    return operation::Result<CoordinateEditResult>::failure(next_scene.error());
+    return R::failure(next_scene.error());
 
   const auto invalidated = static_cast<std::size_t>(std::count_if(
       measurements_.begin(), measurements_.end(),
@@ -4001,7 +4510,7 @@ operation::Result<CoordinateEditResult> Workspace::set_active_atom_position(
   try {
     undo_history_.push_back(record);
   } catch (const std::bad_alloc &) {
-    return operation::Result<CoordinateEditResult>::failure(operation::Error{
+    return R::failure(operation::Error{
         operation::ErrorCode::resource_exhausted,
         "coordinate edit undo allocation failed before commit", {}});
   }
@@ -4018,11 +4527,9 @@ operation::Result<CoordinateEditResult> Workspace::set_active_atom_position(
   scene_ = next_scene.value();
   measurements_.swap(next_measurements);
   refresh_proximity_ramps(object->id);
-  return operation::Result<CoordinateEditResult>::success(
-      {transaction_id, object->id, atom_id, 0U, previous, position,
-       previous_source_revision, previous_coordinate_revision,
-       object->coordinate_source_revision, object->coordinate_revision,
-       *frame_count, invalidated, memory_bytes, evicted});
+  return R::success(CommittedCoordinateEdit{transaction_id, previous_source_revision,
+                                           previous_coordinate_revision, invalidated, memory_bytes,
+                                           evicted});
 }
 
 operation::Result<TopologyPropertyEditResult>
@@ -5610,15 +6117,88 @@ operation::Result<LoadResult> Workspace::load_structure_document(
     io::StructureDocument document, const std::filesystem::path &source_path,
     std::optional<std::string> name) {
   const auto format = document.format;
+  // Session-style documents carry representation and selection requests that are applied after the objects exist.
+  struct SessionExtras {
+    std::vector<std::vector<io::StructureRepresentationHint>> hints;
+    std::vector<bool> visible;
+    std::vector<std::string> original_names;
+    std::vector<std::pair<std::string, std::string>> selections;
+    std::vector<std::string> notes;
+  } extras;
+  const bool session_import = !document.structures.empty() &&
+                              (!document.named_selections.empty() ||
+                               std::any_of(document.structures.begin(), document.structures.end(),
+                                           [](const io::StructureData &structure) {
+                                             return !structure.representation_hints.empty() || !structure.visible;
+                                           }));
+  if (session_import) {
+    for (const auto &structure : document.structures) {
+      extras.hints.push_back(structure.representation_hints);
+      extras.visible.push_back(structure.visible);
+      extras.original_names.push_back(structure.name);
+    }
+    extras.selections = document.named_selections;
+  }
+  extras.notes = document.import_notes;
   operation::TaskContext context;
   auto loaded = load_structure_documents(
       {{std::move(document), source_path, std::move(name)}}, context);
   if (!loaded.has_value())
     return operation::Result<LoadResult>::failure(loaded.error());
-  return operation::Result<LoadResult>::success(
-      {loaded.value().object_id, loaded.value().object_name,
-       loaded.value().atom_count, loaded.value().frame_count, format,
-       std::move(loaded.value().objects)});
+  LoadResult result{loaded.value().object_id, loaded.value().object_name,
+                    loaded.value().atom_count, loaded.value().frame_count, format,
+                    std::move(loaded.value().objects), {}};
+  if (session_import) {
+    const auto kind_of = [](const std::string &representation) -> std::optional<render::RepresentationKind> {
+      if (representation == "lines") return render::RepresentationKind::lines;
+      if (representation == "sticks") return render::RepresentationKind::sticks;
+      if (representation == "spheres") return render::RepresentationKind::spheres;
+      if (representation == "ribbon") return render::RepresentationKind::ribbon;
+      if (representation == "cartoon") return render::RepresentationKind::cartoon;
+      return std::nullopt;
+    };
+    bool names_kept = true;
+    for (const auto &object : result.objects) {
+      const auto index = object.source_record_index;
+      if (index >= extras.original_names.size()) continue;
+      if (object.object_name != extras.original_names[index]) names_kept = false;
+      if (const auto activated = activate_object(object.object_id); !activated.has_value()) {
+        extras.notes.push_back("could not select object " + object.object_name + " to apply the session's representations");
+        continue;
+      }
+      for (const auto &hint : extras.hints[index]) {
+        const auto kind = kind_of(hint.representation);
+        if (!kind.has_value()) continue;
+        if (const auto shown = show(*kind, hint.selection, false); !shown.has_value())
+          extras.notes.push_back("object " + object.object_name + ": could not show " + hint.representation + ": " + shown.error().message);
+      }
+      if (!extras.visible[index]) {
+        if (const auto hidden = set_object_visibility(object.object_id, false); !hidden.has_value())
+          extras.notes.push_back("object " + object.object_name + " could not be hidden as in the session");
+      }
+    }
+    if (!extras.selections.empty()) {
+      if (!names_kept) {
+        extras.notes.push_back("named selections were not created because the objects were renamed on load");
+      } else {
+        for (const auto &[selection_name, expression] : extras.selections) {
+          // Selections are evaluated in the active object; use the first object the expression names ("(model NAME and ...").
+          constexpr std::string_view prefix = "(model ";
+          if (expression.starts_with(prefix)) {
+            const auto end = expression.find(' ', prefix.size());
+            const auto object_name = expression.substr(prefix.size(), end == std::string::npos ? std::string::npos : end - prefix.size());
+            for (const auto &object : result.objects)
+              if (object.object_name == object_name) (void)activate_object(object.object_id);
+          }
+          if (const auto error = set_named_selection(selection_name, expression, false); error.has_value())
+            extras.notes.push_back("selection " + selection_name + " was not created: " + error->message);
+        }
+      }
+    }
+    (void)activate_object(result.object_id);
+  }
+  result.import_notes = std::move(extras.notes);
+  return operation::Result<LoadResult>::success(std::move(result));
 }
 
 operation::Result<BatchLoadResult> Workspace::load_structure_batch(
@@ -5826,7 +6406,7 @@ operation::Result<BatchLoadResult> Workspace::load_structure_documents(
         RepresentationVisibilityState::create(data.topology->atom_count())
             .value(),
         {}, std::move(embedded_trajectory), std::nullopt,
-        render::kColorDefault, nullptr, nullptr, nullptr, std::nullopt, false});
+        render::kColorDefault, nullptr, nullptr, nullptr, std::nullopt, false, {}, 0U});
     loaded_objects.push_back(LoadedObjectResult{
         object_id, candidate.name, data.topology->atom_count(),
         data.coordinates->frame_count().value_or(0U), candidate.record_index});

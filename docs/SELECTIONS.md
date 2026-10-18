@@ -231,3 +231,12 @@ current frame에서 재평가된다.
 multi-object cross-context pseudo point, persistent spatial cache/index와 pinned PyMOL black-box의
 동작 호환 판정이다. 이 범위는 capability matrix의 후속 evidence와 data-model 작업에서 추가하며
 현재 명시적 raw-coordinate semantics를 조용히 바꾸지 않는다.
+
+## VMD 값 keyword와 구조 단어 (SEQ-318)
+
+- `residuetype protein|nucleic|waters|nothing [...]`: 값 목록은 합집합이다. protein·nucleic은 `polymer.protein`·`polymer.nucleic`, waters는 `solvent`, nothing은 그 밖의 원자다.
+- `backbonetype proteinback|nucleicback|hydrogen|normal [...]`: 단백질·핵산 backbone, 수소, 나머지로 원자를 나눈다.
+- `structure H|E|C [...]`, `helix`·`alpha_helix`, `sheet`·`betasheet`·`beta_sheet`·`extended_beta`, `coil`: 파일이 제공한 secondary structure(`ss H`/`ss S`)를 쓴다. `3_10_helix`·`pi_helix`·`bridge_beta`·`turn`과
+  `structure G|I|B|T`는 계산된 할당이 필요해 오류를 낸다(조용히 빈 결과를 주지 않는다).
+- `vx`·`vy`·`vz`: 현재 frame의 속도 비교. 속도를 저장한 frame이 아니면 오류다.
+- `select keywords`가 전체 keyword·별칭·예시를 나열하며 test가 모든 예시의 parse를 확인한다.

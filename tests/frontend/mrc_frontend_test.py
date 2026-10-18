@@ -58,9 +58,9 @@ def main() -> int:
     require(
         python_results[1]["data"]["volume_count"] == 1
         and python_results[1]["data"]["volumes"][0]["name"] == "density"
-        and python_results[2]["data"]["format_count"] == 2
+        and python_results[2]["data"]["format_count"] == 8
         and [item["id"] for item in python_results[2]["data"]["formats"]]
-        == ["opendx", "mrc"],
+        == ["opendx", "mrc", "xplor", "brix", "phi", "grd", "fld", "acnt"],
         "volume list or capability filter lost the MRC object",
     )
 

@@ -31,6 +31,16 @@ StructureFormat detect_format(std::string_view content) {
   if (content.find("@<TRIPOS>MOLECULE") != std::string_view::npos) {
     return StructureFormat::mol2;
   }
+  {
+    const auto first = detail::trim(content.substr(0U, std::min<std::size_t>(content.size(), 4096U)));
+    if (first.starts_with("<?xml") || first.starts_with("<cml") || first.starts_with("<molecule")) {
+      const auto head = content.substr(0U, std::min<std::size_t>(content.size(), 16384U));
+      if (head.find("<cml") != std::string_view::npos || head.find("<molecule") != std::string_view::npos)
+        return StructureFormat::cml;
+      if (head.find("datablock") != std::string_view::npos)
+        return StructureFormat::pdbml;
+    }
+  }
   std::size_t meaningful_position{};
   while (meaningful_position < content.size()) {
     const auto end = content.find('\n', meaningful_position);
@@ -205,6 +215,33 @@ read_structure(std::string_view content, StructureReadOptions options) {
   if (format == StructureFormat::bcif) {
     return detail::read_bcif(content, std::move(options.source_name));
   }
+  if (format == StructureFormat::mmtf) {
+    return detail::read_mmtf(content, std::move(options.source_name));
+  }
+  if (format == StructureFormat::pdbqt) {
+    return detail::read_pdbqt(content, std::move(options.source_name));
+  }
+  if (format == StructureFormat::cor) {
+    return detail::read_cor(content, std::move(options.source_name));
+  }
+  if (format == StructureFormat::cc1) {
+    return detail::read_cc1(content, std::move(options.source_name));
+  }
+  if (format == StructureFormat::pse) {
+    return detail::read_pse(content, std::move(options.source_name));
+  }
+  if (format == StructureFormat::mmod) {
+    return detail::read_mmod(content, std::move(options.source_name));
+  }
+  if (format == StructureFormat::mae) {
+    return detail::read_mae(content, std::move(options.source_name));
+  }
+  if (format == StructureFormat::cml) {
+    return detail::read_cml(content, std::move(options.source_name));
+  }
+  if (format == StructureFormat::pdbml) {
+    return detail::read_pdbml(content, std::move(options.source_name));
+  }
   return detail::read_xyz(content, std::move(options.source_name));
 }
 
@@ -241,6 +278,26 @@ read_structure_file(const std::filesystem::path &path, StructureFormat format) {
     }
     if (extension == ".bcif")
       format = StructureFormat::bcif;
+    if (extension == ".mmtf")
+      format = StructureFormat::mmtf;
+    if (extension == ".pdbqt")
+      format = StructureFormat::pdbqt;
+    if (extension == ".cor" || extension == ".crd")
+      format = StructureFormat::cor;
+    if (extension == ".cc1")
+      format = StructureFormat::cc1;
+    if (extension == ".cml")
+      format = StructureFormat::cml;
+    if (extension == ".pse")
+      format = StructureFormat::pse;
+    if (extension == ".mmd" || extension == ".mmod")
+      format = StructureFormat::mmod;
+    if (extension == ".mae")
+      format = StructureFormat::mae;
+    if (extension == ".pdbml")
+      format = StructureFormat::pdbml;
+    if (extension == ".vdb")
+      format = StructureFormat::pdb;  // VIPERdb files are PDB files
   }
   std::ifstream stream(path, std::ios::binary);
   if (!stream) {
@@ -270,6 +327,24 @@ std::string_view to_string(StructureFormat format) noexcept {
     return "mmcif";
   case StructureFormat::bcif:
     return "bcif";
+  case StructureFormat::mmtf:
+    return "mmtf";
+  case StructureFormat::pdbqt:
+    return "pdbqt";
+  case StructureFormat::cor:
+    return "cor";
+  case StructureFormat::cc1:
+    return "cc1";
+  case StructureFormat::cml:
+    return "cml";
+  case StructureFormat::pse:
+    return "pse";
+  case StructureFormat::mmod:
+    return "mmod";
+  case StructureFormat::mae:
+    return "mae";
+  case StructureFormat::pdbml:
+    return "pdbml";
   case StructureFormat::pqr:
     return "pqr";
   case StructureFormat::mol:

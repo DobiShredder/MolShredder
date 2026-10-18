@@ -317,6 +317,10 @@ molshredder object delete-states [--object OBJECT] --states "1-3 10"
 molshredder object join-states --name NAME --objects a,b[,c] [--selection SELECTION] [--mode identical|intersection]
 molshredder traj delete-frames [--object OBJECT] [--beg N] [--end N] [--skip N]
 molshredder traj dup-frame [--object OBJECT] [--frame N]
+molshredder edit move-atoms --selection SELECTION --values "..." [--mode add|set|transform] [--state current|all|N]
+molshredder object bonds [--selection SELECTION] [--limit N]
+molshredder select keywords
+molshredder rep list|add|modify|delete|index|default|defaults|styles
 molshredder object fix [--object OBJECT]
 molshredder object free [--object OBJECT]
 molshredder object sort
@@ -507,6 +511,30 @@ Additive `format list`와 `save` 문법, atomic output 및 semantic loss table�
   범위 시작부터 N번째마다 남긴다. 모든 frame을 지우는 요청은 거부한다. `traj dup-frame`은 frame(기본: 현재)의 복사본을 마지막에 추가한다.
   연결된 trajectory(`traj load`)와 PBC 처리 중인 object는 거부한다. `object fix`는 object의 scene 배치를 고정해 `object align`·`object matrix-copy`
   대상·`view reset --object`가 거부되게 하고 `object free`가 해제한다(`object list`의 `fixed` 열, `view reset --object all`은 고정된 object를 건너뜀).
+- `edit move-atoms`는 활성 정적 object의 선택 원자를 옮긴다(VMD `moveto`·`moveby`·`lmoveto`·`lmoveby`·`move`, PyMOL `translate`·`transform_selection`).
+  `--mode set`은 값을 위치로 대입하고(숫자 3개면 모든 원자가 같은 위치, 3×원자 수면 원자별 위치), `add`는 오프셋을 더하며, `transform`은 행 우선 4×4 affine 행렬
+  16개를 적용한다(마지막 행은 `0 0 0 1`). 값은 공백·쉼표·세미콜론으로 구분한다. `--state`는 `current`(기본)·`all`·1부터의 state 번호다. 하나의 undo 항목이고(`edit undo`)
+  object의 측정은 다른 좌표 편집처럼 지워진다. 연결된 trajectory·PBC 처리·고정(`object fix`) object는 거부한다. `object bonds`는 선택 원자에 닿는 결합을 원자 번호(1부터)·id·이름·차수로
+  나열하고, `select keywords`는 selection 문법의 keyword와 별칭, 예시를 나열한다.
+- `rep`는 VMD식 representation instance(Q-038 a)다. object마다 번호(0부터)와 이름(`rep0`…)을 가진 순서 있는 목록이며 PyMOL식 `show/hide`와 독립으로 함께 그려진다.
+  `rep add`는 `rep default`(style=Lines, color=Name, selection=all, material=Opaque)로 새 instance를 만들고 `--style --params --selection --color --color-id --material --name`으로 덮어쓴다.
+  `rep modify --rep 번호|이름`이 style·params·selection·color·visible·name·selection-update(끄면 설정 시점의 원자를 고정)·color-update·smooth·draw-frames·scale-min/max/auto를
+  바꾼다. 그려지는 style은 Lines·Bonds·DynamicBonds·VDW·CPK·Licorice·Trace·Tube·Ribbons·NewRibbons·Cartoon·NewCartoon이고 나머지 VMD style 이름은 저장만 한다(`style_drawn`).
+  색 방식은 Name·Type·Element·ResName·ResType·ResID·Chain·SegName·Conformation·Molecule·Structure·ColorID·Beta·Occupancy·Mass·Charge·Pos·PosX/Y/Z·Fragment·Index를 그린다(`color_drawn`).
+  VMD color id(0~32)의 색은 MolShredder의 근사값이다. material·smooth·draw-frames·clip plane은 저장 또는 미지원이다. `rep styles`가 이름 목록을 보여 준다.
+- 파일 형식(SEQ-319): `load`/`load batch`는 `.mmtf`(MMTF 0.x·1.x 읽기, 1.0 쓰기: `save --file-format mmtf`, `--frames all`이면 모델마다 한 state), `.pdbqt`(AutoDock),
+  `.cor`/`.crd`(CHARMM 좌표, 제목 줄 `*`), `.cc1`(ChemDraw 3D), `.vdb`(VIPERdb = PDB)를 읽는다. MMTF는 결합 차수를 1~3만 저장하므로 aromatic 등은 single로 쓰고 `save`의 손실 표에 보고한다.
+  `volume load --file-format`은 X-PLOR/CNS(`xplor`·`cns`; `.map`이 title block을 가진 텍스트면 X-PLOR), BRIX/DSN6(`brix`·`dsn6`·`omap`; PyMOL 기본처럼 평균 0·표준편차 1로 정규화하고 원래 값은 metadata에 기록),
+  Delphi `phi`, ASCII `grd`, AVS `fld`, `acnt`를 더한다(모두 읽기 전용, 한 파일에 한 grid).
+  구조 형식은 `.cml`(CML: `molecule`마다 object, `atomArray`/`bondArray`의 요소형·배열형, `atomRefs2`·`atomsRefs2`, `x2/y2` 평면 좌표는 z=0), `.pdbml`(PDBx/XML의 `atom_site`·`cell`·`struct_conn`;
+  `<PDBx:datablock>` 파일은 `--file-format auto`가 내용으로 알아본다), `.mmd`/`.mmod`(MacroModel 고정 열; 같은 원자 구성을 가진 연속 블록은 state, 읽기·쓰기),
+  `.mae`(Maestro `f_m_ct`/`m_atom`/`m_bond`; 구조마다 object, 읽기·쓰기), `.pse`(PyMOL 세션, 읽기 전용)를 더한다. XML은 자체 파서가 DOCTYPE 내부 subset·ENTITY 선언·사용자 정의 엔티티를 거부한다
+  (XXE·엔티티 확장 불가, 깊이·요소 수 제한). MMOD 쓰기는 MacroModel 원자 type을 원소·결합·전하에서 고르며(어림값) 표현할 수 없는 원소는 type 64로 쓰고 `save` 손실 표에 알린다.
+  `.dat`/`.out`은 확장자만으로 MMOD로 보지 않으므로 `--file-format mmod`를 지정한다. MAE는 비압축 파일만 읽는다(`.maegz` 미지원).
+  PSE는 Python pickle이지만 **코드를 실행하지 않는다**: 데이터 opcode만 해석하는 제한 unpickler가 `_codecs.encode`(latin1)와 `pymol.Session_Storage`만 허용하고 그 밖의 global·호출은 오류로 거부한다.
+  molecule object(모든 state, 결합, 원자 식별자, 전하, B-factor·occupancy, 이차구조, 단위 셀, 숨김 상태), 원자별 표현(sticks·spheres·lines·ribbon·cartoon)과 이름 있는 selection을 가져오고
+  surface·mesh·dots·label·nonbonded 표현, map·CGO·measurement 같은 다른 object, 색·setting·scene·movie·카메라 view는 `import_notes`에 보고만 한다.
+  원자 표가 binary dump(`pse_binary_dump`)로 저장된 세션은 오류로 거부하고 `set pse_binary_dump, 0`으로 다시 저장하라고 안내한다. `.pze`(gzip)는 지원하지 않는다.
 - `object split`은 chain마다 새 object(`<prefix><chain>`, prefix가 없으면 `<원본>_<chain>`)를 만든다. chain이 하나이거나 chain 식별자가 비어
   있거나 대상 이름 하나라도 이미 있으면 아무 것도 만들지 않는 오류이고 중간에 실패하면 만든 object를 지운다. `object sort`는 object panel 순서를
   이름의 natural order(`s2` < `s10`)로 바꾸고 object ID는 그대로다. `object matrix-copy`는 한 object의 scene 배치(이동·회전·scale·pivot)를 다른

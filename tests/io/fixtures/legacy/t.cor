@@ -1,0 +1,8 @@
+* synthetic charmm coordinates
+* second title line
+    5
+    1    1 ALA  N      0.00000   0.00000   0.00000 PROA 1      0.00000
+    2    1 ALA  CA     1.40000   0.00000   0.00000 PROA 1      0.00000
+    3    1 ALA  C      2.00000   1.40000   0.00000 PROA 1      0.00000
+    4    2 GLY  N      3.30000   1.20000   0.10000 PROA 2      0.00000
+    5    2 GLY  CA     4.60000   1.90000   0.20000 PROA 2      0.00000

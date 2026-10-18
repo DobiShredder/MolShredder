@@ -116,12 +116,21 @@ class CoordinateView {
   std::uint64_t coordinate_revision_{};
 };
 
+// File content (atom names, titles, malformed bytes quoted in diagnostics) can be invalid UTF-8; decode with
+// replacement characters instead of letting pybind11 raise UnicodeDecodeError out of a successful command.
+py::str safe_text(const std::string& text) {
+  PyObject* raw = PyUnicode_DecodeUTF8(
+      text.data(), static_cast<Py_ssize_t>(text.size()), "replace");
+  if (raw == nullptr) throw py::error_already_set();
+  return py::reinterpret_steal<py::str>(raw);
+}
+
 py::object to_python(const command::Value& value);
 
 py::dict object_to_python(const command::Value::Object& object) {
   py::dict result;
   for (const auto& [name, value] : object) {
-    result[py::str{name}] = to_python(value);
+    result[safe_text(name)] = to_python(value);
   }
   return result;
 }
@@ -132,11 +141,12 @@ py::object to_python(const command::Value& value) {
         using Item = std::decay_t<decltype(item)>;
         if constexpr (std::is_same_v<Item, std::nullptr_t>) {
           return py::none();
+        } else if constexpr (std::is_same_v<Item, std::string>) {
+          return safe_text(item);
         } else if constexpr (std::is_same_v<Item, bool> ||
                              std::is_same_v<Item, std::int64_t> ||
                              std::is_same_v<Item, std::uint64_t> ||
-                             std::is_same_v<Item, double> ||
-                             std::is_same_v<Item, std::string>) {
+                             std::is_same_v<Item, double>) {
           return py::cast(item);
         } else if constexpr (std::is_same_v<Item, command::Number>) {
           return py::cast(item.value);
@@ -153,7 +163,9 @@ py::object to_python(const command::Value& value) {
 
 py::dict table_to_python(const command::Table& table) {
   py::dict result;
-  result["columns"] = table.columns;
+  py::list columns;
+  for (const auto& column : table.columns) columns.append(safe_text(column));
+  result["columns"] = std::move(columns);
   py::list rows;
   for (const auto& row : table.rows) {
     py::list converted;
@@ -168,10 +180,10 @@ py::dict envelope_to_python(const command::ResultEnvelope& envelope) {
   py::dict result;
   result["schema_version"] = envelope.schema_version;
   result["status"] = envelope.succeeded() ? "ok" : "error";
-  result["command"] = envelope.canonical_command;
+  result["command"] = safe_text(envelope.canonical_command);
   if (envelope.succeeded()) {
     const auto& response = std::get<command::Response>(envelope.payload);
-    result["summary"] = response.summary;
+    result["summary"] = safe_text(response.summary);
     auto data = object_to_python(response.fields);
     if (response.table.has_value()) {
       data["table"] = table_to_python(*response.table);
@@ -181,9 +193,11 @@ py::dict envelope_to_python(const command::ResultEnvelope& envelope) {
     const auto& failure = std::get<operation::Error>(envelope.payload);
     py::dict error;
     error["code"] = operation::to_string(failure.code);
-    error["message"] = failure.message;
-    error["suggestion"] = failure.suggestion;
-    error["details"] = failure.details;
+    error["message"] = safe_text(failure.message);
+    error["suggestion"] = safe_text(failure.suggestion);
+    py::dict details;
+    for (const auto& [key, value] : failure.details) details[safe_text(key)] = safe_text(value);
+    error["details"] = std::move(details);
     result["error"] = std::move(error);
   }
   return result;

@@ -71,6 +71,12 @@ StructureFormat resolve_format(StructureFormat requested,
   }
   if (extension == ".pqr")
     return StructureFormat::pqr;
+  if (extension == ".mmtf")
+    return StructureFormat::mmtf;
+  if (extension == ".mmd" || extension == ".mmod")
+    return StructureFormat::mmod;
+  if (extension == ".mae")
+    return StructureFormat::mae;
   if (extension == ".mol")
     return StructureFormat::mol;
   if (extension == ".sdf" || extension == ".sd") {
@@ -2952,6 +2958,15 @@ write_to_stream(std::ostream &output, const model::Topology &topology,
   if (options.format == StructureFormat::mmcif) {
     return detail::write_mmcif(output, topology, coordinates, options, context);
   }
+  if (options.format == StructureFormat::mmtf) {
+    return detail::write_mmtf(output, topology, coordinates, options, context);
+  }
+  if (options.format == StructureFormat::mmod) {
+    return detail::write_mmod(output, topology, coordinates, options, context);
+  }
+  if (options.format == StructureFormat::mae) {
+    return detail::write_mae(output, topology, coordinates, options, context);
+  }
   if (options.format == StructureFormat::pqr) {
     return write_pqr(output, topology, coordinates, options, context);
   }
@@ -2976,7 +2991,7 @@ write_to_stream(std::ostream &output, const model::Topology &topology,
         operation::Error{operation::ErrorCode::unsupported,
                          "structure writer does not support format: " +
                              std::string{to_string(options.format)},
-                         "use --file-format pdb, mmcif, g96, gro, mol, mol2, "
+                         "use --file-format pdb, mmcif, mmtf, mmod, mae, g96, gro, mol, mol2, "
                          "psf, sdf, pqr or xyz"});
   }
   return write_xyz(output, topology, coordinates, options, context);

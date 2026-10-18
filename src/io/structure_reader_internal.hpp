@@ -62,6 +62,33 @@ read_vtf(std::string_view content, std::string source_name);
 read_mmcif(std::string_view content, std::string source_name);
 
 [[nodiscard]] operation::Result<StructureDocument>
+read_pdbqt(std::string_view content, std::string source_name);
+
+[[nodiscard]] operation::Result<StructureDocument>
+read_cor(std::string_view content, std::string source_name);
+
+[[nodiscard]] operation::Result<StructureDocument>
+read_cc1(std::string_view content, std::string source_name);
+
+[[nodiscard]] operation::Result<StructureDocument>
+read_cml(std::string_view content, std::string source_name);
+
+[[nodiscard]] operation::Result<StructureDocument>
+read_pdbml(std::string_view content, std::string source_name);
+
+[[nodiscard]] operation::Result<StructureDocument>
+read_pse(std::string_view content, std::string source_name);
+
+[[nodiscard]] operation::Result<StructureDocument>
+read_mmod(std::string_view content, std::string source_name);
+
+[[nodiscard]] operation::Result<StructureDocument>
+read_mae(std::string_view content, std::string source_name);
+
+[[nodiscard]] operation::Result<StructureDocument>
+read_mmtf(std::string_view content, std::string source_name);
+
+[[nodiscard]] operation::Result<StructureDocument>
 read_bcif(std::string_view content, std::string source_name);
 
 [[nodiscard]] operation::Result<StructureDocument>

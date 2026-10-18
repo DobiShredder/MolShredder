@@ -119,7 +119,7 @@ int main(int argc, char **argv) {
                                             .data);
   passed &= expect(
       format_response != nullptr && format_count != nullptr &&
-          *format_count == 2U && format_response->table.has_value() &&
+          *format_count == 8U && format_response->table.has_value() &&
           format_response->table->rows.size() == *format_count,
       "format capability count must be captured before moving its table");
 

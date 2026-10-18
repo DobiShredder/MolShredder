@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cml xmlns="http://www.xml-cml.org/schema">
+  <molecule id="m1" title="ethanol-ish">
+    <atomArray>
+      <atom id="a1" elementType="C" x3="0.000" y3="0.000" z3="0.000"/>
+      <atom id="a2" elementType="C" x3="1.520" y3="0.000" z3="0.000"/>
+      <atom id="a3" elementType="O" x3="2.100" y3="1.200" z3="0.000" formalCharge="-1"/>
+      <atom id="a4" elementType="N" x2="3.0" y2="-1.0"/>
+    </atomArray>
+    <bondArray>
+      <bond atomRefs2="a1 a2" order="1"/>
+      <bond atomRefs2="a2 a3" order="2"/>
+      <bond atomRefs2="a2 a4" order="A"/>
+    </bondArray>
+  </molecule>
+  <molecule id="m2">
+    <atomArray atomID="x1 x2 x3" elementType="Cl Na H" x3="0 1.5 3" y3="0 0 1" z3="0 0.5 -1"/>
+    <bondArray atomRef1="x1 x2" atomRef2="x2 x3" order="S T"/>
+  </molecule>
+</cml>

@@ -42,6 +42,9 @@ enum class NumericField {
   coordinate_x,
   coordinate_y,
   coordinate_z,
+  velocity_x,
+  velocity_y,
+  velocity_z,
   atomic_number,
   bond_count,
   van_der_waals_radius,
@@ -206,6 +209,17 @@ struct Node {
 // unary minus and parentheses).
 [[nodiscard]] operation::Result<std::shared_ptr<const NumericNode>>
 parse_numeric_expression(std::string_view source);
+
+// One selection keyword of the grammar for `select keywords` and the
+// grammar-consistency test: `example` is an expression that must parse.
+struct KeywordInfo {
+  std::string name;
+  std::string kind;
+  std::string aliases;
+  std::string example;
+};
+
+[[nodiscard]] const std::vector<KeywordInfo>& keyword_catalog();
 
 class Expression {
  public:

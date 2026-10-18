@@ -48,6 +48,16 @@ io::StructureFormat structure_format(const command::Arguments &arguments) {
   if (found->second == "bcif") {
     return io::StructureFormat::bcif;
   }
+  if (found->second == "mmtf") return io::StructureFormat::mmtf;
+  if (found->second == "pdbqt") return io::StructureFormat::pdbqt;
+  if (found->second == "cor" || found->second == "crd") return io::StructureFormat::cor;
+  if (found->second == "cc1") return io::StructureFormat::cc1;
+  if (found->second == "cml") return io::StructureFormat::cml;
+  if (found->second == "mmod" || found->second == "mmd") return io::StructureFormat::mmod;
+  if (found->second == "mae") return io::StructureFormat::mae;
+  if (found->second == "pse") return io::StructureFormat::pse;
+  if (found->second == "pdbml") return io::StructureFormat::pdbml;
+  if (found->second == "vdb") return io::StructureFormat::pdb;
   if (found->second == "pqr")
     return io::StructureFormat::pqr;
   if (found->second == "mol")
@@ -1290,6 +1300,12 @@ io::VolumeFormat volume_format(std::string_view value) {
     return io::VolumeFormat::opendx;
   if (value == "mrc" || value == "map" || value == "ccp4" || value == "mrcs")
     return io::VolumeFormat::mrc;
+  if (value == "xplor" || value == "cns") return io::VolumeFormat::xplor;
+  if (value == "brix" || value == "dsn6" || value == "omap") return io::VolumeFormat::brix;
+  if (value == "phi") return io::VolumeFormat::phi;
+  if (value == "grd") return io::VolumeFormat::grd;
+  if (value == "fld") return io::VolumeFormat::fld;
+  if (value == "acnt") return io::VolumeFormat::acnt;
   return io::VolumeFormat::auto_detect;
 }
 
@@ -3948,6 +3964,45 @@ command::Registry make_default_registry(
               {"source_object_name", split.value().source_object_name}},
              std::move(table)});
       };
+    } else if (canonical_name == "edit move-atoms") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        std::vector<double> numbers;
+        std::string current;
+        for (const auto character : arguments.at("values") + ",") {
+          if (character == ',' || character == ';' ||
+              std::isspace(static_cast<unsigned char>(character)) != 0) {
+            if (!current.empty()) {
+              try {
+                std::size_t used = 0;
+                numbers.push_back(std::stod(current, &used));
+                if (used != current.size()) throw std::invalid_argument("number");
+              } catch (const std::exception &) {
+                return Result<Response>::failure(operation::Error{
+                    operation::ErrorCode::invalid_argument,
+                    "values must be numbers separated by spaces or commas: " + current, {}, {}});
+              }
+            }
+            current.clear();
+          } else {
+            current.push_back(character);
+          }
+        }
+        const auto &mode_text = arguments.at("mode");
+        const auto mode = mode_text == "set"    ? Workspace::CoordinateMoveMode::set
+                          : mode_text == "add" ? Workspace::CoordinateMoveMode::add
+                                               : Workspace::CoordinateMoveMode::transform;
+        const auto moved = workspace->move_selected_atoms(arguments.at("selection"), mode, numbers,
+                                                          arguments.at("state"));
+        if (!moved.has_value()) return Result<Response>::failure(moved.error());
+        const auto &value = moved.value();
+        return Result<Response>::success(
+            {"moved " + std::to_string(value.moved_atom_count) + " atom(s)",
+             {{"invalidated_measurement_count", static_cast<std::uint64_t>(value.invalidated_measurement_count)},
+              {"moved_atom_count", static_cast<std::uint64_t>(value.moved_atom_count)},
+              {"object_id", value.object_id},
+              {"state_count", static_cast<std::uint64_t>(value.state_count)},
+              {"transaction_id", value.transaction_id}}});
+      };
     } else if (canonical_name == "object split-states") {
       handler = [workspace](const Arguments &arguments, TaskContext &) {
         const auto first = size_argument(arguments, "first");
@@ -4010,6 +4065,155 @@ command::Registry make_default_registry(
               {"object_name", value.object_name},
               {"previous_state_count", static_cast<std::uint64_t>(value.previous_state_count)},
               {"state_count", static_cast<std::uint64_t>(value.state_count)}}});
+      };
+    } else if (canonical_name == "rep list" || canonical_name == "rep add" ||
+               canonical_name == "rep modify" || canonical_name == "rep delete" ||
+               canonical_name == "rep index" || canonical_name == "rep default" ||
+               canonical_name == "rep defaults" || canonical_name == "rep styles") {
+      handler = [workspace, canonical_name](const Arguments &arguments, TaskContext &) {
+        const auto text = [&](const char *key) -> std::optional<std::string> {
+          const auto found = arguments.find(key);
+          if (found == arguments.end()) return std::nullopt;
+          return found->second;
+        };
+        const auto invalid_value = [](const std::string &message) {
+          return Result<Response>::failure(operation::Error{
+              operation::ErrorCode::invalid_argument, message, {}, {}});
+        };
+        const auto truth = [](const std::string &value) -> std::optional<bool> {
+          if (value == "true" || value == "on" || value == "1" || value == "yes") return true;
+          if (value == "false" || value == "off" || value == "0" || value == "no") return false;
+          return std::nullopt;
+        };
+        const auto row_of = [](const RepInstanceInfo &info) -> std::vector<command::Value> {
+          std::string params;
+          for (const auto value : info.instance.params)
+            params += (params.empty() ? "" : " ") + std::to_string(value);
+          return {static_cast<std::uint64_t>(info.index), info.instance.name, info.instance.style,
+                  params, info.instance.selection, info.instance.color,
+                  static_cast<std::int64_t>(info.instance.color_id), info.instance.material,
+                  info.instance.visible, info.instance.selection_update, info.instance.color_update,
+                  info.renderable, info.color_renderable,
+                  static_cast<std::uint64_t>(info.primitive_count)};
+        };
+        const std::vector<std::string> columns{"index", "name", "style", "params", "selection",
+                                               "color", "color_id", "material", "visible",
+                                               "selection_update", "color_update", "style_drawn",
+                                               "color_drawn", "primitive_count"};
+        if (canonical_name == "rep styles") {
+          command::Table table;
+          table.columns = {"kind", "name"};
+          for (const auto &name : vmd_style_names()) table.rows.push_back({std::string{"style"}, name});
+          for (const auto &name : vmd_coloring_names()) table.rows.push_back({std::string{"coloring"}, name});
+          for (const auto &name : vmd_material_names()) table.rows.push_back({std::string{"material"}, name});
+          return Result<Response>::success({"listed styles, colorings and materials", {}, std::move(table)});
+        }
+        if (canonical_name == "rep defaults") {
+          const auto &defaults = workspace->rep_defaults();
+          return Result<Response>::success(
+              {"representation defaults",
+               {{"style", defaults.style}, {"color", defaults.color},
+                {"color_id", static_cast<std::int64_t>(defaults.color_id)},
+                {"selection", defaults.selection}, {"material", defaults.material}}});
+        }
+        if (canonical_name == "rep default") {
+          const auto error = workspace->set_rep_default(arguments.at("category"), arguments.at("value"));
+          if (error.has_value()) return Result<Response>::failure(*error);
+          return Result<Response>::success({"default " + arguments.at("category") + " set", {}});
+        }
+        if (canonical_name == "rep list") {
+          const auto listed = workspace->list_rep_instances(arguments.at("object"));
+          if (!listed.has_value()) return Result<Response>::failure(listed.error());
+          command::Table table;
+          table.columns = columns;
+          for (const auto &info : listed.value()) table.rows.push_back(row_of(info));
+          return Result<Response>::success(
+              {"listed " + std::to_string(listed.value().size()) + " representation(s)",
+               {{"rep_count", static_cast<std::uint64_t>(listed.value().size())}}, std::move(table)});
+        }
+        if (canonical_name == "rep index") {
+          const auto found = workspace->rep_instance_index(arguments.at("object"), arguments.at("name"));
+          if (!found.has_value()) return Result<Response>::failure(found.error());
+          return Result<Response>::success({"representation index " + std::to_string(found.value()),
+                                            {{"index", found.value()}}});
+        }
+        if (canonical_name == "rep delete") {
+          const auto left = workspace->delete_rep_instance(arguments.at("object"), arguments.at("rep"));
+          if (!left.has_value()) return Result<Response>::failure(left.error());
+          return Result<Response>::success({"representation deleted",
+                                            {{"rep_count", static_cast<std::uint64_t>(left.value())}}});
+        }
+        RepInstanceChange change;
+        change.style = text("style");
+        if (const auto params = text("params"); params.has_value()) {
+          std::vector<double> numbers;
+          std::string current;
+          for (const auto character : *params + " ") {
+            if (character == ' ' || character == ',') {
+              if (!current.empty()) {
+                try {
+                  std::size_t used = 0;
+                  numbers.push_back(std::stod(current, &used));
+                  if (used != current.size()) throw std::invalid_argument("n");
+                } catch (const std::exception &) {
+                  return invalid_value("params must be numbers: " + current);
+                }
+              }
+              current.clear();
+            } else {
+              current.push_back(character);
+            }
+          }
+          change.params = std::move(numbers);
+        }
+        change.selection = text("selection");
+        change.color = text("color");
+        if (const auto id = text("color-id"); id.has_value()) {
+          try { change.color_id = std::stoi(*id); }
+          catch (const std::exception &) { return invalid_value("color-id must be an integer"); }
+        }
+        change.material = text("material");
+        change.name = text("name");
+        for (const auto &[key, slot] : std::initializer_list<std::pair<const char *, std::optional<bool> *>>{
+                 {"visible", &change.visible},
+                 {"selection-update", &change.selection_update},
+                 {"color-update", &change.color_update}}) {
+          if (const auto value = text(key); value.has_value()) {
+            const auto parsed = truth(*value);
+            if (!parsed.has_value()) return invalid_value(std::string{key} + " must be true or false");
+            *slot = parsed;
+          }
+        }
+        if (const auto smooth = text("smooth"); smooth.has_value()) {
+          try { change.smooth_window = std::stoll(*smooth); }
+          catch (const std::exception &) { return invalid_value("smooth must be an integer"); }
+        }
+        change.draw_frames = text("draw-frames");
+        const auto scale_min = text("scale-min");
+        const auto scale_max = text("scale-max");
+        if (scale_min.has_value() != scale_max.has_value())
+          return invalid_value("give both scale-min and scale-max");
+        if (scale_min.has_value()) {
+          try { change.scale_range = std::pair{std::stod(*scale_min), std::stod(*scale_max)}; }
+          catch (const std::exception &) { return invalid_value("scale-min and scale-max must be numbers"); }
+        }
+        if (const auto automatic = text("scale-auto"); automatic.has_value())
+          change.scale_auto = truth(*automatic).value_or(false);
+        const auto result = canonical_name == "rep add"
+                                ? workspace->add_rep_instance(arguments.at("object"), change)
+                                : workspace->modify_rep_instance(arguments.at("object"),
+                                                                 arguments.at("rep"), change);
+        if (!result.has_value()) return Result<Response>::failure(result.error());
+        command::Table table;
+        table.columns = columns;
+        table.rows.push_back(row_of(result.value()));
+        const auto &info = result.value();
+        return Result<Response>::success(
+            {std::string{canonical_name == "rep add" ? "added " : "modified "} + info.instance.name,
+             {{"index", static_cast<std::uint64_t>(info.index)}, {"name", info.instance.name},
+              {"style_drawn", info.renderable}, {"color_drawn", info.color_renderable},
+              {"primitive_count", static_cast<std::uint64_t>(info.primitive_count)}},
+             std::move(table)});
       };
     } else if (canonical_name == "object fix" || canonical_name == "object free") {
       const bool fix = canonical_name == "object fix";
@@ -4859,6 +5063,9 @@ command::Registry make_default_registry(
           return Result<Response>::failure(loaded.error());
         command::Value::Array object_ids;
         command::Value::Array loaded_objects;
+        command::Value::Array import_notes;
+        for (const auto &note : loaded.value().import_notes)
+          import_notes.emplace_back(note);
         object_ids.reserve(loaded.value().objects.size());
         loaded_objects.reserve(loaded.value().objects.size());
         for (const auto &object : loaded.value().objects) {
@@ -4879,6 +5086,7 @@ command::Registry make_default_registry(
               {"format", std::string{io::to_string(loaded.value().format)}},
               {"frame_count",
                static_cast<std::uint64_t>(loaded.value().frame_count)},
+              {"import_notes", std::move(import_notes)},
               {"object_id", loaded.value().object_id},
               {"object_ids", std::move(object_ids)},
               {"object_name", loaded.value().object_name},
@@ -5830,6 +6038,33 @@ command::Registry make_default_registry(
         if (value.applied) fields.emplace("scene_version", value.scene_version);
         return Result<Response>::success(
             {apply ? "object aligned" : "fit calculated", std::move(fields)});
+      };
+    } else if (canonical_name == "object bonds") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        const auto limit = size_argument(arguments, "limit");
+        if (!limit.has_value()) return Result<Response>::failure(limit.error());
+        const auto listing = workspace->list_bonds(arguments.at("selection"), limit.value());
+        if (!listing.has_value()) return Result<Response>::failure(listing.error());
+        command::Table table;
+        table.columns = listing.value().columns;
+        for (const auto &row : listing.value().rows) table.rows.push_back(row);
+        return Result<Response>::success(
+            {"listed " + std::to_string(listing.value().rows.size()) + " bond(s)",
+             {{"returned_count", static_cast<std::uint64_t>(listing.value().rows.size())},
+              {"selected_atom_count", static_cast<std::uint64_t>(listing.value().selected_atom_count)},
+              {"truncated", listing.value().truncated}},
+             std::move(table)});
+      };
+    } else if (canonical_name == "select keywords") {
+      handler = [](const Arguments &, TaskContext &) {
+        command::Table table;
+        table.columns = {"keyword", "kind", "aliases", "example"};
+        for (const auto &item : selection::keyword_catalog())
+          table.rows.push_back({item.name, item.kind, item.aliases, item.example});
+        return Result<Response>::success(
+            {"listed " + std::to_string(table.rows.size()) + " selection keyword(s)",
+             {{"keyword_count", static_cast<std::uint64_t>(table.rows.size())}},
+             std::move(table)});
       };
     } else if (canonical_name == "object atoms") {
       handler = [workspace](const Arguments &arguments, TaskContext &) {

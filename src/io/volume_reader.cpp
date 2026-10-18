@@ -435,6 +435,22 @@ operation::Result<VolumeDocument> read_opendx(std::string_view content,
 VolumeFormat detect(std::string_view content) {
   if (detail::is_mrc(content))
     return VolumeFormat::mrc;
+  if (content.substr(0, 3) == ":-)")
+    return VolumeFormat::brix;
+  if (content.size() >= 512U) {
+    const auto word18 = [&](bool swap) {
+      const auto lo = static_cast<unsigned char>(content[36]);
+      const auto hi = static_cast<unsigned char>(content[37]);
+      return swap ? (lo << 8) | hi : (hi << 8) | lo;
+    };
+    if (word18(false) == 100 || word18(true) == 100)
+      return VolumeFormat::brix;
+  }
+  if (content.substr(0, 5) == "# AVS" ||
+      (content.find("\x0c\x0c") != std::string_view::npos && content.find("ndim") != std::string_view::npos))
+    return VolumeFormat::fld;
+  if (content.substr(0, 2048).find("!NTITLE") != std::string_view::npos)
+    return VolumeFormat::xplor;
   return content.find("class gridpositions") != std::string_view::npos &&
                  content.find("class gridconnections") != std::string_view::npos
              ? VolumeFormat::opendx
@@ -448,9 +464,25 @@ operation::Result<VolumeDocument> read_volume(std::string_view content,
   const auto format = options.format == VolumeFormat::auto_detect
                           ? detect(content)
                           : options.format;
+  if (format == VolumeFormat::mrc && !detail::is_mrc(content) &&
+      content.substr(0, 2048).find("!NTITLE") != std::string_view::npos) {
+    // `.map` is shared by CCP4 and X-PLOR/CNS maps: text with a title block is X-PLOR.
+    options.format = VolumeFormat::xplor;
+    return detail::read_xplor(content, std::move(options));
+  }
   if (format == VolumeFormat::mrc) {
     options.format = format;
     return detail::read_mrc(content, std::move(options));
+  }
+  options.format = format;
+  switch (format) {
+  case VolumeFormat::xplor: return detail::read_xplor(content, std::move(options));
+  case VolumeFormat::brix: return detail::read_brix(content, std::move(options));
+  case VolumeFormat::phi: return detail::read_phi(content, std::move(options));
+  case VolumeFormat::grd: return detail::read_grd(content, std::move(options));
+  case VolumeFormat::fld: return detail::read_fld(content, std::move(options));
+  case VolumeFormat::acnt: return detail::read_acnt(content, std::move(options));
+  default: break;
   }
   if (format != VolumeFormat::opendx) {
     return operation::Result<VolumeDocument>::failure(
@@ -485,6 +517,19 @@ read_volume_file(const std::filesystem::path &path, VolumeReadOptions options) {
     else if (extension == ".mrc" || extension == ".ccp4" ||
              extension == ".mrcs")
       options.format = VolumeFormat::mrc;
+    else if (extension == ".xplor" || extension == ".cns")
+      options.format = VolumeFormat::xplor;
+    else if (extension == ".brix" || extension == ".dsn6" || extension == ".omap" ||
+             extension == ".o")
+      options.format = VolumeFormat::brix;
+    else if (extension == ".phi")
+      options.format = VolumeFormat::phi;
+    else if (extension == ".grd")
+      options.format = VolumeFormat::grd;
+    else if (extension == ".fld")
+      options.format = VolumeFormat::fld;
+    else if (extension == ".acnt")
+      options.format = VolumeFormat::acnt;
   }
   if (!options.name.has_value())
     options.name = path.stem().string();
@@ -509,6 +554,18 @@ std::string_view to_string(VolumeFormat format) noexcept {
     return "opendx";
   case VolumeFormat::mrc:
     return "mrc";
+  case VolumeFormat::xplor:
+    return "xplor";
+  case VolumeFormat::brix:
+    return "brix";
+  case VolumeFormat::phi:
+    return "phi";
+  case VolumeFormat::grd:
+    return "grd";
+  case VolumeFormat::fld:
+    return "fld";
+  case VolumeFormat::acnt:
+    return "acnt";
   case VolumeFormat::auto_detect:
     return "auto";
   }

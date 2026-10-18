@@ -15,9 +15,9 @@ Baseline: `pymol-oss-3.1.0` commit `f51e58f6b08308c41c85b9d12a23231f49ca325a`; �
 | 상태 | 개수 | 의미 |
 |---|---:|---|
 | 검증됨 | 137 | implementation이 compatible/robust이며 fixture, evidence, module과 public interface가 모두 연결됨 |
-| 진행 중(미검증) | 467 | partial 구현이며 compatibility 완료 주장이 아님 |
+| 진행 중(미검증) | 486 | partial 구현이며 compatibility 완료 주장이 아님 |
 | 인벤토리/계획 | 0 | inventory 또는 acceptance 설계 단계이며 사용자가 실행할 수 없음 |
-| 사용 불가/보류 | 1338 | 보류, 제외, 접근 제한 또는 license 격리 상태 |
+| 사용 불가/보류 | 1319 | 보류, 제외, 접근 제한 또는 license 격리 상태 |
 
 ## Domain 요약
 
@@ -27,7 +27,7 @@ Baseline: `pymol-oss-3.1.0` commit `f51e58f6b08308c41c85b9d12a23231f49ca325a`; �
 | `automation` | 2 | 28 | 0 | 24 | 54 |
 | `data` | 0 | 0 | 0 | 18 | 18 |
 | `editing` | 0 | 0 | 0 | 100 | 100 |
-| `io` | 0 | 49 | 0 | 137 | 186 |
+| `io` | 0 | 68 | 0 | 118 | 186 |
 | `object_state` | 0 | 41 | 0 | 13 | 54 |
 | `pbc` | 0 | 2 | 0 | 4 | 6 |
 | `performance` | 0 | 0 | 0 | 51 | 51 |
@@ -312,33 +312,33 @@ Baseline: `pymol-oss-3.1.0` commit `f51e58f6b08308c41c85b9d12a23231f49ca325a`; �
 | `io.fetch.type.pdb` | Fetch type pdb | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.fetch.type.pdb1` | Fetch type pdb1 | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.fetch.type.sid` | Fetch type sid | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `io.format.acnt.read` | ACNT read | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `io.format.acnt.read` | ACNT read | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `io.format.aln.read` | ALN read | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.format.aln.write` | ALN write | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.format.bcif.read` | BCIF read | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
-| `io.format.brix.read` | BRIX read | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `io.format.cc1.read` | CC1 read | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `io.format.brix.read` | BRIX read | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `io.format.cc1.read` | CC1 read | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `io.format.ccp4.read` | CCP4 read | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `io.format.ccp4.write` | CCP4 write | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `io.format.cif.read` | CIF read | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `io.format.cif.write` | CIF write | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
-| `io.format.cml.read` | CML read | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `io.format.crd.read` | CRD read | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `io.format.cml.read` | CML read | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `io.format.crd.read` | CRD read | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 2 |
 | `io.format.dae.read` | DAE read | P1 | 사용 불가/보류 (`blocked_access`) | — | — | — | `specified` | — | 0 |
 | `io.format.dx.read` | DX read | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `io.format.fasta.read` | FASTA read | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.format.fasta.write` | FASTA write | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `io.format.fld.read` | FLD read | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `io.format.grd.read` | GRD read | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `io.format.fld.read` | FLD read | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `io.format.grd.read` | GRD read | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `io.format.idx.read` | IDX read | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `io.format.mae.read` | MAE read | P0 | 사용 불가/보류 (`blocked_access`) | — | — | — | `specified` | — | 0 |
-| `io.format.mae.write` | MAE write | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `io.format.mae.read` | MAE read | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `io.format.mae.write` | MAE write | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `io.format.map.read` | MAP read | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `io.format.map.write` | MAP write | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
-| `io.format.mmod.read` | MMOD read | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `io.format.mmod.write` | MMOD write | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `io.format.mmtf.read` | MMTF read | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `io.format.mmtf.write` | MMTF write | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `io.format.mmod.read` | MMOD read | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `io.format.mmod.write` | MMOD write | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `io.format.mmtf.read` | MMTF read | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `io.format.mmtf.write` | MMTF write | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `io.format.moe.read` | MOE read | P0 | 사용 불가/보류 (`blocked_access`) | — | — | — | `specified` | — | 0 |
 | `io.format.mol.read` | MOL read | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `io.format.mol.write` | MOL write | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
@@ -350,15 +350,15 @@ Baseline: `pymol-oss-3.1.0` commit `f51e58f6b08308c41c85b9d12a23231f49ca325a`; �
 | `io.format.p1m.read` | P1M read | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.format.pdb.read` | PDB read | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `io.format.pdb.write` | PDB write | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
-| `io.format.pdbml.read` | PDBML read | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `io.format.pdbqt.read` | PDBQT read | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `io.format.phi.read` | PHI read | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `io.format.pdbml.read` | PDBML read | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `io.format.pdbqt.read` | PDBQT read | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `io.format.phi.read` | PHI read | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `io.format.phypo.read` | PHYPO read | P1 | 사용 불가/보류 (`blocked_access`) | — | — | — | `specified` | — | 0 |
 | `io.format.pkl.write` | PKL write | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.format.pkla.write` | PKLA write | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.format.ply.read` | PLY read | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `io.format.pml.read` | PML read | P1 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | macos | 4 |
-| `io.format.pmo.read` | PMO read | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `io.format.pmo.read` | PMO read | P0 | 사용 불가/보류 (`excluded`) | — | — | — | `specified` | — | 0 |
 | `io.format.pqr.read` | PQR read | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `io.format.pqr.write` | PQR write | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `io.format.pwg.read` | PWG read | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
@@ -370,9 +370,9 @@ Baseline: `pymol-oss-3.1.0` commit `f51e58f6b08308c41c85b9d12a23231f49ca325a`; �
 | `io.format.stl.read` | STL read | P1 | 사용 불가/보류 (`blocked_access`) | — | — | — | `specified` | — | 0 |
 | `io.format.top.read` | TOP read | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `io.format.trj.read` | TRJ read | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
-| `io.format.vdb.read` | VDB read | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `io.format.vdb.read` | VDB read | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `io.format.vis.read` | VIS read | P0 | 사용 불가/보류 (`blocked_access`) | — | — | — | `specified` | — | 0 |
-| `io.format.xplor.read` | XPLOR read | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `io.format.xplor.read` | XPLOR read | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
 | `io.format.xyz.read` | XYZ read | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `io.format.xyz.write` | XYZ write | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | — | 2 |
 | `io.geometry.dump_text` | Dump surface/map geometry as text | P2 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
@@ -474,8 +474,8 @@ Baseline: `pymol-oss-3.1.0` commit `f51e58f6b08308c41c85b9d12a23231f49ca325a`; �
 | `session.embed.data` | Session embedded-data policy | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `session.export.compatibility` | Export sessions for older PyMOL versions | P1 | 사용 불가/보류 (`excluded`) | — | — | — | `specified` | — | 0 |
 | `session.extension.hooks` | Extension session save and restore hooks | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `session.file.load.pse` | Load a PSE session file | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
-| `session.file.save.pse` | Save a PSE session file | P0 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
+| `session.file.load.pse` | Load a PSE session file | P0 | 진행 중(미검증) (`partial`) | — | 예 | 예 | `specified` | — | 1 |
+| `session.file.save.pse` | Save a PSE session file | P0 | 사용 불가/보류 (`excluded`) | — | — | — | `specified` | — | 0 |
 | `session.migration` | Session version check and migration | P0 | 진행 중(미검증) (`partial`) | 예 | 예 | 예 | `specified` | macos | 2 |
 | `session.partial` | Partial session export and restore | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |
 | `session.path.current` | Current session-file path tracking | P1 | 사용 불가/보류 (`deferred`) | — | — | — | `specified` | — | 0 |

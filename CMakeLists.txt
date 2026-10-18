@@ -386,6 +386,7 @@ target_sources(
     src/application/runtime_diagnostics.cpp
     src/application/session.cpp
     src/application/task_service.cpp
+    src/application/rep_instance.cpp
     src/application/representation_visibility.cpp
     src/application/workspace.cpp
     src/application/label_expression.cpp
@@ -398,6 +399,14 @@ target_sources(
     src/io/mmcif_reader.cpp
     src/io/mmcif_writer.cpp
     src/io/bcif_reader.cpp
+    src/io/mmtf_reader.cpp
+    src/io/legacy_structure_readers.cpp
+    src/io/xml_structure_readers.cpp
+    src/io/maestro_family_io.cpp
+    src/io/pickle_reader.cpp
+    src/io/pse_reader.cpp
+    src/io/crystal_map_readers.cpp
+    src/io/mmtf_writer.cpp
     src/io/amber_netcdf_reader.cpp
     src/io/amber_ascii_reader.cpp
     src/io/binpos_reader.cpp
@@ -3434,6 +3443,86 @@ if(BUILD_TESTING)
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/closure_gap_test.py"
       "$<TARGET_FILE:molshredder_python>"
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures"
+  )
+
+  add_test(
+    NAME frontend.selection_vmd_keyword
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/selection_vmd_keyword_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures"
+  )
+
+  add_test(
+    NAME frontend.mmtf_io
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/mmtf_io_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures"
+  )
+
+  add_test(
+    NAME frontend.crystal_map
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/crystal_map_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures"
+  )
+
+  add_test(
+    NAME frontend.legacy_structure
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/legacy_structure_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures"
+  )
+
+  add_test(
+    NAME frontend.xml_structure
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/xml_structure_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures"
+  )
+
+  add_test(
+    NAME frontend.maestro_io
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/maestro_io_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures"
+  )
+
+  add_test(
+    NAME frontend.pse_session
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/pse_session_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures"
+  )
+
+  add_test(
+    NAME frontend.rep_instance
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/rep_instance_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures"
+  )
+
+  add_test(
+    NAME frontend.atomselect_edit
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/atomselect_edit_test.py"
+      "$<TARGET_FILE:molshredder_python>"
   )
 
   add_test(

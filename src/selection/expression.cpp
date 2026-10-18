@@ -389,6 +389,12 @@ std::optional<std::pair<NumericField, std::string>> numeric_field_from(
     return std::pair{NumericField::coordinate_y, std::string{}};
   if (text == "z")
     return std::pair{NumericField::coordinate_z, std::string{}};
+  if (text == "vx")
+    return std::pair{NumericField::velocity_x, std::string{}};
+  if (text == "vy")
+    return std::pair{NumericField::velocity_y, std::string{}};
+  if (text == "vz")
+    return std::pair{NumericField::velocity_z, std::string{}};
   if (text.starts_with("p.") && text.size() > 2U) {
     return std::pair{NumericField::property, text.substr(2U)};
   }
@@ -454,6 +460,15 @@ std::optional<std::string_view> class_expansion(std::string_view lowered) {
       {"polar", "(polymer.protein and not resname ALA+LEU+VAL+ILE+PRO+PHE+MET+TRP)"},
       {"surface", "(polymer.protein and not buried)"},
       {"alpha", "ss H"},
+      // VMD secondary-structure keywords answered from the file-provided `ss`
+      // property (H = helix, S = sheet); finer classes are not available.
+      {"helix", "ss H"},
+      {"alpha_helix", "ss H"},
+      {"sheet", "ss S"},
+      {"betasheet", "ss S"},
+      {"beta_sheet", "ss S"},
+      {"extended_beta", "ss S"},
+      {"coil", "(polymer and ss '')"},
   };
   for (const auto& [name, text] : table)
     if (lowered == name) return text;
@@ -764,6 +779,57 @@ class Parser {
       ++position_;
       return operation::Result<std::shared_ptr<const Node>>::success(
           leaf(NodeKind::amino_residue));
+    }
+    if (!token.quoted &&
+        (lowered == "pi_helix" || lowered == "3_10_helix" || lowered == "bridge_beta" ||
+         lowered == "turn")) {
+      return failure("'" + lowered + "' needs a computed secondary-structure class that is "
+                     "not part of the file-provided assignment",
+                     token.offset);
+    }
+    if (!token.quoted &&
+        (lowered == "residuetype" || lowered == "backbonetype" || lowered == "structure")) {
+      // VMD value keywords: every following word that is a valid value joins the list.
+      const auto expansion_of = [&](std::string_view word) -> std::optional<std::string_view> {
+        if (lowered == "residuetype") {
+          if (word == "protein") return "polymer.protein";
+          if (word == "nucleic") return "polymer.nucleic";
+          if (word == "waters") return "solvent";
+          if (word == "nothing") return "(not polymer and not solvent)";
+        } else if (lowered == "backbonetype") {
+          if (word == "proteinback") return "(polymer.protein and bb.)";
+          if (word == "nucleicback") return "(polymer.nucleic and bb.)";
+          if (word == "hydrogen") return "hydrogens";
+          if (word == "normal") return "(not hydrogens and not (polymer and bb.))";
+        } else {
+          if (word == "h") return "ss H";
+          if (word == "e") return "ss S";
+          if (word == "c") return "(polymer and ss '')";
+        }
+        return std::nullopt;
+      };
+      std::string text;
+      std::size_t cursor = position_ + 1U;
+      while (cursor < tokens_.size() && tokens_[cursor].kind == TokenKind::word) {
+        const auto word = lowercase(tokens_[cursor].text);
+        const auto piece = expansion_of(word);
+        if (!piece.has_value()) {
+          if (lowered == "structure" && (word == "g" || word == "i" || word == "b" || word == "t"))
+            return failure("structure class '" + word + "' needs a computed secondary-structure "
+                           "assignment that is not part of the file-provided one",
+                           tokens_[cursor].offset);
+          break;
+        }
+        text += (text.empty() ? "" : " or ") + std::string{*piece};
+        ++cursor;
+      }
+      if (text.empty())
+        return failure("'" + lowered + "' requires a value", token.offset);
+      const auto expanded = Expression::parse("(" + text + ")");
+      if (!expanded.has_value())
+        return operation::Result<std::shared_ptr<const Node>>::failure(expanded.error());
+      position_ = cursor;
+      return operation::Result<std::shared_ptr<const Node>>::success(expanded.value().root());
     }
     if (!token.quoted) {
       if (const auto expansion = class_expansion(lowered); expansion.has_value()) {
@@ -1121,6 +1187,82 @@ std::set<std::string, std::less<>> Expression::named_references() const {
   std::set<std::string, std::less<>> result;
   collect_references(root_, result);
   return result;
+}
+
+const std::vector<KeywordInfo>& keyword_catalog() {
+  static const std::vector<KeywordInfo> catalog = {
+      // string fields (PyMOL and VMD spellings)
+      {"name", "text", "n.", "name CA"},
+      {"element", "text", "elem, symbol, e.", "element C"},
+      {"altloc", "text", "alt", "altloc A"},
+      {"resname", "text", "resn, r.", "resname ALA"},
+      {"resid", "text", "resi, residue, resident, i.", "resid 1-10"},
+      {"chain", "text", "c.", "chain A"},
+      {"segment", "text", "segid, segi, s.", "segid PROT"},
+      {"object", "text", "model, o., m.", "object ubq"},
+      {"rank", "text", "", "rank 1"},
+      {"pepseq", "text", "ps.", "pepseq ACD"},
+      {"index", "number", "idx.", "index 1-10"},
+      {"id", "number", "", "id 5"},
+      {"state", "text", "", "state 1"},
+      // property fields
+      {"ss", "text", "", "ss H"},
+      {"label", "text", "", "label X"},
+      {"flag", "text", "f.", "flag 1"},
+      {"color", "text", "", "color 3"},
+      // chemical classes
+      {"hetatm", "class", "het", "hetatm"},
+      {"hydrogens", "class", "hydro, h.", "hydrogens"},
+      {"donors", "class", "don., hbd.", "donors"},
+      {"acceptors", "class", "acc., hba.", "acceptors"},
+      {"polymer", "class", "pol.", "polymer"},
+      {"polymer.protein", "class", "", "polymer.protein"},
+      {"polymer.nucleic", "class", "", "polymer.nucleic"},
+      {"organic", "class", "org.", "organic"},
+      {"inorganic", "class", "ino.", "inorganic"},
+      {"solvent", "class", "sol.", "solvent"},
+      {"metals", "class", "", "metals"},
+      {"backbone", "class", "bb.", "backbone"},
+      {"sidechain", "class", "sc.", "sidechain"},
+      {"guide", "class", "", "guide"},
+      // numeric fields (usable in comparisons)
+      {"b", "numeric", "b_factor", "b > 20"},
+      {"q", "numeric", "occupancy", "q < 1"},
+      {"partial_charge", "numeric", "pc", "partial_charge > 0"},
+      {"formal_charge", "numeric", "fc", "formal_charge != 0"},
+      {"atomicnumber", "numeric", "", "atomicnumber == 6"},
+      {"numbonds", "numeric", "", "numbonds > 2"},
+      {"radius", "numeric", "", "radius > 1.5"},
+      {"mass", "numeric", "", "mass > 12"},
+      {"x", "numeric", "", "x > 0"},
+      {"y", "numeric", "", "y > 0"},
+      {"z", "numeric", "", "z > 0"},
+      {"vx", "numeric", "", "vx > 0"},
+      {"vy", "numeric", "", "vy > 0"},
+      {"vz", "numeric", "", "vz > 0"},
+      // VMD value keywords
+      {"residuetype", "value list", "", "residuetype protein nucleic"},
+      {"backbonetype", "value list", "", "backbonetype proteinback"},
+      {"structure", "value list", "", "structure H E"},
+      // VMD residue-class and structure words
+      {"acidic", "word", "", "acidic"},
+      {"basic", "word", "", "basic"},
+      {"aliphatic", "word", "", "aliphatic"},
+      {"aromatic", "word", "", "aromatic"},
+      {"helix", "word", "alpha_helix", "helix"},
+      {"sheet", "word", "betasheet, beta_sheet, extended_beta", "sheet"},
+      {"coil", "word", "", "coil"},
+      // generic words
+      {"all", "word", "*", "all"},
+      {"none", "word", "", "none"},
+      {"amino", "word", "", "amino"},
+      {"present", "word", "pr.", "present"},
+      {"bonded", "word", "", "bonded"},
+      {"visible", "flag", "v.", "visible"},
+      {"fixed", "flag", "fxd.", "fixed"},
+      {"center", "word", "origin", "center"},
+  };
+  return catalog;
 }
 
 }  // namespace molshredder::selection

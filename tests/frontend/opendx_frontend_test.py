@@ -77,10 +77,10 @@ def main() -> int:
         and python_results[3]["data"]["volume_count"] == 1
         and python_results[3]["data"]["volumes"][0]["name"]
         == "electrostatic"
-        and python_results[4]["data"]["format_count"] == 2
+        and python_results[4]["data"]["format_count"] == 8
         and python_results[4]["data"]["provider"]["id"] == "native"
         and [item["id"] for item in python_results[4]["data"]["formats"]]
-        == ["opendx", "mrc"],
+        == ["opendx", "mrc", "xplor", "brix", "phi", "grd", "fld", "acnt"],
         "volume save, MRC export, list or capability filter lost semantics",
     )
 

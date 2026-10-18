@@ -4329,16 +4329,16 @@
       "acceptance_level": "specified",
       "capability_id": "io.format.acnt.read",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "ACNT read"
     },
     {
@@ -4393,32 +4393,32 @@
       "acceptance_level": "specified",
       "capability_id": "io.format.brix.read",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "BRIX read"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "io.format.cc1.read",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "CC1 read"
     },
     {
@@ -4489,32 +4489,32 @@
       "acceptance_level": "specified",
       "capability_id": "io.format.cml.read",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "CML read"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "io.format.crd.read",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 2,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "CRD read"
     },
     {
@@ -4585,32 +4585,32 @@
       "acceptance_level": "specified",
       "capability_id": "io.format.fld.read",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "FLD read"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "io.format.grd.read",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "GRD read"
     },
     {
@@ -4633,32 +4633,32 @@
       "acceptance_level": "specified",
       "capability_id": "io.format.mae.read",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "blocked_access",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "MAE read"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "io.format.mae.write",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "MAE write"
     },
     {
@@ -4697,64 +4697,64 @@
       "acceptance_level": "specified",
       "capability_id": "io.format.mmod.read",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "MMOD read"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "io.format.mmod.write",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "MMOD write"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "io.format.mmtf.read",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "MMTF read"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "io.format.mmtf.write",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "MMTF write"
     },
     {
@@ -4937,48 +4937,48 @@
       "acceptance_level": "specified",
       "capability_id": "io.format.pdbml.read",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "PDBML read"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "io.format.pdbqt.read",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "PDBQT read"
     },
     {
       "acceptance_level": "specified",
       "capability_id": "io.format.phi.read",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "PHI read"
     },
     {
@@ -5068,7 +5068,7 @@
       "capability_id": "io.format.pmo.read",
       "domain": "io",
       "evidence_count": 0,
-      "implementation_status": "deferred",
+      "implementation_status": "excluded",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -5259,16 +5259,16 @@
       "acceptance_level": "specified",
       "capability_id": "io.format.vdb.read",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "VDB read"
     },
     {
@@ -5291,16 +5291,16 @@
       "acceptance_level": "specified",
       "capability_id": "io.format.xplor.read",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "XPLOR read"
     },
     {
@@ -6923,16 +6923,16 @@
       "acceptance_level": "specified",
       "capability_id": "session.file.load.pse",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Load a PSE session file"
     },
     {
@@ -6940,7 +6940,7 @@
       "capability_id": "session.file.save.pse",
       "domain": "io",
       "evidence_count": 0,
-      "implementation_status": "deferred",
+      "implementation_status": "excluded",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -31490,10 +31490,10 @@
         "verified": 0
       },
       "io": {
-        "in_progress": 49,
+        "in_progress": 68,
         "planned": 0,
         "total": 186,
-        "unavailable": 137,
+        "unavailable": 118,
         "verified": 0
       },
       "object_state": {
@@ -31568,16 +31568,16 @@
       }
     },
     "implementation_status_counts": {
-      "blocked_access": 14,
+      "blocked_access": 13,
       "compatible": 137,
-      "deferred": 1204,
-      "excluded": 120,
-      "partial": 467
+      "deferred": 1184,
+      "excluded": 122,
+      "partial": 486
     },
     "public_state_counts": {
-      "in_progress": 467,
+      "in_progress": 486,
       "planned": 0,
-      "unavailable": 1338,
+      "unavailable": 1319,
       "verified": 137
     }
   }

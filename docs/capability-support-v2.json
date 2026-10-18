@@ -6,15 +6,15 @@
       "baseline_id": "pymol-incentive-3.1.8",
       "capability_count": 35,
       "implementation_status_counts": {
-        "blocked_access": 6,
+        "blocked_access": 5,
         "deferred": 14,
         "excluded": 10,
-        "partial": 5
+        "partial": 6
       },
       "public_state_counts": {
-        "in_progress": 5,
+        "in_progress": 6,
         "planned": 0,
-        "unavailable": 30,
+        "unavailable": 29,
         "verified": 0
       },
       "version": "3.1.8"
@@ -24,16 +24,16 @@
       "baseline_id": "pymol-oss-3.1.0",
       "capability_count": 1942,
       "implementation_status_counts": {
-        "blocked_access": 14,
+        "blocked_access": 13,
         "compatible": 137,
-        "deferred": 1204,
-        "excluded": 120,
-        "partial": 467
+        "deferred": 1184,
+        "excluded": 122,
+        "partial": 486
       },
       "public_state_counts": {
-        "in_progress": 467,
+        "in_progress": 486,
         "planned": 0,
-        "unavailable": 1338,
+        "unavailable": 1319,
         "verified": 137
       },
       "version": "f51e58f6b08308c41c85b9d12a23231f49ca325a"
@@ -43,14 +43,14 @@
       "baseline_id": "source-audit-2026-10",
       "capability_count": 522,
       "implementation_status_counts": {
-        "deferred": 374,
-        "excluded": 76,
-        "partial": 72
+        "deferred": 362,
+        "excluded": 77,
+        "partial": 83
       },
       "public_state_counts": {
-        "in_progress": 72,
+        "in_progress": 83,
         "planned": 0,
-        "unavailable": 450,
+        "unavailable": 439,
         "verified": 0
       },
       "version": null
@@ -61,14 +61,14 @@
       "capability_count": 533,
       "implementation_status_counts": {
         "compatible": 23,
-        "deferred": 295,
+        "deferred": 267,
         "excluded": 43,
-        "partial": 172
+        "partial": 200
       },
       "public_state_counts": {
-        "in_progress": 172,
+        "in_progress": 200,
         "planned": 0,
-        "unavailable": 338,
+        "unavailable": 310,
         "verified": 23
       },
       "version": "1.9.3"
@@ -79,14 +79,14 @@
       "capability_count": 573,
       "implementation_status_counts": {
         "compatible": 23,
-        "deferred": 335,
+        "deferred": 308,
         "excluded": 43,
-        "partial": 172
+        "partial": 199
       },
       "public_state_counts": {
-        "in_progress": 172,
+        "in_progress": 199,
         "planned": 0,
-        "unavailable": 378,
+        "unavailable": 351,
         "verified": 23
       },
       "version": "1.9.4a48"
@@ -15555,16 +15555,16 @@
       ],
       "capability_id": "io.format.acnt.read",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "ACNT read"
     },
     {
@@ -15647,16 +15647,16 @@
       ],
       "capability_id": "io.format.brix.read",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "BRIX read"
     },
     {
@@ -15669,16 +15669,16 @@
       ],
       "capability_id": "io.format.cc1.read",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "CC1 read"
     },
     {
@@ -15779,16 +15779,16 @@
       ],
       "capability_id": "io.format.cml.read",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "CML read"
     },
     {
@@ -15801,16 +15801,16 @@
       ],
       "capability_id": "io.format.crd.read",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 2,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "CRD read"
     },
     {
@@ -15977,16 +15977,16 @@
       ],
       "capability_id": "io.format.fld.read",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "FLD read"
     },
     {
@@ -16021,16 +16021,16 @@
       ],
       "capability_id": "io.format.grd.read",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "GRD read"
     },
     {
@@ -16091,16 +16091,16 @@
       ],
       "capability_id": "io.format.mae.read",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "blocked_access",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "MAE read"
     },
     {
@@ -16113,16 +16113,16 @@
       ],
       "capability_id": "io.format.mae.write",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "MAE write"
     },
     {
@@ -16179,16 +16179,16 @@
       ],
       "capability_id": "io.format.mmod.read",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "MMOD read"
     },
     {
@@ -16201,16 +16201,16 @@
       ],
       "capability_id": "io.format.mmod.write",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "MMOD write"
     },
     {
@@ -16223,16 +16223,16 @@
       ],
       "capability_id": "io.format.mmtf.read",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "MMTF read"
     },
     {
@@ -16245,16 +16245,16 @@
       ],
       "capability_id": "io.format.mmtf.write",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "MMTF write"
     },
     {
@@ -16509,16 +16509,16 @@
       ],
       "capability_id": "io.format.pdbml.read",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "PDBML read"
     },
     {
@@ -16531,16 +16531,16 @@
       ],
       "capability_id": "io.format.pdbqt.read",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "PDBQT read"
     },
     {
@@ -16553,16 +16553,16 @@
       ],
       "capability_id": "io.format.phi.read",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "PHI read"
     },
     {
@@ -16688,7 +16688,7 @@
       "capability_id": "io.format.pmo.read",
       "domain": "io",
       "evidence_count": 0,
-      "implementation_status": "deferred",
+      "implementation_status": "excluded",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -16999,16 +16999,16 @@
       ],
       "capability_id": "io.format.vdb.read",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "VDB read"
     },
     {
@@ -17043,16 +17043,16 @@
       ],
       "capability_id": "io.format.xplor.read",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "XPLOR read"
     },
     {
@@ -18324,7 +18324,7 @@
       "capability_id": "io.pymol_importing.load_mmtf",
       "domain": "io",
       "evidence_count": 0,
-      "implementation_status": "deferred",
+      "implementation_status": "partial",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -18332,7 +18332,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "PyMOL cmd.load_mmtf"
     },
     {
@@ -20085,16 +20085,16 @@
       ],
       "capability_id": "session.file.load.pse",
       "domain": "io",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Load a PSE session file"
     },
     {
@@ -20108,7 +20108,7 @@
       "capability_id": "session.file.save.pse",
       "domain": "io",
       "evidence_count": 0,
-      "implementation_status": "deferred",
+      "implementation_status": "excluded",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -23089,16 +23089,16 @@
       ],
       "capability_id": "representation.instance.addrep",
       "domain": "object_state",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "molecule_number : Using the current default settings for the atom selection, col"
     },
     {
@@ -23115,16 +23115,16 @@
       ],
       "capability_id": "representation.instance.colupdate",
       "domain": "object_state",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Update the calculated color for the specified rep each time the molecule's times"
     },
     {
@@ -23141,16 +23141,16 @@
       ],
       "capability_id": "representation.instance.delrep",
       "domain": "object_state",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Deletes the given representation from the specified molecule"
     },
     {
@@ -23193,16 +23193,16 @@
       ],
       "capability_id": "representation.instance.modcolor",
       "domain": "object_state",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Change the current coloring method for the given representation in the specified"
     },
     {
@@ -23245,16 +23245,16 @@
       ],
       "capability_id": "representation.instance.modrep",
       "domain": "object_state",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Using the current default settings for the atom selection, coloring, and renderi"
     },
     {
@@ -23271,16 +23271,16 @@
       ],
       "capability_id": "representation.instance.modselect",
       "domain": "object_state",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Change the current selection for the given representation in the specified molec"
     },
     {
@@ -23297,16 +23297,16 @@
       ],
       "capability_id": "representation.instance.modstyle",
       "domain": "object_state",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Change the current rendering method (style) for the given representation in the "
     },
     {
@@ -23323,16 +23323,16 @@
       ],
       "capability_id": "representation.instance.repindex",
       "domain": "object_state",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Return the rep_number for the rep with the given name, or -1 if no rep with that"
     },
     {
@@ -23349,16 +23349,16 @@
       ],
       "capability_id": "representation.instance.repname",
       "domain": "object_state",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Returns the name of the given rep"
     },
     {
@@ -23375,16 +23375,16 @@
       ],
       "capability_id": "representation.instance.scaleminmax",
       "domain": "object_state",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "molecule_number rep_number [min max | auto] : Get/set the color scale range for "
     },
     {
@@ -23401,16 +23401,16 @@
       ],
       "capability_id": "representation.instance.selupdate",
       "domain": "object_state",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Update the selection for the specified rep each time the molecule's timestep cha"
     },
     {
@@ -23427,16 +23427,16 @@
       ],
       "capability_id": "representation.instance.showrep",
       "domain": "object_state",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "molecule_number rep_number [on | off] : Get/set whether the given rep is shown o"
     },
     {
@@ -23583,16 +23583,16 @@
       ],
       "capability_id": "representation.instance_default.color",
       "domain": "object_state",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Change the default atom coloring method setting"
     },
     {
@@ -23609,16 +23609,16 @@
       ],
       "capability_id": "representation.instance_default.default",
       "domain": "object_state",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Set the default settings for color, style, selection, or material to the supplie"
     },
     {
@@ -23635,16 +23635,16 @@
       ],
       "capability_id": "representation.instance_default.material",
       "domain": "object_state",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Change the default material setting"
     },
     {
@@ -23661,16 +23661,16 @@
       ],
       "capability_id": "representation.instance_default.representation",
       "domain": "object_state",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Change the default rendering method setting"
     },
     {
@@ -23687,16 +23687,16 @@
       ],
       "capability_id": "representation.instance_default.selection",
       "domain": "object_state",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Change the default atom selection setting"
     },
     {
@@ -44173,16 +44173,16 @@
       ],
       "capability_id": "representation.instance.num",
       "domain": "representation",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P2",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "num(molid) : Returns the number of representations in the given molecule"
     },
     {
@@ -60662,7 +60662,7 @@
       "capability_id": "selection.object.delmacro",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "deferred",
+      "implementation_status": "partial",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -60670,7 +60670,7 @@
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "name : Delete the macro corresponding to name "
     },
     {
@@ -60684,7 +60684,7 @@
       "capability_id": "selection.object.frame_get",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "deferred",
+      "implementation_status": "partial",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -60692,7 +60692,7 @@
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Returns the animation frame associated with this selection"
     },
     {
@@ -60710,7 +60710,7 @@
       "capability_id": "selection.object.frame_set",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "deferred",
+      "implementation_status": "partial",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -60718,7 +60718,7 @@
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "frame : Set the frame for the selection"
     },
     {
@@ -60735,16 +60735,16 @@
       ],
       "capability_id": "selection.object.getbonds",
       "domain": "selection",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "returns a list of bondlists"
     },
     {
@@ -60761,16 +60761,16 @@
       ],
       "capability_id": "selection.object.keywords",
       "domain": "selection",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Return a list of all recognized keywords in an atom selection text"
     },
     {
@@ -60787,16 +60787,16 @@
       ],
       "capability_id": "selection.object.lmoveby",
       "domain": "selection",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "move each atom by an offset given in the list"
     },
     {
@@ -60813,16 +60813,16 @@
       ],
       "capability_id": "selection.object.lmoveto",
       "domain": "selection",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "move each atom to a point given by the appropriate list element"
     },
     {
@@ -60840,7 +60840,7 @@
       "capability_id": "selection.object.macro",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "deferred",
+      "implementation_status": "partial",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -60848,7 +60848,7 @@
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "name selection : Create a new singleword atom selection out of existing atom sel"
     },
     {
@@ -60891,16 +60891,16 @@
       ],
       "capability_id": "selection.object.moveto",
       "domain": "selection",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "move all the atoms to a given location"
     },
     {
@@ -60943,16 +60943,16 @@
       ],
       "capability_id": "selection.object.transform",
       "domain": "selection",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P0",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "Applies the given transformation matrix to the coordinates of each atom in the s"
     },
     {
@@ -62325,16 +62325,16 @@
       ],
       "capability_id": "selection.vmd_atomsel_method.keywords",
       "domain": "selection",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "VMD Python atomsel.keywords"
     },
     {
@@ -62348,7 +62348,7 @@
       "capability_id": "selection.vmd_atomsel_method.macro",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "deferred",
+      "implementation_status": "partial",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -62356,7 +62356,7 @@
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "VMD Python atomsel.macro"
     },
     {
@@ -62611,16 +62611,16 @@
       ],
       "capability_id": "selection.vmd_atomselect_method.getbondorders",
       "domain": "selection",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "VMD atomselect getbondorders"
     },
     {
@@ -62721,16 +62721,16 @@
       ],
       "capability_id": "selection.vmd_keyword.backbonetype",
       "domain": "selection",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "VMD selection keyword backbonetype"
     },
     {
@@ -62743,16 +62743,16 @@
       ],
       "capability_id": "selection.vmd_keyword.beta_sheet",
       "domain": "selection",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "VMD selection keyword beta_sheet"
     },
     {
@@ -62765,16 +62765,16 @@
       ],
       "capability_id": "selection.vmd_keyword.betasheet",
       "domain": "selection",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "VMD selection keyword betasheet"
     },
     {
@@ -62809,16 +62809,16 @@
       ],
       "capability_id": "selection.vmd_keyword.residuetype",
       "domain": "selection",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "VMD selection keyword residuetype"
     },
     {
@@ -62832,7 +62832,7 @@
       "capability_id": "selection.vmd_keyword.vmd_fast_hydrogen",
       "domain": "selection",
       "evidence_count": 0,
-      "implementation_status": "deferred",
+      "implementation_status": "excluded",
       "interfaces": {
         "cli": false,
         "gui": false,
@@ -62875,16 +62875,16 @@
       ],
       "capability_id": "selection.vmd_keyword.vx",
       "domain": "selection",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "VMD selection keyword vx"
     },
     {
@@ -62897,16 +62897,16 @@
       ],
       "capability_id": "selection.vmd_keyword.vy",
       "domain": "selection",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "VMD selection keyword vy"
     },
     {
@@ -62919,16 +62919,16 @@
       ],
       "capability_id": "selection.vmd_keyword.vz",
       "domain": "selection",
-      "evidence_count": 0,
-      "implementation_status": "deferred",
+      "evidence_count": 1,
+      "implementation_status": "partial",
       "interfaces": {
-        "cli": false,
+        "cli": true,
         "gui": false,
-        "python": false
+        "python": true
       },
       "platforms": [],
       "priority": "P1",
-      "public_state": "unavailable",
+      "public_state": "in_progress",
       "title": "VMD selection keyword vz"
     },
     {
@@ -69042,7 +69042,7 @@
     "unavailable": "보류, 제외, 접근 제한 또는 license 격리 상태",
     "verified": "implementation이 compatible/robust이며 fixture, evidence, module과 public interface가 모두 연결됨"
   },
-  "reviewed_at": "2026-10-14",
+  "reviewed_at": "2026-10-18",
   "schema_version": 2,
   "summary": {
     "capability_count": 2983,
@@ -69076,17 +69076,17 @@
         "verified": 0
       },
       "io": {
-        "in_progress": 54,
+        "in_progress": 74,
         "planned": 0,
         "total": 227,
-        "unavailable": 173,
+        "unavailable": 153,
         "verified": 0
       },
       "object_state": {
-        "in_progress": 71,
+        "in_progress": 88,
         "planned": 0,
         "total": 142,
-        "unavailable": 71,
+        "unavailable": 54,
         "verified": 0
       },
       "pbc": {
@@ -69118,10 +69118,10 @@
         "verified": 3
       },
       "representation": {
-        "in_progress": 70,
+        "in_progress": 71,
         "planned": 0,
         "total": 708,
-        "unavailable": 537,
+        "unavailable": 536,
         "verified": 101
       },
       "scene": {
@@ -69132,10 +69132,10 @@
         "verified": 31
       },
       "selection": {
-        "in_progress": 172,
+        "in_progress": 192,
         "planned": 0,
         "total": 258,
-        "unavailable": 86,
+        "unavailable": 66,
         "verified": 0
       },
       "trajectory": {
@@ -69154,16 +69154,16 @@
       }
     },
     "implementation_status_counts": {
-      "blocked_access": 14,
+      "blocked_access": 13,
       "compatible": 137,
-      "deferred": 1967,
-      "excluded": 244,
-      "partial": 621
+      "deferred": 1907,
+      "excluded": 247,
+      "partial": 679
     },
     "public_state_counts": {
-      "in_progress": 621,
+      "in_progress": 679,
       "planned": 0,
-      "unavailable": 2225,
+      "unavailable": 2167,
       "verified": 137
     }
   }

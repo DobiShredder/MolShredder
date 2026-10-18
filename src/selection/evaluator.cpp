@@ -567,6 +567,30 @@ operation::Result<std::optional<double>> numeric_property(
               : component);
     }
 
+    if (node.field == NumericField::velocity_x || node.field == NumericField::velocity_y ||
+        node.field == NumericField::velocity_z) {
+      if (context.frame == nullptr || !context.frame->velocities().has_value())
+        return operation::Result<std::optional<double>>::failure(invalid(
+            "velocity selection requires a frame with velocities",
+            "load a trajectory that stores velocities"));
+      if (context.frame->atom_count() != topology.atom_count())
+        return operation::Result<std::optional<double>>::failure(
+            invalid("selection frame atom count does not match topology"));
+      if (!context.frame->atom_present(atom_index))
+        return operation::Result<std::optional<double>>::success(std::nullopt);
+      const auto velocity = std::visit(
+          [atom_index](const auto& values) {
+            return model::Vec3d{static_cast<double>(values[atom_index].x),
+                                static_cast<double>(values[atom_index].y),
+                                static_cast<double>(values[atom_index].z)};
+          },
+          context.frame->velocities()->values());
+      return operation::Result<std::optional<double>>::success(
+          node.field == NumericField::velocity_x   ? velocity.x
+          : node.field == NumericField::velocity_y ? velocity.y
+                                                   : velocity.z);
+    }
+
     std::string resolved_property = node.property;
     const auto* frame_properties = context.frame == nullptr
                                        ? nullptr

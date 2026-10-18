@@ -25,7 +25,7 @@ int main() {
   const auto &capabilities = format_capabilities();
   passed &= expect(molshredder::io::kFormatCapabilitySchemaVersion == 3U,
                    "format capability schema must remain versioned");
-  passed &= expect(capabilities.size() == 24U,
+  passed &= expect(capabilities.size() == 39U,
                    "registry must enumerate every implemented format");
   std::set<std::string> ids;
   for (const auto &capability : capabilities) {
