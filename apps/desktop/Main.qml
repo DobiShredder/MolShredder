@@ -277,6 +277,10 @@ Window {
     width: 1080
     height: 720
     visible: true
+    // Automated runs (see main.cpp) stay behind everything and off-screen.
+    flags: backgroundRun ? (Qt.Tool | Qt.WindowStaysOnBottomHint | Qt.WindowDoesNotAcceptFocus) : Qt.Window
+    x: backgroundRun ? -30000 : Screen.virtualX + 60
+    y: backgroundRun ? -30000 : Screen.virtualY + 60
     color: "#050812"
     title: qsTr("MolShredder Molecular Viewer")
 

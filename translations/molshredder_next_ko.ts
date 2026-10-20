@@ -62,6 +62,10 @@
 <context>
     <name>NextMovieBar</name>
     <message>
+        <source>Cancel</source>
+        <translation>취소</translation>
+    </message>
+    <message>
         <source>First frame</source>
         <translation>첫 프레임</translation>
     </message>
@@ -96,6 +100,26 @@
 </context>
 <context>
     <name>NextObjectPanel</name>
+    <message>
+        <source>delete…</source>
+        <translation>삭제…</translation>
+    </message>
+    <message>
+        <source>All objects</source>
+        <translation>모든 object</translation>
+    </message>
+    <message>
+        <source>When on, show, hide and color apply to every object, not only the active one.</source>
+        <translation>켜면 보이기·숨기기·색 지정이 활성 object만이 아니라 모든 object에 적용됩니다.</translation>
+    </message>
+    <message>
+        <source>edit expression…</source>
+        <translation>식 편집…</translation>
+    </message>
+    <message>
+        <source>inspect…</source>
+        <translation>인스펙터…</translation>
+    </message>
     <message>
         <source>Viewing</source>
         <translation>보기</translation>
@@ -195,10 +219,6 @@
     <message>
         <source>duplicate…</source>
         <translation>복제…</translation>
-    </message>
-    <message>
-        <source>delete</source>
-        <translation>삭제</translation>
     </message>
     <message>
         <source>align to…</source>
@@ -318,6 +338,78 @@ or drop a file here.</source>
 </context>
 <context>
     <name>NextShell</name>
+    <message>
+        <source>Delete %1?</source>
+        <translation>%1을(를) 삭제할까요?</translation>
+    </message>
+    <message>
+        <source>The object and its selections are removed from the workspace.</source>
+        <translation>object와 그 selection이 workspace에서 사라집니다.</translation>
+    </message>
+    <message>
+        <source>Delete</source>
+        <translation>삭제</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>취소</translation>
+    </message>
+    <message>
+        <source>Camera…</source>
+        <translation>카메라…</translation>
+    </message>
+    <message>
+        <source>System information…</source>
+        <translation>시스템 정보…</translation>
+    </message>
+    <message>
+        <source>Chemistry…</source>
+        <translation>화학…</translation>
+    </message>
+    <message>
+        <source>Edit atoms and bonds…</source>
+        <translation>원자·결합 편집…</translation>
+    </message>
+    <message>
+        <source>Volumes…</source>
+        <translation>volume…</translation>
+    </message>
+    <message>
+        <source>Surface options…</source>
+        <translation>표면 옵션…</translation>
+    </message>
+    <message>
+        <source>Views and scenes…</source>
+        <translation>view와 scene…</translation>
+    </message>
+    <message>
+        <source>Select by expression…</source>
+        <translation>식으로 선택…</translation>
+    </message>
+    <message>
+        <source>Results…</source>
+        <translation>결과…</translation>
+    </message>
+    <message>
+        <source>Export result</source>
+        <translation>결과 내보내기</translation>
+    </message>
+    <message>
+        <source>CSV (*.csv)</source>
+        <translation>CSV (*.csv)</translation>
+    </message>
+    <message>
+        <source>JSON (*.json)</source>
+        <translation>JSON (*.json)</translation>
+    </message>
+    <message>
+        <source>Movie editor…</source>
+        <translation>동영상 편집기…</translation>
+    </message>
+    <message>
+        <source>Inspector…</source>
+        <translation>인스펙터…</translation>
+    </message>
     <message>
         <source>MolShredder</source>
         <translation>MolShredder</translation>
@@ -469,26 +561,6 @@ or drop a file here.</source>
     <message>
         <source>Molecule builder…</source>
         <translation>분자 빌더…</translation>
-    </message>
-    <message>
-        <source>Atom position…</source>
-        <translation>원자 위치…</translation>
-    </message>
-    <message>
-        <source>Atom properties…</source>
-        <translation>원자 속성…</translation>
-    </message>
-    <message>
-        <source>Residue properties…</source>
-        <translation>Residue 속성…</translation>
-    </message>
-    <message>
-        <source>Bond order…</source>
-        <translation>결합 차수…</translation>
-    </message>
-    <message>
-        <source>Perceive chemistry</source>
-        <translation>화학 인지</translation>
     </message>
     <message>
         <source>Play</source>
@@ -699,10 +771,6 @@ or drop a file here.</source>
         <translation>명령 도움말</translation>
     </message>
     <message>
-        <source>System information</source>
-        <translation>시스템 정보</translation>
-    </message>
-    <message>
         <source>File</source>
         <translation>파일</translation>
     </message>
@@ -783,4 +851,1664 @@ or drop a file here.</source>
         <translation>%1 이름 변경</translation>
     </message>
 </context>
+  <context>
+    <name>NextInspector</name>
+    <message>
+        <source>Settings tab: changes apply at the scope chosen there; the output window shows each command.</source>
+        <translation>설정 탭: 변경은 거기서 고른 범위에 적용되며 출력 창에 각 명령이 표시됩니다.</translation>
+    </message>
+    <message>
+        <source>INSPECTOR</source>
+        <translation>인스펙터</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>닫기</translation>
+    </message>
+    <message>
+        <source>Selection</source>
+        <translation>선택</translation>
+    </message>
+    <message>
+        <source>Use the selection (sele)</source>
+        <translation>선택 (sele) 사용</translation>
+    </message>
+    <message>
+        <source>all</source>
+        <translation>전체</translation>
+    </message>
+    <message>
+        <source>Use every atom</source>
+        <translation>모든 원자 사용</translation>
+    </message>
+    <message>
+        <source>Representation</source>
+        <translation>표현</translation>
+    </message>
+    <message>
+        <source>Color</source>
+        <translation>색</translation>
+    </message>
+    <message>
+        <source>Settings</source>
+        <translation>설정</translation>
+    </message>
+    <message>
+        <source>Show</source>
+        <translation>보이기</translation>
+    </message>
+    <message>
+        <source>Hide</source>
+        <translation>숨기기</translation>
+    </message>
+    <message>
+        <source>Only</source>
+        <translation>이것만</translation>
+    </message>
+    <message>
+        <source>Show only this representation</source>
+        <translation>이 표현만 보이기</translation>
+    </message>
+    <message>
+        <source>Hide everything</source>
+        <translation>모두 숨기기</translation>
+    </message>
+    <message>
+        <source>by element</source>
+        <translation>원소별</translation>
+    </message>
+    <message>
+        <source>spectrum by index</source>
+        <translation>index 스펙트럼</translation>
+    </message>
+    <message>
+        <source>spectrum by B-factor</source>
+        <translation>B-factor 스펙트럼</translation>
+    </message>
+    <message>
+        <source>name or 0xRRGGBB</source>
+        <translation>이름 또는 0xRRGGBB</translation>
+    </message>
+    <message>
+        <source>Apply</source>
+        <translation>적용</translation>
+    </message>
+    <message>
+        <source>Search settings</source>
+        <translation>설정 검색</translation>
+    </message>
+    <message>
+        <source>Scope the change applies to</source>
+        <translation>변경이 적용되는 범위</translation>
+    </message>
+    <message>
+        <source>Remove this override</source>
+        <translation>이 재정의 제거</translation>
+    </message>
+  </context>
+  <context>
+    <name>NextMovieEditor</name>
+    <message>
+        <source>Play</source>
+        <translation>재생</translation>
+    </message>
+    <message>
+        <source>Pause</source>
+        <translation>일시정지</translation>
+    </message>
+    <message>
+        <source>A keyframe needs a scene or a trajectory frame</source>
+        <translation>keyframe에는 scene 또는 trajectory frame이 필요합니다</translation>
+    </message>
+    <message>
+        <source>MOVIE EDITOR</source>
+        <translation>동영상 편집기</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>닫기</translation>
+    </message>
+    <message>
+        <source>Trajectory</source>
+        <translation>Trajectory</translation>
+    </message>
+    <message>
+        <source>The active object has no trajectory. File ▸ Open trajectory… attaches one.</source>
+        <translation>활성 object에 trajectory가 없습니다. File ▸ Open trajectory…로 붙입니다.</translation>
+    </message>
+    <message>
+        <source>%1 frames · %2 · %3 fps</source>
+        <translation>%1 frame · %2 · %3 fps</translation>
+    </message>
+    <message>
+        <source>first</source>
+        <translation>처음</translation>
+    </message>
+    <message>
+        <source>last</source>
+        <translation>끝</translation>
+    </message>
+    <message>
+        <source>stride</source>
+        <translation>간격</translation>
+    </message>
+    <message>
+        <source>Apply range</source>
+        <translation>범위 적용</translation>
+    </message>
+    <message>
+        <source>speed (fps)</source>
+        <translation>속도 (fps)</translation>
+    </message>
+    <message>
+        <source>Set speed</source>
+        <translation>속도 설정</translation>
+    </message>
+    <message>
+        <source>Delete frames…</source>
+        <translation>frame 삭제…</translation>
+    </message>
+    <message>
+        <source>Duplicate frame…</source>
+        <translation>frame 복제…</translation>
+    </message>
+    <message>
+        <source>Save trajectory…</source>
+        <translation>trajectory 저장…</translation>
+    </message>
+    <message>
+        <source>Movie</source>
+        <translation>동영상</translation>
+    </message>
+    <message>
+        <source>frames</source>
+        <translation>frame 수</translation>
+    </message>
+    <message>
+        <source>fps</source>
+        <translation>fps</translation>
+    </message>
+    <message>
+        <source>loop</source>
+        <translation>반복</translation>
+    </message>
+    <message>
+        <source>Replace movie</source>
+        <translation>동영상 교체</translation>
+    </message>
+    <message>
+        <source>Create movie</source>
+        <translation>동영상 만들기</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation>지우기</translation>
+    </message>
+    <message>
+        <source>frame %1</source>
+        <translation>frame %1</translation>
+    </message>
+    <message>
+        <source>%1 keyframes · %2 mapped frames</source>
+        <translation>keyframe %1개 · 매핑 frame %2개</translation>
+    </message>
+    <message>
+        <source>keyframe at</source>
+        <translation>keyframe 위치</translation>
+    </message>
+    <message>
+        <source>(no scene)</source>
+        <translation>(scene 없음)</translation>
+    </message>
+    <message>
+        <source>traj frame</source>
+        <translation>traj frame</translation>
+    </message>
+    <message>
+        <source>Set keyframe</source>
+        <translation>keyframe 설정</translation>
+    </message>
+    <message>
+        <source>map states</source>
+        <translation>state 매핑</translation>
+    </message>
+    <message>
+        <source>e.g. 1 x30 or 1 -20</source>
+        <translation>예: 1 x30 또는 1 -20</translation>
+    </message>
+    <message>
+        <source>append</source>
+        <translation>추가</translation>
+    </message>
+    <message>
+        <source>Map</source>
+        <translation>매핑</translation>
+    </message>
+    <message>
+        <source>Export frames…</source>
+        <translation>frame 내보내기…</translation>
+    </message>
+    <message>
+        <source>Export video…</source>
+        <translation>동영상 내보내기…</translation>
+    </message>
+  </context>
+  <context>
+    <name>NextResults</name>
+    <message>
+        <source>Center</source>
+        <translation>중심</translation>
+    </message>
+    <message>
+        <source>Distance</source>
+        <translation>거리</translation>
+    </message>
+    <message>
+        <source>Angle</source>
+        <translation>각도</translation>
+    </message>
+    <message>
+        <source>Dihedral</source>
+        <translation>이면각</translation>
+    </message>
+    <message>
+        <source>Surface area</source>
+        <translation>표면적</translation>
+    </message>
+    <message>
+        <source>Pair distribution</source>
+        <translation>쌍 분포</translation>
+    </message>
+    <message>
+        <source>Contacts</source>
+        <translation>접촉</translation>
+    </message>
+    <message>
+        <source>Trajectory RMSD</source>
+        <translation>trajectory RMSD</translation>
+    </message>
+    <message>
+        <source>RMSD matrix</source>
+        <translation>RMSD 행렬</translation>
+    </message>
+    <message>
+        <source>selection</source>
+        <translation>선택</translation>
+    </message>
+    <message>
+        <source>mode</source>
+        <translation>모드</translation>
+    </message>
+    <message>
+        <source>from</source>
+        <translation>시작</translation>
+    </message>
+    <message>
+        <source>to</source>
+        <translation>끝</translation>
+    </message>
+    <message>
+        <source>pbc</source>
+        <translation>pbc</translation>
+    </message>
+    <message>
+        <source>first</source>
+        <translation>첫째</translation>
+    </message>
+    <message>
+        <source>vertex</source>
+        <translation>꼭짓점</translation>
+    </message>
+    <message>
+        <source>third</source>
+        <translation>셋째</translation>
+    </message>
+    <message>
+        <source>second</source>
+        <translation>둘째</translation>
+    </message>
+    <message>
+        <source>fourth</source>
+        <translation>넷째</translation>
+    </message>
+    <message>
+        <source>probe (Å)</source>
+        <translation>probe (Å)</translation>
+    </message>
+    <message>
+        <source>samples</source>
+        <translation>샘플 수</translation>
+    </message>
+    <message>
+        <source>budget</source>
+        <translation>예산</translation>
+    </message>
+    <message>
+        <source>max radius (Å)</source>
+        <translation>최대 반지름 (Å)</translation>
+    </message>
+    <message>
+        <source>bin width (Å)</source>
+        <translation>구간 폭 (Å)</translation>
+    </message>
+    <message>
+        <source>normalization</source>
+        <translation>정규화</translation>
+    </message>
+    <message>
+        <source>cutoff (Å)</source>
+        <translation>컷오프 (Å)</translation>
+    </message>
+    <message>
+        <source>reference frame</source>
+        <translation>기준 frame</translation>
+    </message>
+    <message>
+        <source>frame-pair budget</source>
+        <translation>frame 쌍 예산</translation>
+    </message>
+    <message>
+        <source>result name (optional)</source>
+        <translation>결과 이름 (선택)</translation>
+    </message>
+    <message>
+        <source>Run</source>
+        <translation>실행</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>취소</translation>
+    </message>
+    <message>
+        <source>Analysis started: %1</source>
+        <translation>분석 시작: %1</translation>
+    </message>
+    <message>
+        <source>Analysis could not start: %1</source>
+        <translation>분석을 시작할 수 없음: %1</translation>
+    </message>
+    <message>
+        <source>RESULTS</source>
+        <translation>결과</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>닫기</translation>
+    </message>
+    <message>
+        <source>Show in viewport</source>
+        <translation>viewport에 표시</translation>
+    </message>
+    <message>
+        <source>No results yet.
+Run something from the Analyze menu.</source>
+        <translation>아직 결과가 없습니다.
+분석 메뉴에서 실행해 보세요.</translation>
+    </message>
+    <message>
+        <source>Hide in viewport</source>
+        <translation>viewport에서 숨기기</translation>
+    </message>
+    <message>
+        <source>Export CSV…</source>
+        <translation>CSV 내보내기…</translation>
+    </message>
+    <message>
+        <source>Export JSON…</source>
+        <translation>JSON 내보내기…</translation>
+    </message>
+    <message>
+        <source>Delete</source>
+        <translation>삭제</translation>
+    </message>
+    <message>
+        <source>plot</source>
+        <translation>그래프</translation>
+    </message>
+    <message>
+        <source>%1 rows</source>
+        <translation>%1행</translation>
+    </message>
+    <message>
+        <source>first %1 shown</source>
+        <translation>처음 %1행 표시</translation>
+    </message>
+    <message>
+        <source>stale: %1</source>
+        <translation>오래됨: %1</translation>
+    </message>
+  </context>
+  <context>
+    <name>NextSelectionEditor</name>
+    <message>
+        <source>SELECT BY EXPRESSION</source>
+        <translation>식으로 선택</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>닫기</translation>
+    </message>
+    <message>
+        <source>Name</source>
+        <translation>이름</translation>
+    </message>
+    <message>
+        <source>Expression</source>
+        <translation>식</translation>
+    </message>
+    <message>
+        <source>polymer.protein and b &lt; 30</source>
+        <translation>polymer.protein and b &lt; 30</translation>
+    </message>
+    <message>
+        <source>%1 of %2 atoms</source>
+        <translation>원자 %1 / %2개</translation>
+    </message>
+    <message>
+        <source>Update with trajectory frame</source>
+        <translation>trajectory frame에 따라 갱신</translation>
+    </message>
+    <message>
+        <source>Add to the selection if it exists</source>
+        <translation>이미 있으면 선택에 더하기</translation>
+    </message>
+    <message>
+        <source>Define</source>
+        <translation>정의</translation>
+    </message>
+    <message>
+        <source>Existing selections</source>
+        <translation>기존 selection</translation>
+    </message>
+    <message>
+        <source>Load into the editor</source>
+        <translation>편집기로 불러오기</translation>
+    </message>
+    <message>
+        <source>none yet</source>
+        <translation>아직 없음</translation>
+    </message>
+    <message>
+        <source>Search keywords</source>
+        <translation>키워드 검색</translation>
+    </message>
+    <message>
+        <source>Click inserts the keyword, right-click inserts the example</source>
+        <translation>클릭하면 키워드, 오른쪽 클릭하면 예시를 넣습니다</translation>
+    </message>
+    <message>
+        <source>aliases: %1</source>
+        <translation>별칭: %1</translation>
+    </message>
+  </context>
+  <context>
+    <name>NextScenes</name>
+    <message>
+        <source>VIEWS AND SCENES</source>
+        <translation>view와 scene</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>닫기</translation>
+    </message>
+    <message>
+        <source>Views</source>
+        <translation>View</translation>
+    </message>
+    <message>
+        <source>A view stores the camera only.</source>
+        <translation>view는 카메라만 저장합니다.</translation>
+    </message>
+    <message>
+        <source>view name</source>
+        <translation>view 이름</translation>
+    </message>
+    <message>
+        <source>Store</source>
+        <translation>저장</translation>
+    </message>
+    <message>
+        <source>animate (s)</source>
+        <translation>애니메이션 (초)</translation>
+    </message>
+    <message>
+        <source>Perspective</source>
+        <translation>원근</translation>
+    </message>
+    <message>
+        <source>Orthographic</source>
+        <translation>직교</translation>
+    </message>
+    <message>
+        <source>Recall</source>
+        <translation>불러오기</translation>
+    </message>
+    <message>
+        <source>Delete</source>
+        <translation>삭제</translation>
+    </message>
+    <message>
+        <source>no stored views</source>
+        <translation>저장된 view 없음</translation>
+    </message>
+    <message>
+        <source>Reset orientation</source>
+        <translation>방향 초기화</translation>
+    </message>
+    <message>
+        <source>Copy view (PyMOL)</source>
+        <translation>view 복사 (PyMOL)</translation>
+    </message>
+    <message>
+        <source>Import view…</source>
+        <translation>view 가져오기…</translation>
+    </message>
+    <message>
+        <source>Delete all</source>
+        <translation>모두 삭제</translation>
+    </message>
+    <message>
+        <source>Scenes</source>
+        <translation>Scene</translation>
+    </message>
+    <message>
+        <source>A scene stores camera, representations, colors and visibility.</source>
+        <translation>scene은 카메라·표현·색·표시 상태를 저장합니다.</translation>
+    </message>
+    <message>
+        <source>scene name</source>
+        <translation>scene 이름</translation>
+    </message>
+    <message>
+        <source>First scene</source>
+        <translation>첫 scene</translation>
+    </message>
+    <message>
+        <source>Previous scene</source>
+        <translation>이전 scene</translation>
+    </message>
+    <message>
+        <source>Next scene</source>
+        <translation>다음 scene</translation>
+    </message>
+    <message>
+        <source>Last scene</source>
+        <translation>마지막 scene</translation>
+    </message>
+    <message>
+        <source>Update current</source>
+        <translation>현재 scene 갱신</translation>
+    </message>
+    <message>
+        <source>%1 objects</source>
+        <translation>object %1개</translation>
+    </message>
+    <message>
+        <source>%1 volumes</source>
+        <translation>volume %1개</translation>
+    </message>
+    <message>
+        <source>Rename…</source>
+        <translation>이름 변경…</translation>
+    </message>
+    <message>
+        <source>no stored scenes</source>
+        <translation>저장된 scene 없음</translation>
+    </message>
+    <message>
+        <source>Move to top</source>
+        <translation>맨 위로</translation>
+    </message>
+    <message>
+        <source>Move to bottom</source>
+        <translation>맨 아래로</translation>
+    </message>
+    <message>
+        <source>Sort by name</source>
+        <translation>이름순 정렬</translation>
+    </message>
+  </context>
+  <context>
+    <name>NextTrajectoryImport</name>
+    <message>
+        <source>OPEN TRAJECTORY</source>
+        <translation>trajectory 열기</translation>
+    </message>
+    <message>
+        <source>for %1</source>
+        <translation>대상: %1</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>닫기</translation>
+    </message>
+    <message>
+        <source>Atoms are matched by their stable IDs; the file must carry the same IDs as the loaded structure.</source>
+        <translation>원자를 안정 ID로 맞춥니다. 파일에 불러온 구조와 같은 ID가 있어야 합니다.</translation>
+    </message>
+    <message>
+        <source>You list the stable IDs, in file order, that the trajectory atoms correspond to (for example 3,2,1).</source>
+        <translation>trajectory 원자에 대응하는 안정 ID를 파일 순서대로 직접 적습니다 (예: 3,2,1).</translation>
+    </message>
+    <message>
+        <source>Atom number n of the file is atom n of the structure. Use this for most MD files.</source>
+        <translation>파일의 n번째 원자가 구조의 n번째 원자입니다. 대부분의 MD 파일에 쓰는 방식입니다.</translation>
+    </message>
+    <message>
+        <source>path of the trajectory file</source>
+        <translation>trajectory 파일 경로</translation>
+    </message>
+    <message>
+        <source>File</source>
+        <translation>파일</translation>
+    </message>
+    <message>
+        <source>Browse…</source>
+        <translation>찾아보기…</translation>
+    </message>
+    <message>
+        <source>Format</source>
+        <translation>형식</translation>
+    </message>
+    <message>
+        <source>Coordinate unit</source>
+        <translation>좌표 단위</translation>
+    </message>
+    <message>
+        <source>Atom mapping</source>
+        <translation>원자 대응</translation>
+    </message>
+    <message>
+        <source>Stable IDs, for example: 3,2,1</source>
+        <translation>안정 ID, 예: 3,2,1</translation>
+    </message>
+    <message>
+        <source>Advanced</source>
+        <translation>고급</translation>
+    </message>
+    <message>
+        <source>Provider</source>
+        <translation>provider</translation>
+    </message>
+    <message>
+        <source>Plugin path</source>
+        <translation>plugin 경로</translation>
+    </message>
+    <message>
+        <source>Particle group</source>
+        <translation>particle group</translation>
+    </message>
+    <message>
+        <source>Cache (MiB)</source>
+        <translation>cache (MiB)</translation>
+    </message>
+    <message>
+        <source>Prefetch frames</source>
+        <translation>미리 읽을 frame 수</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>취소</translation>
+    </message>
+    <message>
+        <source>Open</source>
+        <translation>열기</translation>
+    </message>
+  </context>
+  <context>
+    <name>NextSurface</name>
+    <message>
+        <source>MOLECULAR SURFACE</source>
+        <translation>분자 표면</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>닫기</translation>
+    </message>
+    <message>
+        <source>Kind</source>
+        <translation>종류</translation>
+    </message>
+    <message>
+        <source>Color</source>
+        <translation>색</translation>
+    </message>
+    <message>
+        <source>Solvent-accessible surface: the path of a probe sphere's center rolling over the atoms.</source>
+        <translation>용매 접근 표면: probe 구의 중심이 원자 위를 굴러간 자취입니다.</translation>
+    </message>
+    <message>
+        <source>Van der Waals surface: the union of the atom spheres.</source>
+        <translation>반데르발스 표면: 원자 구들의 합집합입니다.</translation>
+    </message>
+    <message>
+        <source>Selection</source>
+        <translation>선택</translation>
+    </message>
+    <message>
+        <source>all</source>
+        <translation>전체</translation>
+    </message>
+    <message>
+        <source>Probe radius (Å)</source>
+        <translation>probe 반지름 (Å)</translation>
+    </message>
+    <message>
+        <source>Grid spacing (Å)</source>
+        <translation>격자 간격 (Å)</translation>
+    </message>
+    <message>
+        <source>coarse</source>
+        <translation>거칠게</translation>
+    </message>
+    <message>
+        <source>normal</source>
+        <translation>보통</translation>
+    </message>
+    <message>
+        <source>fine</source>
+        <translation>촘촘히</translation>
+    </message>
+    <message>
+        <source>A smaller spacing is smoother but needs roughly (old/new)³ times the memory and time.</source>
+        <translation>간격이 작을수록 매끈하지만 메모리와 시간이 대략 (이전/새 간격)³배 듭니다.</translation>
+    </message>
+    <message>
+        <source>Opacity</source>
+        <translation>불투명도</translation>
+    </message>
+    <message>
+        <source>Budgets</source>
+        <translation>예산</translation>
+    </message>
+    <message>
+        <source>Voxel budget</source>
+        <translation>voxel 예산</translation>
+    </message>
+    <message>
+        <source>Memory budget (bytes)</source>
+        <translation>메모리 예산 (바이트)</translation>
+    </message>
+    <message>
+        <source>Probe radius must be ≥ 0; spacing and budgets must be &gt; 0.</source>
+        <translation>probe 반지름은 0 이상, 간격과 예산은 0보다 커야 합니다.</translation>
+    </message>
+    <message>
+        <source>Hide surface</source>
+        <translation>표면 숨기기</translation>
+    </message>
+    <message>
+        <source>Show surface</source>
+        <translation>표면 보이기</translation>
+    </message>
+  </context>
+  <context>
+    <name>NextVolume</name>
+    <message>
+        <source>VOLUMES</source>
+        <translation>volume</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>닫기</translation>
+    </message>
+    <message>
+        <source>Active: the panels below act on this volume</source>
+        <translation>활성: 아래 패널이 이 volume에 작동합니다</translation>
+    </message>
+    <message>
+        <source>No volume loaded.</source>
+        <translation>불러온 volume이 없습니다.</translation>
+    </message>
+    <message>
+        <source>Open volume…</source>
+        <translation>volume 열기…</translation>
+    </message>
+    <message>
+        <source>Combine…</source>
+        <translation>합치기…</translation>
+    </message>
+    <message>
+        <source>Save…</source>
+        <translation>저장…</translation>
+    </message>
+    <message>
+        <source>Contour</source>
+        <translation>등치면</translation>
+    </message>
+    <message>
+        <source>Slice</source>
+        <translation>단면</translation>
+    </message>
+    <message>
+        <source>Direct</source>
+        <translation>직접 렌더링</translation>
+    </message>
+    <message>
+        <source>A named contour is an isosurface of the active volume. Creating it again with the same name and mode replaces it; a name cannot change mode.</source>
+        <translation>이름 있는 contour는 활성 volume의 등치면입니다. 같은 이름·같은 모드로 다시 만들면 교체되며, 이름의 모드는 바꿀 수 없습니다.</translation>
+    </message>
+    <message>
+        <source>Name</source>
+        <translation>이름</translation>
+    </message>
+    <message>
+        <source>Mode</source>
+        <translation>모드</translation>
+    </message>
+    <message>
+        <source>Color</source>
+        <translation>색</translation>
+    </message>
+    <message>
+        <source>Level</source>
+        <translation>레벨</translation>
+    </message>
+    <message>
+        <source>Restrict to a selection</source>
+        <translation>selection으로 제한</translation>
+    </message>
+    <message>
+        <source>Selection</source>
+        <translation>선택</translation>
+    </message>
+    <message>
+        <source>Carve (Å)</source>
+        <translation>깎기 (Å)</translation>
+    </message>
+    <message>
+        <source>Buffer (Å)</source>
+        <translation>여유 (Å)</translation>
+    </message>
+    <message>
+        <source>Create / replace</source>
+        <translation>만들기 / 교체</translation>
+    </message>
+    <message>
+        <source>Change level only</source>
+        <translation>레벨만 변경</translation>
+    </message>
+    <message>
+        <source>Updates the level of the contour with this name</source>
+        <translation>이 이름의 contour 레벨을 갱신합니다</translation>
+    </message>
+    <message>
+        <source>Quick isosurface (one, replaced each time)</source>
+        <translation>빠른 등치면 (하나, 매번 교체)</translation>
+    </message>
+    <message>
+        <source>Show</source>
+        <translation>보이기</translation>
+    </message>
+    <message>
+        <source>A color-mapped plane through the active volume.</source>
+        <translation>활성 volume을 가로지르는 색 지도 평면입니다.</translation>
+    </message>
+    <message>
+        <source>Axis</source>
+        <translation>축</translation>
+    </message>
+    <message>
+        <source>Index %1 of %2</source>
+        <translation>%1 / %2번째</translation>
+    </message>
+    <message>
+        <source>Minimum color</source>
+        <translation>최소값 색</translation>
+    </message>
+    <message>
+        <source>Maximum color</source>
+        <translation>최대값 색</translation>
+    </message>
+    <message>
+        <source>Opacity</source>
+        <translation>불투명도</translation>
+    </message>
+    <message>
+        <source>Show slice</source>
+        <translation>단면 보이기</translation>
+    </message>
+    <message>
+        <source>Renders the whole volume as a translucent cloud on the GPU.</source>
+        <translation>GPU로 volume 전체를 반투명한 구름처럼 그립니다.</translation>
+    </message>
+    <message>
+        <source>Color ramp</source>
+        <translation>색 ramp</translation>
+    </message>
+    <message>
+        <source>Sampling step</source>
+        <translation>샘플 간격</translation>
+    </message>
+    <message>
+        <source>Maximum steps</source>
+        <translation>최대 단계 수</translation>
+    </message>
+    <message>
+        <source>Lookup samples</source>
+        <translation>조회표 샘플 수</translation>
+    </message>
+    <message>
+        <source>Texture budget (bytes)</source>
+        <translation>texture 예산 (바이트)</translation>
+    </message>
+    <message>
+        <source>Render</source>
+        <translation>렌더링</translation>
+    </message>
+    <message>
+        <source>Hide</source>
+        <translation>숨기기</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>취소</translation>
+    </message>
+  </context>
+  <context>
+    <name>NextEditor</name>
+    <message>
+        <source>EDIT ATOMS</source>
+        <translation>원자 편집</translation>
+    </message>
+    <message>
+        <source>Undo</source>
+        <translation>되돌리기</translation>
+    </message>
+    <message>
+        <source>Redo</source>
+        <translation>다시 실행</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>닫기</translation>
+    </message>
+    <message>
+        <source>Atoms</source>
+        <translation>원자</translation>
+    </message>
+    <message>
+        <source>Selection</source>
+        <translation>선택</translation>
+    </message>
+    <message>
+        <source>all</source>
+        <translation>전체</translation>
+    </message>
+    <message>
+        <source>%1 atoms selected</source>
+        <translation>원자 %1개 선택됨</translation>
+    </message>
+    <message>
+        <source>first %1 listed</source>
+        <translation>처음 %1개만 표시</translation>
+    </message>
+    <message>
+        <source>A trajectory is attached to this object; coordinate edits are blocked.</source>
+        <translation>이 object에 trajectory가 붙어 있어 좌표 편집이 막혀 있습니다.</translation>
+    </message>
+    <message>
+        <source>Select atoms first: click in the viewport in an atom mode, or type an expression.</source>
+        <translation>먼저 원자를 선택하세요: 원자 모드에서 viewport를 클릭하거나 식을 입력합니다.</translation>
+    </message>
+    <message>
+        <source>Atom #%1 · %2</source>
+        <translation>원자 #%1 · %2</translation>
+    </message>
+    <message>
+        <source>Atom</source>
+        <translation>원자</translation>
+    </message>
+    <message>
+        <source>Pick an atom in the list to edit it.</source>
+        <translation>목록에서 편집할 원자를 고르세요.</translation>
+    </message>
+    <message>
+        <source>Position (Å)</source>
+        <translation>위치 (Å)</translation>
+    </message>
+    <message>
+        <source>Move atom</source>
+        <translation>원자 이동</translation>
+    </message>
+    <message>
+        <source>Chemistry</source>
+        <translation>화학 정보</translation>
+    </message>
+    <message>
+        <source>name</source>
+        <translation>이름</translation>
+    </message>
+    <message>
+        <source>atomic number</source>
+        <translation>원자 번호</translation>
+    </message>
+    <message>
+        <source>formal charge</source>
+        <translation>형식 전하</translation>
+    </message>
+    <message>
+        <source>Apply</source>
+        <translation>적용</translation>
+    </message>
+    <message>
+        <source>Residue</source>
+        <translation>잔기</translation>
+    </message>
+    <message>
+        <source>chain</source>
+        <translation>chain</translation>
+    </message>
+    <message>
+        <source>number</source>
+        <translation>번호</translation>
+    </message>
+    <message>
+        <source>Bonds of the selection</source>
+        <translation>선택의 결합</translation>
+    </message>
+    <message>
+        <source>none</source>
+        <translation>없음</translation>
+    </message>
+    <message>
+        <source>Set order</source>
+        <translation>차수 설정</translation>
+    </message>
+    <message>
+        <source>Move the whole selection</source>
+        <translation>선택 전체 이동</translation>
+    </message>
+    <message>
+        <source>Shift by</source>
+        <translation>이동량 적용</translation>
+    </message>
+    <message>
+        <source>The shift is in the unit of the object's coordinates (Å for most files).</source>
+        <translation>이동량은 object 좌표의 단위입니다 (대부분 Å).</translation>
+    </message>
+  </context>
+  <context>
+    <name>NextChemistry</name>
+    <message>
+        <source>Charges and isotopes</source>
+        <translation>전하와 동위원소</translation>
+    </message>
+    <message>
+        <source>Bonds by order</source>
+        <translation>차수별 결합</translation>
+    </message>
+    <message>
+        <source>Where the information came from</source>
+        <translation>정보의 출처</translation>
+    </message>
+    <message>
+        <source>Residue kinds</source>
+        <translation>잔기 종류</translation>
+    </message>
+    <message>
+        <source>Polymers</source>
+        <translation>고분자</translation>
+    </message>
+    <message>
+        <source>No active object.</source>
+        <translation>활성 object가 없습니다.</translation>
+    </message>
+    <message>
+        <source>The rules could not run with these options.</source>
+        <translation>이 옵션으로는 규칙을 실행할 수 없습니다.</translation>
+    </message>
+    <message>
+        <source>CHEMISTRY</source>
+        <translation>화학</translation>
+    </message>
+    <message>
+        <source>Refresh</source>
+        <translation>새로 고침</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>닫기</translation>
+    </message>
+    <message>
+        <source>What the object says</source>
+        <translation>object가 가진 정보</translation>
+    </message>
+    <message>
+        <source>%1 atoms · %2 bonds · %3 residues</source>
+        <translation>원자 %1개 · 결합 %2개 · 잔기 %3개</translation>
+    </message>
+    <message>
+        <source>Show zero counts</source>
+        <translation>0인 항목도 보기</translation>
+    </message>
+    <message>
+        <source>What the rules would add</source>
+        <translation>규칙이 더할 것</translation>
+    </message>
+    <message>
+        <source>Conservative rules propose missing bonds from distances, ring and aromatic marks and residue kinds. Nothing changes until you apply.</source>
+        <translation>보수적인 규칙이 거리, 고리·방향족 표시, 잔기 종류로 빠진 결합을 제안합니다. 적용하기 전에는 아무것도 바뀌지 않습니다.</translation>
+    </message>
+    <message>
+        <source>Infer missing bonds from distances</source>
+        <translation>거리로 빠진 결합 추정</translation>
+    </message>
+    <message>
+        <source>radius scale</source>
+        <translation>반지름 배율</translation>
+    </message>
+    <message>
+        <source>pair budget</source>
+        <translation>쌍 예산</translation>
+    </message>
+    <message>
+        <source>Analyze</source>
+        <translation>분석</translation>
+    </message>
+    <message>
+        <source>Apply proposal</source>
+        <translation>제안 적용</translation>
+    </message>
+    <message>
+        <source>proposed new bonds</source>
+        <translation>제안된 새 결합</translation>
+    </message>
+    <message>
+        <source>proposed bond-order changes</source>
+        <translation>제안된 결합 차수 변경</translation>
+    </message>
+    <message>
+        <source>residues classified</source>
+        <translation>분류된 잔기</translation>
+    </message>
+    <message>
+        <source>ring atoms</source>
+        <translation>고리 원자</translation>
+    </message>
+    <message>
+        <source>ring bonds</source>
+        <translation>고리 결합</translation>
+    </message>
+    <message>
+        <source>aromatic ring edges</source>
+        <translation>방향족 고리 변</translation>
+    </message>
+    <message>
+        <source>implicit hydrogens</source>
+        <translation>암묵적 수소</translation>
+    </message>
+    <message>
+        <source>atoms with unsupported valence</source>
+        <translation>지원하지 않는 원자가의 원자</translation>
+    </message>
+    <message>
+        <source>atom pairs examined</source>
+        <translation>검사한 원자 쌍</translation>
+    </message>
+    <message>
+        <source>Proposed bonds</source>
+        <translation>제안된 결합</translation>
+    </message>
+    <message>
+        <source>first %1 of %2</source>
+        <translation>처음 %1개 · 전체 %2개</translation>
+    </message>
+    <message>
+        <source>Applying cannot be undone with Undo; reload the structure to start over.</source>
+        <translation>적용한 결과는 되돌리기로 취소할 수 없습니다. 처음부터 다시 하려면 구조를 다시 여세요.</translation>
+    </message>
+    <message>
+        <source>Assumptions</source>
+        <translation>가정</translation>
+    </message>
+  </context>
+  <context>
+    <name>NextBuilder</name>
+    <message>
+        <source>Water</source>
+        <translation>물</translation>
+    </message>
+    <message>
+        <source>Methane</source>
+        <translation>메테인</translation>
+    </message>
+    <message>
+        <source>Carbon dioxide</source>
+        <translation>이산화 탄소</translation>
+    </message>
+    <message>
+        <source>Ethene</source>
+        <translation>에텐</translation>
+    </message>
+    <message>
+        <source>Benzene</source>
+        <translation>벤젠</translation>
+    </message>
+    <message>
+        <source>Give the molecule a name.</source>
+        <translation>분자 이름을 입력하세요.</translation>
+    </message>
+    <message>
+        <source>Add at least one atom.</source>
+        <translation>원자를 하나 이상 추가하세요.</translation>
+    </message>
+    <message>
+        <source>Atom %1 needs a name.</source>
+        <translation>원자 %1의 이름이 필요합니다.</translation>
+    </message>
+    <message>
+        <source>Atom %1: unknown element.</source>
+        <translation>원자 %1: 알 수 없는 원소입니다.</translation>
+    </message>
+    <message>
+        <source>Atom %1: position and charge must be numbers.</source>
+        <translation>원자 %1: 위치와 전하는 숫자여야 합니다.</translation>
+    </message>
+    <message>
+        <source>Bond %1: atom numbers must be between 1 and %2.</source>
+        <translation>결합 %1: 원자 번호는 1부터 %2 사이여야 합니다.</translation>
+    </message>
+    <message>
+        <source>Bond %1 joins an atom to itself.</source>
+        <translation>결합 %1이 원자를 자기 자신에 잇습니다.</translation>
+    </message>
+    <message>
+        <source>The residue number must be a number.</source>
+        <translation>잔기 번호는 숫자여야 합니다.</translation>
+    </message>
+    <message>
+        <source>MOLECULE BUILDER</source>
+        <translation>분자 만들기</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>닫기</translation>
+    </message>
+    <message>
+        <source>Template</source>
+        <translation>템플릿</translation>
+    </message>
+    <message>
+        <source>name</source>
+        <translation>이름</translation>
+    </message>
+    <message>
+        <source>residue</source>
+        <translation>잔기</translation>
+    </message>
+    <message>
+        <source>chain</source>
+        <translation>chain</translation>
+    </message>
+    <message>
+        <source>number</source>
+        <translation>번호</translation>
+    </message>
+    <message>
+        <source>Atoms</source>
+        <translation>원자</translation>
+    </message>
+    <message>
+        <source>element</source>
+        <translation>원소</translation>
+    </message>
+    <message>
+        <source>charge</source>
+        <translation>전하</translation>
+    </message>
+    <message>
+        <source>Remove atom</source>
+        <translation>원자 삭제</translation>
+    </message>
+    <message>
+        <source>Add atom</source>
+        <translation>원자 추가</translation>
+    </message>
+    <message>
+        <source>element: symbol (C, N, Cl…) or atomic number</source>
+        <translation>원소: 기호 (C, N, Cl…) 또는 원자 번호</translation>
+    </message>
+    <message>
+        <source>Bonds</source>
+        <translation>결합</translation>
+    </message>
+    <message>
+        <source>Remove bond</source>
+        <translation>결합 삭제</translation>
+    </message>
+    <message>
+        <source>Add bond</source>
+        <translation>결합 추가</translation>
+    </message>
+    <message>
+        <source>atom numbers refer to the # column above</source>
+        <translation>원자 번호는 위 표의 # 열을 가리킵니다</translation>
+    </message>
+    <message>
+        <source>Build molecule</source>
+        <translation>분자 만들기</translation>
+    </message>
+  </context>
+  <context>
+    <name>NextCamera</name>
+    <message>
+        <source>CAMERA</source>
+        <translation>카메라</translation>
+    </message>
+    <message>
+        <source>Reset view</source>
+        <translation>뷰 초기화</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>닫기</translation>
+    </message>
+    <message>
+        <source>Frame a selection</source>
+        <translation>선택 영역 맞추기</translation>
+    </message>
+    <message>
+        <source>state</source>
+        <translation>state</translation>
+    </message>
+    <message>
+        <source>animate (s)</source>
+        <translation>애니메이션 (초)</translation>
+    </message>
+    <message>
+        <source>Zoom</source>
+        <translation>확대</translation>
+    </message>
+    <message>
+        <source>Center</source>
+        <translation>중심</translation>
+    </message>
+    <message>
+        <source>Orient</source>
+        <translation>방향 맞춤</translation>
+    </message>
+    <message>
+        <source>Set rotation origin</source>
+        <translation>회전 중심 설정</translation>
+    </message>
+    <message>
+        <source>Object origin</source>
+        <translation>object 원점</translation>
+    </message>
+    <message>
+        <source>object (current)</source>
+        <translation>object (현재)</translation>
+    </message>
+    <message>
+        <source>Set origin</source>
+        <translation>원점 설정</translation>
+    </message>
+    <message>
+        <source>Reset object</source>
+        <translation>object 초기화</translation>
+    </message>
+    <message>
+        <source>Projection</source>
+        <translation>투영</translation>
+    </message>
+    <message>
+        <source>field of view (°)</source>
+        <translation>시야각 (°)</translation>
+    </message>
+    <message>
+        <source>keep scale</source>
+        <translation>배율 유지</translation>
+    </message>
+    <message>
+        <source>Apply</source>
+        <translation>적용</translation>
+    </message>
+    <message>
+        <source>Stereo</source>
+        <translation>스테레오</translation>
+    </message>
+    <message>
+        <source>enabled</source>
+        <translation>켜기</translation>
+    </message>
+    <message>
+        <source>swap eyes</source>
+        <translation>눈 바꾸기</translation>
+    </message>
+    <message>
+        <source>shift %</source>
+        <translation>이동 %</translation>
+    </message>
+    <message>
+        <source>angle ×</source>
+        <translation>각도 ×</translation>
+    </message>
+    <message>
+        <source>Clipping planes</source>
+        <translation>절단면</translation>
+    </message>
+    <message>
+        <source>distance</source>
+        <translation>거리</translation>
+    </message>
+    <message>
+        <source>selection (atoms)</source>
+        <translation>선택 (atoms 모드)</translation>
+    </message>
+    <message>
+        <source>Step the camera</source>
+        <translation>카메라 이동</translation>
+    </message>
+    <message>
+        <source>Move −</source>
+        <translation>이동 −</translation>
+    </message>
+    <message>
+        <source>Move +</source>
+        <translation>이동 +</translation>
+    </message>
+    <message>
+        <source>Turn −</source>
+        <translation>회전 −</translation>
+    </message>
+    <message>
+        <source>Turn +</source>
+        <translation>회전 +</translation>
+    </message>
+    <message>
+        <source>Move steps are in Å, turn steps in degrees.</source>
+        <translation>이동량은 Å, 회전량은 도 단위입니다.</translation>
+    </message>
+    <message>
+        <source>PyMOL view text</source>
+        <translation>PyMOL view 텍스트</translation>
+    </message>
+    <message>
+        <source>The 18 numbers of PyMOL's get_view; paste some to restore a camera.</source>
+        <translation>PyMOL get_view의 숫자 18개입니다. 붙여 넣으면 카메라를 복원합니다.</translation>
+    </message>
+    <message>
+        <source>Copy current view</source>
+        <translation>현재 view 복사</translation>
+    </message>
+    <message>
+        <source>Apply view</source>
+        <translation>view 적용</translation>
+    </message>
+  </context>
+  <context>
+    <name>NextSystemInfo</name>
+    <message>
+        <source>Graphics</source>
+        <translation>그래픽</translation>
+    </message>
+    <message>
+        <source>status</source>
+        <translation>상태</translation>
+    </message>
+    <message>
+        <source>device</source>
+        <translation>장치</translation>
+    </message>
+    <message>
+        <source>device type</source>
+        <translation>장치 종류</translation>
+    </message>
+    <message>
+        <source>API</source>
+        <translation>API</translation>
+    </message>
+    <message>
+        <source>backend</source>
+        <translation>backend</translation>
+    </message>
+    <message>
+        <source>driver</source>
+        <translation>드라이버</translation>
+    </message>
+    <message>
+        <source>RHI based</source>
+        <translation>RHI 기반</translation>
+    </message>
+    <message>
+        <source>note</source>
+        <translation>비고</translation>
+    </message>
+    <message>
+        <source>Platform</source>
+        <translation>플랫폼</translation>
+    </message>
+    <message>
+        <source>system</source>
+        <translation>시스템</translation>
+    </message>
+    <message>
+        <source>architecture</source>
+        <translation>아키텍처</translation>
+    </message>
+    <message>
+        <source>Build</source>
+        <translation>빌드</translation>
+    </message>
+    <message>
+        <source>version</source>
+        <translation>버전</translation>
+    </message>
+    <message>
+        <source>configuration</source>
+        <translation>구성</translation>
+    </message>
+    <message>
+        <source>compiler</source>
+        <translation>컴파일러</translation>
+    </message>
+    <message>
+        <source>Features</source>
+        <translation>기능</translation>
+    </message>
+    <message>
+        <source>yes</source>
+        <translation>예</translation>
+    </message>
+    <message>
+        <source>no</source>
+        <translation>아니오</translation>
+    </message>
+    <message>
+        <source>Dependencies</source>
+        <translation>의존성</translation>
+    </message>
+    <message>
+        <source>SYSTEM INFORMATION</source>
+        <translation>시스템 정보</translation>
+    </message>
+    <message>
+        <source>Copy JSON</source>
+        <translation>JSON 복사</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>닫기</translation>
+    </message>
+    <message>
+        <source>Values come from the canonical system info operation, as the viewport runs it.</source>
+        <translation>값은 viewport가 실행하는 표준 system info 작업에서 가져옵니다.</translation>
+    </message>
+  </context>
+  <context>
+    <name>NextScript</name>
+    <message>
+        <source>Run in this process</source>
+        <translation>이 프로세스에서 실행</translation>
+    </message>
+    <message>
+        <source>This script uses molshredder, which the isolated Python does not have. Run it in this process instead, where it drives the open workspace.</source>
+        <translation>이 스크립트는 molshredder를 쓰는데 격리된 Python에는 그 모듈이 없습니다. 이 프로세스에서 실행하면 열린 workspace를 다룰 수 있습니다.</translation>
+    </message>
+    <message>
+        <source>RUN PYTHON SCRIPT</source>
+        <translation>Python 스크립트 실행</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>닫기</translation>
+    </message>
+    <message>
+        <source>Run trusted Python code?</source>
+        <translation>신뢰하는 Python 코드를 실행할까요?</translation>
+    </message>
+    <message>
+        <source>A script runs with the same permissions as MolShredder. It can read files, use the network and start processes, and may leave partial changes in the viewer if it fails. Review the file before continuing.</source>
+        <translation>스크립트는 MolShredder와 같은 권한으로 실행됩니다. 파일을 읽고 네트워크를 쓰고 프로세스를 시작할 수 있으며, 실패하면 viewer에 일부 변경이 남을 수 있습니다. 계속하기 전에 파일을 확인하세요.</translation>
+    </message>
+    <message>
+        <source>path of the .py file</source>
+        <translation>.py 파일 경로</translation>
+    </message>
+    <message>
+        <source>Browse…</source>
+        <translation>찾아보기…</translation>
+    </message>
+    <message>
+        <source>Run in an isolated child process (recommended)</source>
+        <translation>격리된 자식 프로세스에서 실행 (권장)</translation>
+    </message>
+    <message>
+        <source>Isolated: the script cannot change the open workspace directly, can be cancelled at any time and its output is bounded.</source>
+        <translation>격리: 스크립트가 열린 workspace를 직접 바꿀 수 없고, 언제든 취소할 수 있으며, 출력 크기가 제한됩니다.</translation>
+    </message>
+    <message>
+        <source>In this process: the script can change the open workspace directly; cancelling waits for the script to yield.</source>
+        <translation>이 프로세스에서 실행: 스크립트가 열린 workspace를 직접 바꿀 수 있고, 취소는 스크립트가 양보할 때까지 기다립니다.</translation>
+    </message>
+    <message>
+        <source>Output</source>
+        <translation>출력</translation>
+    </message>
+    <message>
+        <source>Clear output</source>
+        <translation>출력 지우기</translation>
+    </message>
+    <message>
+        <source>Cancel script</source>
+        <translation>스크립트 취소</translation>
+    </message>
+    <message>
+        <source>Running…</source>
+        <translation>실행 중…</translation>
+    </message>
+    <message>
+        <source>Run script</source>
+        <translation>스크립트 실행</translation>
+    </message>
+    <message>
+        <source>Script started: %1</source>
+        <translation>스크립트 시작: %1</translation>
+    </message>
+    <message>
+        <source>The script could not start.</source>
+        <translation>스크립트를 시작할 수 없습니다.</translation>
+    </message>
+  </context>
 </TS>

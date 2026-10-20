@@ -789,7 +789,7 @@ if(MOLSHREDDER_BUILD_DESKTOP)
   # New PyMOL-style shell (SEQ-330, `--ui next`). Flat names so the files resolve each other inside the module.
   set(MOLSHREDDER_NEXT_QML
     NextTheme NextButton NextMenu NextObjectPanel NextConsole NextMovieBar
-    NextSequenceBar NextCommandForm NextShell
+    NextSequenceBar NextCommandForm NextInspector NextMovieEditor NextResults NextSelectionEditor NextScenes NextTrajectoryImport NextSurface NextVolume NextEditor NextChemistry NextBuilder NextSystemInfo NextCamera NextScript NextShell
   )
   set(MOLSHREDDER_NEXT_QML_FILES "")
   foreach(next_name IN LISTS MOLSHREDDER_NEXT_QML)
@@ -889,7 +889,7 @@ if(MOLSHREDDER_BUILD_DESKTOP)
       PROPERTIES
         TIMEOUT 10
         PASS_REGULAR_EXPRESSION
-          "MolShredder localization ready: language=en title=MolShredder Molecular Viewer"
+          "MolShredder localization ready: language=en title=MolShredder( Molecular Viewer)?"
     )
     add_test(
       NAME desktop.localization_korean_smoke
@@ -900,13 +900,13 @@ if(MOLSHREDDER_BUILD_DESKTOP)
       PROPERTIES
         TIMEOUT 10
         PASS_REGULAR_EXPRESSION
-          "MolShredder localization ready: language=ko title=MolShredder 분자 뷰어"
+          "MolShredder localization ready: language=ko title=MolShredder( 분자 뷰어)?"
     )
     foreach(MOLSHREDDER_ACTION_LANGUAGE IN ITEMS en ko)
       add_test(
         NAME desktop.information_architecture_${MOLSHREDDER_ACTION_LANGUAGE}_smoke
         COMMAND
-          molshredder_desktop --smoke --information-architecture-smoke
+          molshredder_desktop --smoke --ui=legacy --information-architecture-smoke
           --open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/lammps_topology.pdb
           --trajectory=${CMAKE_CURRENT_BINARY_DIR}/desktop_trajectory.dcd
           --language=${MOLSHREDDER_ACTION_LANGUAGE}
@@ -1111,6 +1111,373 @@ if(MOLSHREDDER_BUILD_DESKTOP)
       PROPERTIES
         TIMEOUT 15
         PASS_REGULAR_EXPRESSION "MolShredder desktop GPU picking ready: Atom [0-9]+ .* residue \\(3 atoms\\)"
+    )
+    add_test(
+      NAME desktop.next_ui_inspector_smoke
+      COMMAND
+        molshredder_desktop --smoke --ui=next --language=en
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb"
+        "--command=select sele, resi 10-20"
+        "--command=ui:inspector representation"
+        "--command=show sticks, sele"
+        "--command=hide sticks, sele"
+        "--command=as cartoon, sele"
+        "--command=surface show"
+        "--command=surface hide"
+        "--command=hide everything, all"
+        "--command=ui:inspector color"
+        "--command=color red, sele"
+        "--command=spectrum b, rainbow, sele"
+        "--command=recolor"
+        "--command=ui:inspector settings"
+        "--command=setting set --name sphere_scale --value 0.5 --scope object"
+        "--command=setting set --name label_position --value \"0, 0, 2\" --scope object"
+        "--command=setting unset --name sphere_scale --scope object"
+    )
+    set_tests_properties(
+      desktop.next_ui_inspector_smoke
+      PROPERTIES
+        TIMEOUT 30
+        PASS_REGULAR_EXPRESSION "commands=13 errors=0 objects=1"
+    )
+    add_test(
+      NAME desktop.next_ui_movie_editor_smoke
+      COMMAND
+        molshredder_desktop --smoke --ui=next --language=en
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/synthetic_multimodel.pdb"
+        "--command=ui:movieeditor"
+        "--command=traj range --first 0 --last 1 --stride 1 --mode loop --direction forward"
+        "--command=traj speed --fps 12"
+        "--command=movie configure --frames 60 --fps 12 --loop true"
+        "--command=movie keyframe --frame 1 --trajectory-frame 0"
+        "--command=movie keyframe --frame 30 --trajectory-frame 1"
+        "--command=movie seek --frame 20"
+        "--command=movie map --spec \"1 x30 2 x30\""
+        "--command=movie clear"
+    )
+    set_tests_properties(
+      desktop.next_ui_movie_editor_smoke
+      PROPERTIES
+        TIMEOUT 30
+        PASS_REGULAR_EXPRESSION "commands=8 errors=0 objects=1"
+    )
+    add_test(
+      NAME desktop.next_ui_results_smoke
+      COMMAND
+        molshredder_desktop --smoke --ui=next --language=en
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb"
+        "--command=measure distance --from \"index 1\" --to \"index 20\" --result-name d1"
+        "--command=analyze sasa --selection all --result-name sa"
+        "--command=analyze contacts --first \"resi 1-10\" --result-name ct"
+        "--command=ui:results"
+        "--command=result hide --id 1"
+        "--command=result show --id 1"
+        "--command=result export --id 3 --path ${CMAKE_CURRENT_BINARY_DIR}/next_ui_results.csv --output-format csv --overwrite true"
+        "--command=result delete --id 2"
+        "--command=result list"
+    )
+    set_tests_properties(
+      desktop.next_ui_results_smoke
+      PROPERTIES
+        TIMEOUT 30
+        PASS_REGULAR_EXPRESSION "commands=8 errors=0 objects=1"
+    )
+    add_test(
+      NAME desktop.next_ui_selection_editor_smoke
+      COMMAND
+        molshredder_desktop --smoke --ui=next --language=en
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb"
+        "--command=ui:selection polymer.protein and b < 30"
+        "--command=select --name \"core\" --expression \"polymer.protein and b < 30\""
+        "--command=select --name \"core\" --expression \"resi 1-5\" --merge true"
+        "--command=select --name \"core\" --expression \"resi 1-5\" --update true"
+        "--command=object count --selection \"@core\""
+        "--command=zoom core"
+        "--command=group add --name \"g1\" --members \"1UBQ\""
+        "--command=group ungroup --members \"1UBQ\""
+        "--command=group add --name \"g2\" --members \"1UBQ\""
+        "--command=group excise --name \"g2\""
+        "--command=select delete --name \"core\""
+    )
+    set_tests_properties(
+      desktop.next_ui_selection_editor_smoke
+      PROPERTIES
+        TIMEOUT 30
+        PASS_REGULAR_EXPRESSION "commands=10 errors=0 objects=1"
+    )
+    add_test(
+      NAME desktop.next_ui_scenes_smoke
+      COMMAND
+        molshredder_desktop --smoke --ui=next --language=en
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb"
+        "--command=ui:scenes"
+        "--command=view store --name \"front\""
+        "--command=turn y, 90"
+        "--command=view store --name \"side view\""
+        "--command=view recall --name \"front\" --duration 0"
+        "--command=view projection --mode orthographic"
+        "--command=view projection --mode perspective"
+        "--command=view export-pymol"
+        "--command=view reset"
+        "--command=view delete --name \"side view\""
+        "--command=scene store --name \"one\""
+        "--command=show cartoon, all"
+        "--command=scene store --name \"two\""
+        "--command=scene first"
+        "--command=scene next"
+        "--command=scene previous"
+        "--command=scene last"
+        "--command=scene update"
+        "--command=scene recall --name \"one\""
+        "--command=scene rename --name \"one\" --new-name \"first look\""
+        "--command=scene order --names \"two\" --location top"
+        "--command=scene order --sort true"
+        "--command=scene delete --name \"two\""
+        "--command=scene clear"
+        "--command=view clear"
+    )
+    set_tests_properties(
+      desktop.next_ui_scenes_smoke
+      PROPERTIES
+        TIMEOUT 40
+        PASS_REGULAR_EXPRESSION "commands=24 errors=0 objects=1"
+    )
+    add_test(
+      NAME desktop.next_ui_trajectory_import_smoke
+      COMMAND
+        molshredder_desktop --smoke --ui=next --language=en
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/topology.prmtop"
+        "--command=ui:trajectory ${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/trajectory.mdcrd"
+        "--command=traj load --path \"${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/trajectory.mdcrd\" --mapping index"
+        "--command=traj load --path \"${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/trajectory.mdcrd\" --mapping index --file-format mdcrd --coordinate-unit angstrom --cache-mib 8 --prefetch-frames 0"
+        "--command=traj frame --frame 1"
+        "--command=traj range --first 0 --last 1 --stride 1 --mode loop --direction forward"
+    )
+    set_tests_properties(
+      desktop.next_ui_trajectory_import_smoke
+      PROPERTIES
+        TIMEOUT 30
+        PASS_REGULAR_EXPRESSION "commands=4 errors=0 objects=1"
+    )
+    add_test(
+      NAME desktop.next_ui_surface_smoke
+      COMMAND
+        molshredder_desktop --smoke --ui=next --language=en
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb"
+        "--command=select sele, resi 10-30"
+        "--command=ui:surface"
+        "--command=surface show --kind sas --selection \"all\" --probe-radius 1.4 --grid-spacing 1.2 --color cyan --opacity 0.72"
+        "--command=surface show --kind vdw --selection \"@sele\" --probe-radius 0 --grid-spacing 0.7 --color orange --opacity 0.5 --voxel-budget 4000000 --memory-budget-bytes 268435456"
+        "--command=surface hide"
+    )
+    set_tests_properties(
+      desktop.next_ui_surface_smoke
+      PROPERTIES
+        TIMEOUT 40
+        PASS_REGULAR_EXPRESSION "commands=4 errors=0 objects=1"
+    )
+    add_test(
+      NAME desktop.next_ui_volume_smoke
+      COMMAND
+        molshredder_desktop --smoke --ui=next --language=en
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb"
+        "--command=select sele, resi 10-30"
+        "--command=ui:volume"
+        "--command=volume load --path \"${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/potential.dx\" --name \"pot\""
+        "--command=volume contour --name \"c1\" --level 1.5 --mode mesh --color default"
+        "--command=volume contour --name \"c2\" --level 2.5 --mode surface --color orange --selection \"@sele\" --carve 3 --buffer 1"
+        "--command=volume isolevel --name \"c1\" --level 3"
+        "--command=volume isosurface --level 2 --color cyan"
+        "--command=volume slice --axis z --index 1 --minimum-color blue --maximum-color orange --opacity 0.8"
+        "--command=volume ramp set --preset fire"
+        "--command=volume render --ramp fire --mode post-classified --sampling-step 0.5 --maximum-steps 4096 --lookup-table-samples 256 --texture-budget-bytes 536870912"
+        "--command=volume hide"
+        "--command=volume list"
+    )
+    set_tests_properties(
+      desktop.next_ui_volume_smoke
+      PROPERTIES
+        TIMEOUT 60
+        PASS_REGULAR_EXPRESSION "commands=11 errors=0 objects=1"
+    )
+    add_test(
+      NAME desktop.next_ui_object_activate_smoke
+      COMMAND
+        molshredder_desktop --smoke --ui=next --language=en
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb"
+        "--command=load --path \"${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/pick_residue.pdb\" --name \"second\""
+        "--command=object activate --id 1"
+        "--command=select first_sel, resi 10-20"
+        "--command=object activate --id 2"
+        "--command=select second_sel, all"
+        "--command=object count --selection \"@second_sel\""
+    )
+    set_tests_properties(
+      desktop.next_ui_object_activate_smoke
+      PROPERTIES
+        TIMEOUT 30
+        PASS_REGULAR_EXPRESSION "commands=6 errors=0 objects=2"
+    )
+    # Each molecular edit quotes the object revisions, which an edit bumps, so every edit command gets its own
+    # fresh object (revisions 1/1) instead of sharing one process.
+    set(
+      MOLSHREDDER_NEXT_EDIT_CASES
+      "position|edit atom-position --atom-id 1 --x 5 --y 6 --z 7 --expected-topology-version 1 --expected-coordinate-source-revision 1"
+      "properties|edit atom-properties --atom-id 2 --name XX --atomic-number 7 --formal-charge 1 --expected-topology-version 1 --expected-coordinate-source-revision 1"
+      "residue|edit residue-properties --atom-id 3 --name ALA --chain B --residue-number 9 --expected-topology-version 1 --expected-coordinate-source-revision 1"
+      "move|edit move-atoms --selection \"@sele\" --mode add --values \"1 0 0\""
+    )
+    foreach(edit_case IN LISTS MOLSHREDDER_NEXT_EDIT_CASES)
+      string(REPLACE "|" ";" edit_parts "${edit_case}")
+      list(GET edit_parts 0 edit_name)
+      list(GET edit_parts 1 edit_command)
+      add_test(
+        NAME desktop.next_ui_edit_${edit_name}_smoke
+        COMMAND
+          molshredder_desktop --smoke --ui=next --language=en
+          "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb"
+          "--command=select sele, resi 10-20"
+          "--command=ui:editor @sele"
+          "--command=${edit_command}"
+          "--command=edit undo"
+          "--command=edit redo"
+      )
+      set_tests_properties(
+        desktop.next_ui_edit_${edit_name}_smoke
+        PROPERTIES
+          TIMEOUT 30
+          PASS_REGULAR_EXPRESSION "commands=4 errors=0 objects=1"
+      )
+    endforeach()
+    add_test(
+      NAME desktop.next_ui_chemistry_smoke
+      COMMAND
+        molshredder_desktop --smoke --ui=next --language=en
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb"
+        "--command=ui:chemistry analyze"
+        "--command=object chemistry"
+        "--command=object perceive-chemistry --infer-connectivity true --radius-scale 1.2 --pair-budget 2000000"
+        "--command=object perceive-chemistry --infer-connectivity true --radius-scale 1.2 --pair-budget 2000000 --apply true"
+    )
+    set_tests_properties(
+      desktop.next_ui_chemistry_smoke
+      PROPERTIES
+        TIMEOUT 40
+        PASS_REGULAR_EXPRESSION "commands=3 errors=0 objects=1"
+    )
+    add_test(
+      NAME desktop.next_ui_builder_smoke
+      COMMAND
+        molshredder_desktop --smoke --ui=next --language=en
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb"
+        "--command=ui:builder"
+        "--command=build molecule --name \"water\" --atoms \"O,8,0,0,0,0;H1,1,0.757,0.586,0,0;H2,1,-0.757,0.586,0,0\" --bonds \"1,2,single;1,3,single\" --residue-name \"HOH\" --chain \"A\" --residue-number 1 --unit angstrom"
+        "--command=build molecule --name \"co2\" --atoms \"C,6,0,0,0,0;O1,8,1.16,0,0,0;O2,8,-1.16,0,0,0\" --bonds \"1,2,double;1,3,double\" --residue-name \"CO2\" --chain \"A\" --residue-number 1 --unit angstrom"
+        "--command=build molecule --name \"ring\" --atoms \"C1,6,1.39,0,0,0;C2,6,0.695,1.204,0,0;C3,6,-0.695,1.204,0,0;C4,6,-1.39,0,0,0;C5,6,-0.695,-1.204,0,0;C6,6,0.695,-1.204,0,0\" --bonds \"1,2,aromatic;2,3,aromatic;3,4,aromatic;4,5,aromatic;5,6,aromatic;6,1,aromatic\" --residue-name \"BNZ\" --chain \"B\" --residue-number 2 --unit angstrom"
+        "--command=object perceive-chemistry"
+    )
+    set_tests_properties(
+      desktop.next_ui_builder_smoke
+      PROPERTIES
+        TIMEOUT 40
+        PASS_REGULAR_EXPRESSION "commands=4 errors=0 objects=4"
+    )
+    add_test(
+      NAME desktop.next_ui_menu_audit_smoke
+      COMMAND
+        molshredder_desktop --smoke --ui=next --language=en
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb"
+        "--command=select sele, resi 10-20"
+        "--command=group add --name g1 --members 1UBQ"
+        "--command=ui:menuaudit"
+    )
+    set_tests_properties(
+      desktop.next_ui_menu_audit_smoke
+      PROPERTIES
+        TIMEOUT 40
+        PASS_REGULAR_EXPRESSION "menu audit: entries=[0-9]+ problems=0"
+    )
+    add_test(
+      NAME desktop.next_ui_menu_audit_ko_smoke
+      COMMAND
+        molshredder_desktop --smoke --ui=next --language=ko
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb"
+        "--command=select sele, resi 10-20"
+        "--command=ui:menuaudit"
+    )
+    set_tests_properties(
+      desktop.next_ui_menu_audit_ko_smoke
+      PROPERTIES
+        TIMEOUT 40
+        PASS_REGULAR_EXPRESSION "menu audit: entries=[0-9]+ problems=0"
+    )
+    add_test(
+      NAME desktop.next_ui_camera_smoke
+      COMMAND
+        molshredder_desktop --smoke --ui=next --language=en
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb"
+        "--command=select sele, resi 10-20"
+        "--command=ui:camera"
+        "--command=view zoom --selection \"@sele\" --state \"current\" --duration 0"
+        "--command=view center --selection \"all\" --state \"all\" --duration 0"
+        "--command=view orient --selection \"@sele\" --state \"1\" --duration 0"
+        "--command=view origin --selection \"@sele\" --state \"current\""
+        "--command=view origin --position \"1 2 3\""
+        "--command=view origin --position \"1 2 3\" --object \"1UBQ\""
+        "--command=view reset --object \"1UBQ\""
+        "--command=view projection --mode orthographic --preserve-scale true"
+        "--command=view projection --mode perspective --field-of-view-degrees 35 --preserve-scale true"
+        "--command=stereo set --enabled true --mode side_by_side --swap-eyes false --shift-percent 2 --angle-scale 2.1"
+        "--command=stereo set --enabled false --mode anaglyph --swap-eyes true --shift-percent 2 --angle-scale 2.1"
+        "--command=view clip --mode near --distance 1"
+        "--command=view clip --mode atoms --distance 2 --selection \"@sele\""
+        "--command=view move --axis x --distance 1"
+        "--command=view move --axis y --distance -1"
+        "--command=view turn --axis z --angle 15"
+        "--command=view export-pymol"
+        "--command=view import-pymol --values \"0,1,0,-1,0,0,0,0,1,2,-3,-40,10,20,30,.5,100,-60\""
+        "--command=view reset"
+    )
+    set_tests_properties(
+      desktop.next_ui_camera_smoke
+      PROPERTIES
+        TIMEOUT 40
+        PASS_REGULAR_EXPRESSION "commands=20 errors=0 objects=1"
+    )
+    add_test(
+      NAME desktop.next_ui_behavior_smoke
+      COMMAND
+        molshredder_desktop --smoke --ui=next --language=en
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb"
+        "--command=show sticks, resi 1-6"
+        "--command=label resi 1-6 and name CA, resn"
+        "--command=measure distance --from \"index 2\" --to \"index 40\" --result-name d1"
+        "--command=ui:expect labels 2"
+        "--command=movie configure --frames 20 --fps 30"
+        "--command=movie play"
+        "--command=ui:expect movietimer"
+        "--command=movie pause"
+        "--command=ui:script ${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/console_script.py"
+        "--command=ui:expect scriptready"
+        "--command=ui:expect nohint"
+        "--command=ui:script ${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/script_imports_molshredder.py"
+        "--command=ui:expect scripthint"
+        "--command=ui:scope on"
+        "--command=ui:expect scope on"
+        "--command=ui:scope off"
+        "--command=ui:expect scope off"
+        "--command=session save --path ${CMAKE_CURRENT_BINARY_DIR}/next_ui_behavior.msess"
+        "--command=ui:autosavenow"
+        "--command=ui:expect file ${CMAKE_CURRENT_BINARY_DIR}/next_ui_behavior.msess.autosave"
+        "--command=ui:delete 1UBQ"
+        "--command=ui:expect deleteopen"
+        "--command=ui:confirmdelete"
+    )
+    set_tests_properties(
+      desktop.next_ui_behavior_smoke
+      PROPERTIES
+        TIMEOUT 40
+        PASS_REGULAR_EXPRESSION "commands=8 errors=0 objects=0"
     )
     add_test(
       NAME desktop.next_ui_error_smoke
@@ -3646,6 +4013,15 @@ if(BUILD_TESTING)
   )
 
   add_test(
+    NAME frontend.edit_panel_data
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/edit_panel_data_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures"
+  )
+
+  add_test(
     NAME frontend.selection_ui_commands
     COMMAND
       Python3::Interpreter
@@ -3899,6 +4275,11 @@ if(BUILD_TESTING)
     COMMAND molshredder analyze center --help
   )
   add_test(NAME cli.invalid COMMAND molshredder unsupported)
+  add_test(NAME cli.setting_list COMMAND molshredder setting list)
+  set_tests_properties(
+    cli.setting_list
+    PROPERTIES PASS_REGULAR_EXPRESSION "definition_count=80"
+  )
   set_tests_properties(
     cli.version
     PROPERTIES PASS_REGULAR_EXPRESSION "MolShredder ${PROJECT_VERSION}"
@@ -3932,4 +4313,27 @@ if(BUILD_TESTING)
     PROPERTIES PASS_REGULAR_EXPRESSION "choices: centroid, com"
   )
   set_tests_properties(cli.invalid PROPERTIES WILL_FAIL TRUE)
+endif()
+
+if(MOLSHREDDER_BUILD_DESKTOP)
+  # The shared desktop smoke tests start the shell chosen here (SEQ-330 G2/G3): "next" is the application, "legacy"
+  # repeats them against the old Main.qml shell until it is removed (G5). Tests that pass --ui=... keep their own
+  # choice; the rest follow MOLSHREDDER_UI.
+  set(
+    MOLSHREDDER_DESKTOP_TEST_UI
+    "next"
+    CACHE STRING
+    "Shell the desktop smoke tests start: next or legacy"
+  )
+  set_property(CACHE MOLSHREDDER_DESKTOP_TEST_UI PROPERTY STRINGS next legacy)
+  get_property(molshredder_all_tests DIRECTORY PROPERTY TESTS)
+  foreach(molshredder_test IN LISTS molshredder_all_tests)
+    if(molshredder_test MATCHES "^desktop\\.")
+      set_property(
+        TEST ${molshredder_test}
+        APPEND
+        PROPERTY ENVIRONMENT "MOLSHREDDER_UI=${MOLSHREDDER_DESKTOP_TEST_UI}"
+      )
+    endif()
+  endforeach()
 endif()

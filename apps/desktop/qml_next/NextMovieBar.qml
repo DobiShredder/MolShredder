@@ -41,6 +41,14 @@ Rectangle {
         NextButton { text: "▶▶"; width: 32; enabled: bar.frameCount > 0; ToolTip.text: qsTr("Next frame"); onClicked: bar.step(1) }
         NextButton { text: "⏭"; width: 28; enabled: bar.frameCount > 0; ToolTip.text: qsTr("Last frame"); onClicked: bar.seek(bar.frameCount - 1) }
     }
+    Row {
+        id: taskRow
+        visible: viewport && viewport.trajectoryTaskRunning
+        anchors { right: label.left; rightMargin: 10; verticalCenter: parent.verticalCenter }
+        spacing: 6
+        ProgressBar { objectName: "trajectoryTaskProgress"; width: 90; value: viewport ? viewport.trajectoryTaskProgress : 0; anchors.verticalCenter: parent.verticalCenter }
+        NextButton { objectName: "trajectoryTaskCancelButton"; text: qsTr("Cancel"); onClicked: viewport.cancelTrajectoryTask() }
+    }
     Text {
         id: label
         anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
@@ -53,7 +61,7 @@ Rectangle {
     }
     Item {
         id: track
-        anchors { left: buttons.right; leftMargin: 14; right: label.left; rightMargin: 14; verticalCenter: parent.verticalCenter }
+        anchors { left: buttons.right; leftMargin: 14; right: taskRow.visible ? taskRow.left : label.left; rightMargin: 14; verticalCenter: parent.verticalCenter }
         height: 18
         enabled: bar.frameCount > 1
         Rectangle { anchors.verticalCenter: parent.verticalCenter; width: parent.width; height: 6; radius: 3; color: NextTheme.line }

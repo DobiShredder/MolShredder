@@ -20,6 +20,8 @@
 #include <vector>
 
 #include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QStringList>
 #include <QEventLoop>
 #include <QFileInfo>
@@ -2481,6 +2483,22 @@ QVariantMap MolecularViewport::movieState() const {
   result.insert(QStringLiteral("playing"), movie.playing);
   result.insert(QStringLiteral("keyframeCount"),
                 static_cast<qulonglong>(movie.keyframes.size()));
+  result.insert(QStringLiteral("mappedFrames"),
+                static_cast<qulonglong>(movie.state_map.size()));
+  QVariantList keyframes;
+  for (const auto &[frame, record] : movie.keyframes) {
+    QVariantMap key;
+    key.insert(QStringLiteral("frame"), static_cast<qulonglong>(frame));
+    key.insert(QStringLiteral("scene"), record.scene_name.has_value()
+                                            ? QString::fromStdString(*record.scene_name)
+                                            : QString{});
+    key.insert(QStringLiteral("trajectoryFrame"),
+               record.trajectory_frame.has_value()
+                   ? QVariant{static_cast<qulonglong>(*record.trajectory_frame)}
+                   : QVariant{});
+    keyframes.push_back(key);
+  }
+  result.insert(QStringLiteral("keyframes"), keyframes);
   return result;
 }
 
@@ -6659,6 +6677,13 @@ QVariantMap MolecularViewport::executeCommandLine(const QString &text) {
     result.insert(QStringLiteral("command"), QString::fromStdString(command::serialize(*outcome.canonical_invocation)));
   lines = result_lines(outcome.envelope);
   if (pymol_syntax && outcome.succeeded() && !lines.isEmpty()) lines = lines.mid(0, 1);  // keep only "ran N PML statements"
+  // Long tables (contacts, per-frame series) stay in the Results panel; the output window shows the head.
+  constexpr qsizetype kMaxOutputLines = 40;
+  if (outcome.succeeded() && lines.size() > kMaxOutputLines + 10) {
+    const auto hidden = lines.size() - kMaxOutputLines;
+    lines = lines.mid(0, kMaxOutputLines);
+    lines << QStringLiteral("… ") + QString::number(hidden) + QStringLiteral(" more lines; stored results are in Analyze ▸ Results");
+  }
   if (!outcome.succeeded()) {
     const auto &failure = std::get<operation::Error>(outcome.envelope.payload);
     lines.clear();
@@ -6680,6 +6705,7 @@ QVariantMap MolecularViewport::executeCommandLine(const QString &text) {
     emit selectionChanged();
     emit representationChanged();
   }
+  if (outcome.succeeded()) emit analysisResultsChanged();
   result.insert(QStringLiteral("mutated"), mutating);
   result.insert(QStringLiteral("lines"), lines);
   return result;
@@ -6771,6 +6797,192 @@ QVariantList MolecularViewport::commandCatalog() const {
     catalog.push_back(entry);
   }
   return catalog;
+}
+
+namespace {
+QVariantMap runJsonAction(const gui::ActionAdapter &actions, const char *command,
+                          const std::map<std::string, std::string> &parameters) {
+  gui::Action action;
+  action.command_name = command;
+  for (const auto &[key, value] : parameters) action.parameters.emplace(key, value);
+  operation::TaskContext context;
+  const auto outcome = actions.trigger(action, context);
+  const auto rendered = command::render(outcome.envelope, operation::OutputFormat::json);
+  if (!rendered.has_value()) return {};
+  const auto document = QJsonDocument::fromJson(QByteArray::fromStdString(rendered.value()));
+  if (!document.isObject()) return {};
+  const auto root = document.object();
+  if (root.value(QStringLiteral("status")).toString() != QStringLiteral("ok")) return {};
+  return root.value(QStringLiteral("data")).toObject().toVariantMap();
+}
+} // namespace
+
+QVariantList MolecularViewport::settingCatalog() const {
+  QVariantList rows;
+  const auto data = runJsonAction(actions_, "setting list", {});
+  const auto table = data.value(QStringLiteral("table")).toMap();
+  const auto columns = table.value(QStringLiteral("columns")).toStringList();
+  for (const auto &row_value : table.value(QStringLiteral("rows")).toList()) {
+    const auto cells = row_value.toList();
+    QVariantMap row;
+    for (qsizetype i = 0; i < columns.size() && i < cells.size(); ++i) row.insert(columns.at(i), cells.at(i));
+    rows.push_back(row);
+  }
+  return rows;
+}
+
+QVariantMap MolecularViewport::selectionPreview(const QString &expression) const {
+  QVariantMap result;
+  const auto text = expression.trimmed();
+  if (text.isEmpty()) {
+    result.insert(QStringLiteral("ok"), false);
+    result.insert(QStringLiteral("message"), QString{});
+    return result;
+  }
+  gui::Action action;
+  action.command_name = "object count";
+  action.parameters.emplace("selection", text.toStdString());
+  operation::TaskContext context;
+  const auto outcome = actions_.trigger(action, context);
+  if (!outcome.succeeded()) {
+    result.insert(QStringLiteral("ok"), false);
+    const auto &failure = std::get<operation::Error>(outcome.envelope.payload);
+    result.insert(QStringLiteral("message"), QString::fromStdString(failure.message));
+    return result;
+  }
+  const auto rendered = command::render(outcome.envelope, operation::OutputFormat::json);
+  const auto document = rendered.has_value() ? QJsonDocument::fromJson(QByteArray::fromStdString(rendered.value())) : QJsonDocument{};
+  const auto data = document.object().value(QStringLiteral("data")).toObject();
+  result.insert(QStringLiteral("ok"), true);
+  result.insert(QStringLiteral("atomCount"), data.value(QStringLiteral("atom_count")).toVariant());
+  result.insert(QStringLiteral("objectAtomCount"), data.value(QStringLiteral("object_atom_count")).toVariant());
+  result.insert(QStringLiteral("message"), QString{});
+  return result;
+}
+
+QVariantMap MolecularViewport::commandData(const QString &name, const QVariantMap &arguments) const {
+  std::map<std::string, std::string> parameters;
+  for (auto it = arguments.cbegin(); it != arguments.cend(); ++it)
+    parameters.emplace(it.key().toStdString(), it.value().toString().toStdString());
+  return runJsonAction(actions_, name.toStdString().c_str(), parameters);
+}
+
+bool MolecularViewport::fileExists(const QString &path) const { return QFileInfo::exists(path); }
+
+bool MolecularViewport::fileContainsText(const QString &path, const QString &needle) const {
+  QFile file{path};
+  if (!file.open(QIODevice::ReadOnly)) return false;
+  return file.read(256 * 1024).contains(needle.toUtf8());
+}
+
+QString MolecularViewport::auditCommandLine(const QString &text) const {
+  const auto line = text.trimmed().toStdString();
+  bool quoting_ok = true;
+  const auto words = split_command_words(line, quoting_ok);
+  if (!quoting_ok) return QStringLiteral("unterminated quote");
+  if (words.empty()) return QStringLiteral("empty command");
+  if (words.front() == "help" || (words.front() == "clear" && words.size() == 1U)) return {};  // shell built-ins
+  command::Invocation invocation;
+  if (words.front() == "invoke") {
+    const auto parsed = command::parse_canonical(line);
+    if (!parsed.has_value()) return QString::fromStdString(parsed.error().message);
+    invocation = parsed.value();
+  } else {
+    std::set<std::string> names;
+    for (const auto &descriptor : registry_.descriptors()) names.insert(descriptor.canonical_name);
+    for (const auto &alias : registry_.aliases()) names.insert(alias.name);
+    std::size_t name_words = 0;
+    std::string name;
+    std::string candidate;
+    for (std::size_t k = 1; k <= std::min<std::size_t>(words.size(), 4U); ++k) {
+      candidate += (k == 1U ? "" : " ") + words[k - 1U];
+      if (names.contains(candidate)) { name_words = k; name = candidate; }
+    }
+    const bool option_form = name_words > 0U && words.size() > name_words && words[name_words].starts_with("--");
+    if (option_form) {
+      invocation.canonical_name = name;
+      for (std::size_t i = name_words; i < words.size(); i += 2U) {
+        if (!words[i].starts_with("--") || words[i].size() == 2U || i + 1U >= words.size())
+          return QStringLiteral("malformed option near '") + QString::fromStdString(words[i]) + QLatin1Char('\'');
+        invocation.arguments[words[i].substr(2)] = words[i + 1U];
+      }
+    } else if (name_words > 0U && name_words == words.size() && name.find(' ') != std::string::npos) {
+      invocation.canonical_name = name;
+    } else {
+      const auto data = runJsonAction(actions_, "pml translate", {{"text", line}});
+      if (data.isEmpty()) return QStringLiteral("not a command and PyMOL translation is unavailable");
+      if (data.value(QStringLiteral("failed_statements")).toInt() > 0) {
+        for (const auto &statement : data.value(QStringLiteral("statements")).toList())
+          for (const auto &diagnostic : statement.toMap().value(QStringLiteral("diagnostics")).toList())
+            if (diagnostic.toMap().value(QStringLiteral("severity")).toString() == QStringLiteral("error"))
+              return diagnostic.toMap().value(QStringLiteral("message")).toString();
+        return QStringLiteral("PyMOL statement does not translate");
+      }
+      return {};
+    }
+  }
+  auto target = invocation.canonical_name;
+  for (const auto &alias : registry_.aliases())
+    if (alias.name == target) target = alias.canonical_name;
+  for (const auto &descriptor : registry_.descriptors()) {
+    if (descriptor.canonical_name != target) continue;
+    for (const auto &[key, value] : invocation.arguments) {
+      const auto parameter = std::find_if(descriptor.parameters.begin(), descriptor.parameters.end(),
+                                          [&key](const auto &p) { return p.name == key; });
+      if (parameter == descriptor.parameters.end())
+        return QStringLiteral("'") + QString::fromStdString(target) + QStringLiteral("' has no option --") + QString::fromStdString(key);
+      if (!parameter->allowed_values.empty() &&
+          std::find(parameter->allowed_values.begin(), parameter->allowed_values.end(), value) == parameter->allowed_values.end())
+        return QStringLiteral("--") + QString::fromStdString(key) + QStringLiteral(" does not allow '") + QString::fromStdString(value) + QLatin1Char('\'');
+    }
+    for (const auto &parameter : descriptor.parameters)
+      if (parameter.required && !parameter.default_value.has_value() && invocation.arguments.count(parameter.name) == 0U)
+        return QStringLiteral("'") + QString::fromStdString(target) + QStringLiteral("' needs --") + QString::fromStdString(parameter.name);
+    return {};
+  }
+  return QStringLiteral("unknown command '") + QString::fromStdString(target) + QLatin1Char('\'');
+}
+
+QVariantMap MolecularViewport::editRevisions() const {
+  QVariantMap result;
+  const auto *object = workspace_->active_object();
+  if (object == nullptr) return result;
+  result.insert(QStringLiteral("topologyVersion"), QVariant::fromValue<qulonglong>(static_cast<qulonglong>(object->system->topology()->version())));
+  result.insert(QStringLiteral("coordinateSourceRevision"), QVariant::fromValue<qulonglong>(static_cast<qulonglong>(object->coordinate_source_revision)));
+  result.insert(QStringLiteral("trajectory"), object->trajectory.has_value());
+  return result;
+}
+
+QVariantList MolecularViewport::volumeItems() const {
+  QVariantList rows;
+  const auto data = runJsonAction(actions_, "volume list", {});
+  for (const auto &entry : data.value(QStringLiteral("volumes")).toList()) rows.push_back(entry);
+  return rows;
+}
+
+QVariantList MolecularViewport::selectionKeywords() const {
+  QVariantList rows;
+  const auto data = runJsonAction(actions_, "select keywords", {});
+  const auto table = data.value(QStringLiteral("table")).toMap();
+  const auto columns = table.value(QStringLiteral("columns")).toStringList();
+  for (const auto &row_value : table.value(QStringLiteral("rows")).toList()) {
+    const auto cells = row_value.toList();
+    QVariantMap row;
+    for (qsizetype i = 0; i < columns.size() && i < cells.size(); ++i) row.insert(columns.at(i), cells.at(i));
+    rows.push_back(row);
+  }
+  return rows;
+}
+
+QVariantMap MolecularViewport::settingState(const QString &name, const QString &scope) const {
+  const auto data = runJsonAction(actions_, "setting get",
+                                  {{"name", name.trimmed().toStdString()}, {"scope", scope.trimmed().toLower().toStdString()}});
+  if (data.isEmpty()) return {};
+  QVariantMap state;
+  state.insert(QStringLiteral("value"), data.value(QStringLiteral("value")));
+  state.insert(QStringLiteral("overridden"), !data.value(QStringLiteral("source_scope")).isNull());
+  state.insert(QStringLiteral("type"), data.value(QStringLiteral("type")));
+  return state;
 }
 
 } // namespace molshredder::desktop

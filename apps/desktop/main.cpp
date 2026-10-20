@@ -20,6 +20,7 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickWindow>
+
 #include <QSGRendererInterface>
 #include <QTimer>
 #include <QTemporaryDir>
@@ -137,6 +138,20 @@ int main(int argc, char *argv[]) {
                  "MolShredder redirected renderer stage: process-entry\n");
     std::fflush(stderr);
   }
+  // Automated runs (smoke tests, screenshots, `--command`) never take the foreground. On macOS Qt turns the process
+  // into a foreground application unless told not to, which steals keyboard focus from whatever the person is
+  // typing into; the window itself is also kept at the bottom and outside the screens (see NextShell.qml).
+  const auto automated_run = [&] {
+    for (int index = 1; index < argc; ++index) {
+      const std::string_view argument{argv[index]};
+      if (argument.find("smoke") != std::string_view::npos || argument.starts_with("--screenshot") ||
+          argument.starts_with("--command"))
+        return true;
+    }
+    return false;
+  }();
+  if (automated_run && !qEnvironmentVariableIsSet("MOLSHREDDER_FOREGROUND"))
+    qputenv("QT_MAC_DISABLE_FOREGROUND_APPLICATION_TRANSFORM", QByteArrayLiteral("1"));
   molshredder::python::link_embedded_module();
   if (redirected_render_requested) {
     std::fprintf(stderr,
@@ -199,7 +214,9 @@ int main(int argc, char *argv[]) {
   bool direct_volume_smoke = false;
   std::optional<QString> redirected_render_smoke;
   std::optional<QString> screenshot;
-  bool next_ui = false;
+  // The new shell (qml_next/) is the application. MOLSHREDDER_UI=legacy or --ui=legacy starts the old Main.qml shell
+  // until it is removed (SEQ-330 G5), so the whole smoke suite can still be repeated against it.
+  bool next_ui = qgetenv("MOLSHREDDER_UI") != "legacy";
   QString pick_mode;  // atom|residue|chain|object for --picking-smoke
   std::vector<QString> startup_commands;
   std::vector<QString> open_paths;
@@ -297,6 +314,8 @@ int main(int argc, char *argv[]) {
           argument.substr(std::string_view{"--screenshot="}.size());
       screenshot =
           QString::fromUtf8(path.data(), static_cast<qsizetype>(path.size()));
+    } else if (argument == "--ui=legacy") {
+      next_ui = false;
     } else if (argument == "--ui=next" || (argument == "--ui" && index + 1 < argc && std::string_view{argv[index + 1]} == "next")) {
       next_ui = true;
       if (argument == "--ui") ++index;
@@ -369,6 +388,13 @@ int main(int argc, char *argv[]) {
   localization.setEngine(&engine);
   engine.rootContext()->setContextProperty(QStringLiteral("localization"),
                                            &localization);
+  // Automated runs must not take the foreground from the person using the machine: the QML window is created
+  // at the bottom of the window stack, without keyboard focus and outside the visible screens.
+  // MOLSHREDDER_FOREGROUND=1 restores the normal window for debugging a test by eye.
+  engine.rootContext()->setContextProperty(
+      QStringLiteral("backgroundRun"),
+      QCoreApplication::applicationName() == QStringLiteral("MolShredder-test") &&
+          !qEnvironmentVariableIsSet("MOLSHREDDER_FOREGROUND"));
   engine.load(QUrl{next_ui ? QStringLiteral("qrc:/NextShell.qml") : QStringLiteral("qrc:/Main.qml")});
   if (engine.rootObjects().isEmpty())
     return EXIT_FAILURE;
@@ -376,6 +402,9 @@ int main(int argc, char *argv[]) {
       qobject_cast<QQuickWindow *>(engine.rootObjects().constFirst());
   if (window == nullptr)
     return EXIT_FAILURE;
+  // Automated runs must not take the foreground from the person using the machine: the window stays at the
+  // bottom, never takes keyboard focus and sits far outside the visible screens. MOLSHREDDER_FOREGROUND=1 restores
+  // the normal window for debugging a test by eye.
   qInfo("MolShredder localization ready: language=%s title=%s",
         qUtf8Printable(localization.currentLanguage()),
         qUtf8Printable(window->title()));
@@ -383,6 +412,14 @@ int main(int argc, char *argv[]) {
       QStringLiteral("molecularViewport"));
   if (viewport == nullptr)
     return EXIT_FAILURE;
+  // The new shell opens its panels through `ui:` hooks and names them *Panel / *Overlay; the old shell binds
+  // Main.qml actions to them. One smoke body serves both: it asks the shell it runs against.
+  const auto next_panel_visible = [window](const char *hook, const char *name) {
+    QMetaObject::invokeMethod(window, "run", Qt::DirectConnection,
+                              Q_ARG(QVariant, QVariant{QString::fromLatin1(hook)}));
+    auto *panel = window->findChild<QObject *>(QString::fromLatin1(name));
+    return panel != nullptr && panel->property("visible").toBool();
+  };
   if (information_architecture_smoke) {
     const auto open_metadata =
         localization.actionMetadata(QStringLiteral("file.open"));
@@ -1162,10 +1199,11 @@ int main(int argc, char *argv[]) {
         packet.mesh_triangles.size() == 2U &&
         packet.pick_targets.size() == 1U &&
         viewport->selectionText().contains(QStringLiteral("Volume")) &&
-        panel != nullptr &&
-        panel->property("actionId").toString() ==
-            QStringLiteral("represent.volume-slice") &&
-        panel->property("entryAction").value<QObject *>() != nullptr;
+        (next_ui ? next_panel_visible("ui:volume slice", "volumePanel")
+                 : (panel != nullptr &&
+                    panel->property("actionId").toString() ==
+                        QStringLiteral("represent.volume-slice") &&
+                    panel->property("entryAction").value<QObject *>() != nullptr));
     if (!passed) {
       qCritical("MolShredder desktop volume slice smoke failed: %s",
                 viewport->statusText().toUtf8().constData());
@@ -1194,11 +1232,12 @@ int main(int argc, char *argv[]) {
                         !packet.pick_targets.empty() &&
                         viewport->selectionText().contains(
                             QStringLiteral("Atom 1")) &&
-                        action != nullptr && panel != nullptr &&
-                        panel->property("actionId").toString() ==
-                            QStringLiteral("represent.surface") &&
-                        panel->property("entryAction").value<QObject *>() !=
-                            nullptr;
+                        (next_ui ? next_panel_visible("ui:surface", "surfacePanel")
+                                 : (action != nullptr && panel != nullptr &&
+                                    panel->property("actionId").toString() ==
+                                        QStringLiteral("represent.surface") &&
+                                    panel->property("entryAction").value<QObject *>() !=
+                                        nullptr));
     if (!passed) {
       qCritical("MolShredder desktop molecular surface smoke failed: shown=%d representation=%s vertices=%llu triangles=%llu picks=%llu selection=%s action=%d status=%s",
                 shown ? 1 : 0,
@@ -1248,7 +1287,8 @@ int main(int argc, char *argv[]) {
                             512U * 1024U * 1024U &&
                         viewport->directVolumePickId() != 0U &&
                         stereo_enabled && viewport->stereoEnabled() &&
-                        action != nullptr && panel != nullptr &&
+                        (next_ui ? next_panel_visible("ui:volume direct", "volumePanel")
+                                 : (action != nullptr && panel != nullptr)) &&
                         cancel_button != nullptr;
     if (!passed) {
       qCritical("MolShredder desktop direct volume smoke failed: cancelled=%d shown=%d completed=%d stereo=%d stage=%s status=%s",
@@ -1498,6 +1538,11 @@ int main(int argc, char *argv[]) {
         QStringLiteral("topologyEditOverlay"));
     auto *topology_apply_button = window->findChild<QObject *>(
         QStringLiteral("topologyEditApplyButton"));
+    // New shell: atoms and bonds are edited in one panel (Edit atoms and bonds).
+    const auto next_topology_opened =
+        next_ui && QMetaObject::invokeMethod(window, "openTopologyEditor", Qt::DirectConnection) &&
+        window->findChild<QObject *>(QStringLiteral("coordinateEditOverlay")) != nullptr &&
+        window->findChild<QObject *>(QStringLiteral("coordinateEditOverlay"))->property("visible").toBool();
     const auto chemistry = viewport->chemicalSemanticsJson();
     const auto &packet = viewport->renderPacket();
     const auto passed = built && undone && redone && atom_edited &&
@@ -1510,13 +1555,15 @@ int main(int argc, char *argv[]) {
                         packet.spheres.size() == 2U && opened &&
                         overlay != nullptr && apply_button != nullptr &&
                         overlay->property("visible").toBool() &&
-                        overlay->property("actionId").toString() ==
-                            QStringLiteral("build.molecule") &&
-                        topology_opened && topology_overlay != nullptr &&
-                        topology_apply_button != nullptr &&
-                        topology_overlay->property("visible").toBool() &&
-                        topology_overlay->property("actionId").toString() ==
-                            QStringLiteral("edit.atom-properties") &&
+                        (next_ui ||
+                         overlay->property("actionId").toString() ==
+                             QStringLiteral("build.molecule")) &&
+                        (next_ui ? next_topology_opened
+                                 : (topology_opened && topology_overlay != nullptr &&
+                                    topology_apply_button != nullptr &&
+                                    topology_overlay->property("visible").toBool() &&
+                                    topology_overlay->property("actionId").toString() ==
+                                        QStringLiteral("edit.atom-properties"))) &&
                         chemistry.contains(
                             QStringLiteral("\"topology_version\":4")) &&
                         chemistry.contains(

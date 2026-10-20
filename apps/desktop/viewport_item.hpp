@@ -363,6 +363,10 @@ public:
                                  const QString &unit,
                                  qulonglong memory_budget_bytes);
   Q_INVOKABLE bool runPythonScript(const QUrl &url, bool isolated = false);
+  // Same, from a plain file path (spaces, '#' and non-ASCII characters are safe).
+  Q_INVOKABLE bool runPythonScriptPath(const QString &path, bool isolated = false) {
+    return runPythonScript(QUrl::fromLocalFile(path), isolated);
+  }
   Q_INVOKABLE void cancelPythonScript();
   Q_INVOKABLE void clearScriptOutput();
   Q_INVOKABLE QString systemInfoJson() const;
@@ -443,6 +447,29 @@ public:
   Q_INVOKABLE QVariantList sequenceItems() const;
   // Every registered command with its parameters (name, summary, undo, parameters[]), for forms and help.
   Q_INVOKABLE QVariantList commandCatalog() const;
+  // Render-setting catalog rows {name, type, default, minimum, maximum, unit, scope} for the inspector.
+  Q_INVOKABLE QVariantList settingCatalog() const;
+  // Resolved value of one setting at `scope`: {value, overridden, type}; empty map when it cannot be read.
+  Q_INVOKABLE QVariantMap settingState(const QString &name, const QString &scope) const;
+  // Parses and counts a selection expression of the active object without changing state:
+  // {ok, atomCount, objectAtomCount, message}.
+  Q_INVOKABLE QVariantMap selectionPreview(const QString &expression) const;
+  // Selection keywords {keyword, kind, aliases, example} for the expression editor.
+  Q_INVOKABLE QVariantList selectionKeywords() const;
+  // Loaded volumes {object_id, name, active, visible, dimensions, minimum, maximum, representations} for the panel.
+  Q_INVOKABLE QVariantList volumeItems() const;
+  // Runs one read-only command with string arguments and returns its data object (empty map on failure). The
+  // panels use it for listings (`object atoms`, `object bonds`, …); mutations go through executeCommandLine.
+  Q_INVOKABLE QVariantMap commandData(const QString &name, const QVariantMap &arguments) const;
+  // The two revisions every molecular edit command must quote: {topologyVersion, coordinateSourceRevision, trajectory}.
+  Q_INVOKABLE QVariantMap editRevisions() const;
+  // Checks a command line without running it: the command exists, its options exist with allowed values, its
+  // required options are present; PyMOL syntax must translate without failed statements. Empty when fine.
+  Q_INVOKABLE QString auditCommandLine(const QString &text) const;
+  // True when `path` names an existing file (the smoke tests check what the shell wrote).
+  Q_INVOKABLE bool fileExists(const QString &path) const;
+  // True when the first 256 KiB of the file contain `needle` (the script panel warns before an isolated run).
+  Q_INVOKABLE bool fileContainsText(const QString &path, const QString &needle) const;
   Q_INVOKABLE QString pymolViewText() const;
   Q_INVOKABLE bool importPymolView(const QString &values);
   Q_INVOKABLE bool importPymolViewAnimated(const QString &values,

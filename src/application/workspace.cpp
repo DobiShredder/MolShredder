@@ -2775,9 +2775,11 @@ Workspace::list_bonds(std::string selection_expression, std::size_t limit) const
     return "unknown";
   };
   AtomListing listing;
-  listing.columns = {"index1", "index2", "id1", "id2", "name1", "name2", "order"};
+  listing.columns = {"index1", "index2", "id1", "id2", "name1", "name2", "order", "bond_id"};
   for (const auto selected : mask.value()) listing.selected_atom_count += selected != 0U ? 1U : 0U;
+  std::size_t bond_index = 0U;
   for (const auto &bond : topology.bonds()) {
+    const auto current_bond_index = bond_index++;
     if (mask.value()[bond.first.value] == 0U && mask.value()[bond.second.value] == 0U) continue;
     if (listing.rows.size() >= limit) {
       listing.truncated = true;
@@ -2790,7 +2792,11 @@ Workspace::list_bonds(std::string selection_expression, std::size_t limit) const
                             first_id.has_value() ? first_id->value : std::uint64_t{0},
                             second_id.has_value() ? second_id->value : std::uint64_t{0},
                             topology.atoms()[bond.first.value].name,
-                            topology.atoms()[bond.second.value].name, order_name(bond.order)});
+                            topology.atoms()[bond.second.value].name, order_name(bond.order),
+                            [&] {
+                              const auto id = topology.bond_id(current_bond_index);
+                              return id.has_value() ? id->value : std::uint64_t{0};
+                            }()});
   }
   return R::success(std::move(listing));
 }

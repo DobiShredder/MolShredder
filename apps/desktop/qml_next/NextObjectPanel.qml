@@ -12,6 +12,9 @@ Rectangle {
     signal commandIn(string owner, string text)
     signal formRequested(string name, var preset)
     signal renameRequested(string name)
+    signal inspectRequested(string name)
+    signal deleteRequested(string name)
+    signal selectionEditRequested(string name, string owner)
     signal mouseModeRequested(string mode)
     color: NextTheme.panel
 
@@ -38,7 +41,7 @@ Rectangle {
                 {text: qsTr("show all members"), command: "enable " + name},
                 {text: qsTr("hide all members"), command: "disable " + name},
                 {separator: true},
-                {text: qsTr("ungroup"), command: "group ungroup --name " + name}
+                {text: qsTr("ungroup"), command: "group excise --name " + name}
             ]
         }
         if (kind === "A" && rowKind === "selection") {
@@ -47,6 +50,7 @@ Rectangle {
                 {text: qsTr("center"), command: "center " + sel},
                 {text: qsTr("orient"), command: "orient " + sel},
                 {separator: true},
+                {text: qsTr("edit expression…"), action: "editSelection", name: name},
                 {text: qsTr("create object…"), form: "object create", preset: {"selection": "@" + name}},
                 {text: qsTr("extract to object…"), form: "object extract", preset: {"selection": "@" + name}},
                 {separator: true},
@@ -61,13 +65,14 @@ Rectangle {
                 {separator: true},
                 {text: qsTr("rename…"), action: "rename", name: name},
                 {text: qsTr("duplicate…"), form: "object copy", preset: {"object": name}},
-                {text: qsTr("delete"), command: "delete " + sel},
+                {text: qsTr("delete…"), action: "confirmDelete", name: name},
                 {separator: true},
                 {text: qsTr("align to…"), form: "object align", preset: {"mobile-object": name}},
                 {text: qsTr("split states"), command: "object split-states --object " + name},
                 {text: qsTr("fix"), command: "object fix --object " + name},
                 {text: qsTr("free"), command: "object free --object " + name},
                 {separator: true},
+                {text: qsTr("inspect…"), action: "inspect", name: name},
                 {text: qsTr("analyze…"), form: "analyze center", preset: {"selection": sel}}
             ]
         }
@@ -125,6 +130,9 @@ Rectangle {
             else if (entry.command) panel.command(entry.command)
             else if (entry.form) panel.formRequested(entry.form, entry.preset || ({}))
             else if (entry.action === "rename") panel.renameRequested(entry.name)
+            else if (entry.action === "inspect") panel.inspectRequested(entry.name)
+            else if (entry.action === "confirmDelete") panel.deleteRequested(entry.name)
+            else if (entry.action === "editSelection") panel.selectionEditRequested(entry.name, owner)
         }
     }
 
@@ -139,6 +147,16 @@ Rectangle {
             font.pixelSize: NextTheme.smallFont
             font.letterSpacing: 1.1
             color: NextTheme.muted
+        }
+        NextButton {
+            objectName: "workspaceScopeButton"
+            anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
+            text: qsTr("All objects")
+            pixelSize: NextTheme.smallFont
+            checkable: true
+            checked: panel.viewport ? panel.viewport.workspaceScope : false
+            ToolTip.text: qsTr("When on, show, hide and color apply to every object, not only the active one.")
+            onClicked: panel.viewport.workspaceScope = !panel.viewport.workspaceScope
         }
         Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: NextTheme.line }
     }
@@ -205,7 +223,7 @@ Rectangle {
                     anchors.fill: parent
                     hoverEnabled: true
                     onClicked: {
-                        if (isObject) panel.command("object activate --object " + modelData.name)
+                        if (isObject) panel.command("object activate --id " + modelData.id)
                         else if (isGroup) panel.command("group toggle --name " + modelData.name)
                     }
                     onDoubleClicked: if (isObject) panel.renameRequested(modelData.name)

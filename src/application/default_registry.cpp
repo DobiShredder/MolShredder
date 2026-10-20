@@ -880,6 +880,16 @@ command::Value render_setting_value(const render::RenderSettingValue &value) {
       value);
 }
 
+// Table cells must be scalars, so a vector default is listed as "x, y, z".
+command::Value table_setting_default(const render::RenderSettingValue &value) {
+  if (const auto *vector = std::get_if<render::RenderSettingVector3>(&value)) {
+    std::ostringstream stream;
+    stream << (*vector)[0] << ", " << (*vector)[1] << ", " << (*vector)[2];
+    return stream.str();
+  }
+  return render_setting_value(value);
+}
+
 std::string_view render_setting_type_name(render::RenderSettingValueType type) {
   using enum render::RenderSettingValueType;
   switch (type) {
@@ -5369,7 +5379,7 @@ command::Registry make_default_registry(
           table.rows.push_back(
               {definition.stable_id, definition.name,
                std::string{render_setting_type_name(definition.value_type)},
-               render_setting_value(definition.default_value),
+               table_setting_default(definition.default_value),
                definition.minimum.has_value()
                    ? command::Value{*definition.minimum}
                    : command::Value{nullptr},
