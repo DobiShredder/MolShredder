@@ -56,6 +56,11 @@ Popup {
     }
 
     component Field: TextField {
+        // Said by screen readers; give each field a `label:` where no placeholder tells what it is.
+        property string label: ""
+        property string derivedLabel: ""
+        Accessible.name: label.length > 0 ? label : (placeholderText.length > 0 ? placeholderText : derivedLabel)
+        Item { visible: false; width: 0; height: 0; Component.onCompleted: parent.derivedLabel = NextTheme.captionBefore(parent) }
         implicitHeight: 26
         implicitWidth: 70
         color: NextTheme.text
@@ -65,6 +70,10 @@ Popup {
         background: Rectangle { radius: NextTheme.radius; color: NextTheme.chrome; border.color: parent.activeFocus ? NextTheme.active : NextTheme.line }
     }
     component Choice: ComboBox {
+        property string label: ""
+        property string derivedLabel: ""
+        Accessible.name: label.length > 0 ? label : (derivedLabel.length > 0 ? derivedLabel : displayText)
+        Item { visible: false; width: 0; height: 0; Component.onCompleted: parent.derivedLabel = NextTheme.captionBefore(parent) }
         implicitHeight: 26
         implicitWidth: 92
         font.pixelSize: NextTheme.fontSize
@@ -79,6 +88,7 @@ Popup {
     }
     component Check: CheckBox {
         id: check
+        Accessible.name: text
         font.pixelSize: NextTheme.fontSize
         implicitHeight: 26
         indicator: Rectangle {

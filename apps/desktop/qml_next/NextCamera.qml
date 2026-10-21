@@ -60,6 +60,11 @@ Popup {
     }
 
     component Field: TextField {
+        // Said by screen readers; give each field a `label:` where no placeholder tells what it is.
+        property string label: ""
+        property string derivedLabel: ""
+        Accessible.name: label.length > 0 ? label : (placeholderText.length > 0 ? placeholderText : derivedLabel)
+        Item { visible: false; width: 0; height: 0; Component.onCompleted: parent.derivedLabel = NextTheme.captionBefore(parent) }
         implicitHeight: 26
         implicitWidth: 70
         color: NextTheme.text
@@ -123,9 +128,9 @@ Popup {
                 Row {
                     spacing: 6
                     Field { id: objectOriginInput; objectName: "objectOriginInput"; implicitWidth: 110; placeholderText: qsTr("object (current)") }
-                    Field { id: originX; objectName: "objectOriginX"; implicitWidth: 56; text: "0" }
-                    Field { id: originY; implicitWidth: 56; text: "0" }
-                    Field { id: originZ; implicitWidth: 56; text: "0" }
+                    Field { id: originX; label: qsTr("Origin x"); objectName: "objectOriginX"; implicitWidth: 56; text: "0" }
+                    Field { id: originY; label: qsTr("Origin y"); implicitWidth: 56; text: "0" }
+                    Field { id: originZ; label: qsTr("Origin z"); implicitWidth: 56; text: "0" }
                 }
                 Row {
                     spacing: 6
@@ -209,7 +214,7 @@ Popup {
                 Row {
                     spacing: 6
                     NextButton { id: navigationAxisButton; objectName: "navigationAxisButton"; text: panel.navigationAxis; onClicked: panel.navigationAxis = panel.cycle(panel.axes, panel.navigationAxis) }
-                    Field { id: navigationStepInput; objectName: "navigationStepInput"; implicitWidth: 56; text: "1" }
+                    Field { id: navigationStepInput; label: qsTr("Step size"); objectName: "navigationStepInput"; implicitWidth: 56; text: "1" }
                 }
                 Flow {
                     width: parent.width
@@ -230,6 +235,7 @@ Popup {
                     TextArea {
                         id: pymolViewInput
                         objectName: "pymolViewInput"
+                        Accessible.name: qsTr("PyMOL view text")
                         color: NextTheme.text
                         font.family: NextTheme.mono
                         font.pixelSize: 11

@@ -127,6 +127,7 @@ Popup {
                     required property string modelData
                     required property int index
                     text: modelData
+                    Accessible.name: modelData
                     font.pixelSize: NextTheme.fontSize
                     contentItem: Text {
                         text: parent.text
@@ -229,6 +230,7 @@ Popup {
                         width: parent.width
                         TextField {
                             id: customColor
+                            Accessible.name: qsTr("name or 0xRRGGBB")
                             Layout.fillWidth: true
                             placeholderText: qsTr("name or 0xRRGGBB")
                             placeholderTextColor: NextTheme.muted
@@ -271,6 +273,7 @@ Popup {
                     }
                     ComboBox {
                         id: scopeBox
+                        Accessible.name: qsTr("Scope")
                         model: inspector.scopes
                         currentIndex: 1
                         implicitWidth: 92
@@ -336,6 +339,7 @@ Popup {
                         Component {
                             id: boolEditor
                             Switch {
+                                Accessible.name: settingRow.modelData.name
                                 checked: settingRow.state.value === true
                                 onToggled: inspector.setSetting(settingRow.modelData.name, checked ? "true" : "false")
                             }
@@ -343,6 +347,7 @@ Popup {
                         Component {
                             id: textEditor
                             TextField {
+                                Accessible.name: settingRow.modelData.name
                                 width: 110
                                 implicitHeight: 24
                                 text: {

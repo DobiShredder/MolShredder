@@ -113,6 +113,37 @@ Rectangle {
         return entries
     }
 
+    // The row under the keyboard cursor (null when the list is empty).
+    function currentRow() { return rows && list.currentIndex >= 0 && list.currentIndex < rows.length ? rows[list.currentIndex] : null }
+    // Returns true when the key was a list key.
+    function keyAction(key, modifiers) {
+        const row = currentRow()
+        if (!row) return false
+        const isObject = row.kind === "object", isGroup = row.kind === "group", isSelection = row.kind === "selection"
+        if (key === Qt.Key_Return || key === Qt.Key_Enter) {
+            if (isObject) command("object activate --id " + row.id)
+            else if (isGroup) command("group toggle --name " + row.name)
+            return true
+        }
+        if (key === Qt.Key_Space) {
+            if (!isSelection) command((row.visible ? "disable " : "enable ") + row.name)
+            return true
+        }
+        if (key === Qt.Key_F2) { if (isObject) renameRequested(row.name); return true }
+        if (key === Qt.Key_Delete || key === Qt.Key_Backspace) {
+            if (isObject) deleteRequested(row.name)
+            else if (isSelection) commandIn(row.owner, "delete " + row.name)
+            return true
+        }
+        if (key === Qt.Key_Menu || (key === Qt.Key_F10 && (modifiers & Qt.ShiftModifier) !== 0)) {
+            popup.owner = isSelection ? row.owner : ""
+            popup.entries = menuFor("A", row.name, row.kind)
+            popup.popup(list, 40, (list.currentIndex - 0) * NextTheme.rowHeight + NextTheme.rowHeight)
+            return true
+        }
+        return false
+    }
+
     // Opens the menu of the first object row (used by the `ui:objectmenu` test hook).
     function openMenu(kind) {
         if (!rows || rows.length === 0) return
@@ -168,6 +199,14 @@ Rectangle {
         model: panel.rows
         boundsBehavior: Flickable.StopAtBounds
         ScrollBar.vertical: ScrollBar { }
+        // Keyboard: Up/Down move, Enter activates (a group opens or closes), Space shows or hides, F2 renames,
+        // Delete asks to delete, the Menu key or Shift+F10 opens the actions menu.
+        activeFocusOnTab: true
+        keyNavigationEnabled: true
+        currentIndex: 0
+        Accessible.role: Accessible.List
+        Accessible.name: qsTr("Objects")
+        Keys.onPressed: function(event) { if (panel.keyAction(event.key, event.modifiers)) event.accepted = true }
         delegate: Rectangle {
             id: row
             required property var modelData
@@ -178,6 +217,16 @@ Rectangle {
             height: NextTheme.rowHeight
             color: modelData.active === true ? NextTheme.activeSoft : (hover.hovered ? NextTheme.chrome : "transparent")
             HoverHandler { id: hover }
+            Accessible.role: Accessible.ListItem
+            Accessible.name: (isSelection ? "(" + modelData.name + ")" : modelData.name) + (isObject && modelData.visible === false ? " " + qsTr("hidden") : "")
+            // the row the keyboard is on
+            Rectangle {
+                anchors.fill: parent
+                color: "transparent"
+                visible: list.activeFocus && row.ListView.isCurrentItem
+                border.width: 2
+                border.color: NextTheme.active
+            }
 
             Text {
                 id: fold

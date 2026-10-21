@@ -101,6 +101,10 @@
 <context>
     <name>NextObjectPanel</name>
     <message>
+        <source>hidden</source>
+        <translation>숨김</translation>
+    </message>
+    <message>
         <source>delete…</source>
         <translation>삭제…</translation>
     </message>
@@ -338,6 +342,36 @@ or drop a file here.</source>
 </context>
 <context>
     <name>NextShell</name>
+    <message>
+        <source>Welcome to MolShredder</source>
+        <translation>MolShredder에 오신 것을 환영합니다</translation>
+    </message>
+    <message>
+        <source>Open a structure to begin. You can also drop a file onto this window.</source>
+        <translation>구조를 열어서 시작하세요. 이 창에 파일을 끌어다 놓아도 됩니다.</translation>
+    </message>
+    <message>
+        <source>Build a molecule…</source>
+        <translation>분자 만들기…</translation>
+    </message>
+    <message>
+        <source>Keyboard shortcuts…</source>
+        <translation>키보드 단축키…</translation>
+    </message>
+    <message>
+        <source>3D viewport</source>
+        <translation>3D viewport</translation>
+    </message>
+    <message>
+        <source>• Type commands in the line below (PyMOL syntax such as show cartoon, or name --option value).
+• Ctrl+K lists every command as a form.
+• Left drag rotates, wheel moves the clipping planes, right drag zooms.
+• Everything here works from the keyboard too.</source>
+        <translation>• 아래 줄에 명령을 입력합니다 (show cartoon 같은 PyMOL 문법 또는 name --option value).
+• Ctrl+K는 모든 명령을 폼으로 보여 줍니다.
+• 왼쪽 드래그는 회전, 휠은 절단면 이동, 오른쪽 드래그는 확대·축소입니다.
+• 여기 있는 모든 것은 키보드로도 쓸 수 있습니다.</translation>
+    </message>
     <message>
         <source>Delete %1?</source>
         <translation>%1을(를) 삭제할까요?</translation>
@@ -854,6 +888,10 @@ or drop a file here.</source>
   <context>
     <name>NextInspector</name>
     <message>
+        <source>Scope</source>
+        <translation>범위</translation>
+    </message>
+    <message>
         <source>Settings tab: changes apply at the scope chosen there; the output window shows each command.</source>
         <translation>설정 탭: 변경은 거기서 고른 범위에 적용되며 출력 창에 각 명령이 표시됩니다.</translation>
     </message>
@@ -1095,6 +1133,10 @@ or drop a file here.</source>
   </context>
   <context>
     <name>NextResults</name>
+    <message>
+        <source>Analysis</source>
+        <translation>분석</translation>
+    </message>
     <message>
         <source>Center</source>
         <translation>중심</translation>
@@ -1645,6 +1687,14 @@ Run something from the Analyze menu.</source>
   <context>
     <name>NextVolume</name>
     <message>
+        <source>Slice index</source>
+        <translation>단면 번호</translation>
+    </message>
+    <message>
+        <source>Level value</source>
+        <translation>레벨 값</translation>
+    </message>
+    <message>
         <source>VOLUMES</source>
         <translation>volume</translation>
     </message>
@@ -1807,6 +1857,30 @@ Run something from the Analyze menu.</source>
   </context>
   <context>
     <name>NextEditor</name>
+    <message>
+        <source>Position x</source>
+        <translation>위치 x</translation>
+    </message>
+    <message>
+        <source>Position y</source>
+        <translation>위치 y</translation>
+    </message>
+    <message>
+        <source>Position z</source>
+        <translation>위치 z</translation>
+    </message>
+    <message>
+        <source>Shift x</source>
+        <translation>이동 x</translation>
+    </message>
+    <message>
+        <source>Shift y</source>
+        <translation>이동 y</translation>
+    </message>
+    <message>
+        <source>Shift z</source>
+        <translation>이동 z</translation>
+    </message>
     <message>
         <source>EDIT ATOMS</source>
         <translation>원자 편집</translation>
@@ -2066,6 +2140,46 @@ Run something from the Analyze menu.</source>
   <context>
     <name>NextBuilder</name>
     <message>
+        <source>Atom %1 charge</source>
+        <translation>원자 %1 전하</translation>
+    </message>
+    <message>
+        <source>Atom %1 element</source>
+        <translation>원자 %1 원소</translation>
+    </message>
+    <message>
+        <source>Atom %1 name</source>
+        <translation>원자 %1 이름</translation>
+    </message>
+    <message>
+        <source>Atom %1 x</source>
+        <translation>원자 %1 x</translation>
+    </message>
+    <message>
+        <source>Atom %1 y</source>
+        <translation>원자 %1 y</translation>
+    </message>
+    <message>
+        <source>Atom %1 z</source>
+        <translation>원자 %1 z</translation>
+    </message>
+    <message>
+        <source>Bond %1 first atom</source>
+        <translation>결합 %1 첫 원자</translation>
+    </message>
+    <message>
+        <source>Bond %1 second atom</source>
+        <translation>결합 %1 둘째 원자</translation>
+    </message>
+    <message>
+        <source>Bond %1 order</source>
+        <translation>결합 %1 차수</translation>
+    </message>
+    <message>
+        <source>Unit</source>
+        <translation>단위</translation>
+    </message>
+    <message>
         <source>Water</source>
         <translation>물</translation>
     </message>
@@ -2192,6 +2306,22 @@ Run something from the Analyze menu.</source>
   </context>
   <context>
     <name>NextCamera</name>
+    <message>
+        <source>Origin x</source>
+        <translation>원점 x</translation>
+    </message>
+    <message>
+        <source>Origin y</source>
+        <translation>원점 y</translation>
+    </message>
+    <message>
+        <source>Origin z</source>
+        <translation>원점 z</translation>
+    </message>
+    <message>
+        <source>Step size</source>
+        <translation>이동 크기</translation>
+    </message>
     <message>
         <source>CAMERA</source>
         <translation>카메라</translation>
@@ -2509,6 +2639,173 @@ Run something from the Analyze menu.</source>
     <message>
         <source>The script could not start.</source>
         <translation>스크립트를 시작할 수 없습니다.</translation>
+    </message>
+  </context>
+  <context>
+    <name>NextShortcuts</name>
+    <message>
+        <source>KEYBOARD SHORTCUTS</source>
+        <translation>키보드 단축키</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>닫기</translation>
+    </message>
+    <message>
+        <source>Anywhere</source>
+        <translation>어디서나</translation>
+    </message>
+    <message>
+        <source>Open structure</source>
+        <translation>구조 열기</translation>
+    </message>
+    <message>
+        <source>All commands</source>
+        <translation>모든 명령</translation>
+    </message>
+    <message>
+        <source>Command line</source>
+        <translation>명령줄</translation>
+    </message>
+    <message>
+        <source>Undo / Redo</source>
+        <translation>되돌리기 / 다시 실행</translation>
+    </message>
+    <message>
+        <source>Output window</source>
+        <translation>출력 창</translation>
+    </message>
+    <message>
+        <source>Sequence viewer</source>
+        <translation>서열 막대</translation>
+    </message>
+    <message>
+        <source>This list</source>
+        <translation>이 목록</translation>
+    </message>
+    <message>
+        <source>Quit</source>
+        <translation>종료</translation>
+    </message>
+    <message>
+        <source>Panels</source>
+        <translation>패널</translation>
+    </message>
+    <message>
+        <source>Inspector</source>
+        <translation>인스펙터</translation>
+    </message>
+    <message>
+        <source>Movie editor</source>
+        <translation>동영상 편집기</translation>
+    </message>
+    <message>
+        <source>Results</source>
+        <translation>결과</translation>
+    </message>
+    <message>
+        <source>Select by expression</source>
+        <translation>식으로 선택</translation>
+    </message>
+    <message>
+        <source>Edit atoms and bonds</source>
+        <translation>원자·결합 편집</translation>
+    </message>
+    <message>
+        <source>Camera</source>
+        <translation>카메라</translation>
+    </message>
+    <message>
+        <source>Views and scenes</source>
+        <translation>view와 scene</translation>
+    </message>
+    <message>
+        <source>Volumes</source>
+        <translation>volume</translation>
+    </message>
+    <message>
+        <source>Viewport (click it or press Tab to focus it)</source>
+        <translation>viewport (클릭하거나 Tab으로 포커스)</translation>
+    </message>
+    <message>
+        <source>Rotate</source>
+        <translation>회전</translation>
+    </message>
+    <message>
+        <source>Move sideways</source>
+        <translation>옆으로 이동</translation>
+    </message>
+    <message>
+        <source>Zoom</source>
+        <translation>확대·축소</translation>
+    </message>
+    <message>
+        <source>Move the clipping planes</source>
+        <translation>절단면 이동</translation>
+    </message>
+    <message>
+        <source>Reset the view</source>
+        <translation>뷰 초기화</translation>
+    </message>
+    <message>
+        <source>Object list (Tab to focus it)</source>
+        <translation>object 목록 (Tab으로 포커스)</translation>
+    </message>
+    <message>
+        <source>Move</source>
+        <translation>이동</translation>
+    </message>
+    <message>
+        <source>Activate object / open or close group</source>
+        <translation>object 활성화 / group 열기·닫기</translation>
+    </message>
+    <message>
+        <source>Show or hide</source>
+        <translation>보이기·숨기기</translation>
+    </message>
+    <message>
+        <source>Rename</source>
+        <translation>이름 변경</translation>
+    </message>
+    <message>
+        <source>Delete</source>
+        <translation>삭제</translation>
+    </message>
+    <message>
+        <source>Actions menu</source>
+        <translation>작업 메뉴</translation>
+    </message>
+    <message>
+        <source>Mouse in the viewport</source>
+        <translation>viewport의 마우스</translation>
+    </message>
+    <message>
+        <source>left drag</source>
+        <translation>왼쪽 드래그</translation>
+    </message>
+    <message>
+        <source>middle drag, or Shift + left drag</source>
+        <translation>가운데 드래그 또는 Shift + 왼쪽 드래그</translation>
+    </message>
+    <message>
+        <source>right drag, or Ctrl + wheel</source>
+        <translation>오른쪽 드래그 또는 Ctrl + 휠</translation>
+    </message>
+    <message>
+        <source>wheel</source>
+        <translation>휠</translation>
+    </message>
+    <message>
+        <source>Select / pick</source>
+        <translation>선택 / 지정</translation>
+    </message>
+    <message>
+        <source>click (Ctrl-click adds)</source>
+        <translation>클릭 (Ctrl-클릭은 추가)</translation>
+    </message>
+    <message>
+        <source>double-click</source>
+        <translation>더블클릭</translation>
     </message>
   </context>
 </TS>

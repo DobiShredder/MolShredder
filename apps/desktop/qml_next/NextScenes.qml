@@ -37,6 +37,11 @@ Popup {
     }
 
     component Field: TextField {
+        // Said by screen readers; give each field a `label:` where no placeholder tells what it is.
+        property string label: ""
+        property string derivedLabel: ""
+        Accessible.name: label.length > 0 ? label : (placeholderText.length > 0 ? placeholderText : derivedLabel)
+        Item { visible: false; width: 0; height: 0; Component.onCompleted: parent.derivedLabel = NextTheme.captionBefore(parent) }
         implicitHeight: 26
         color: NextTheme.text
         font.pixelSize: NextTheme.fontSize

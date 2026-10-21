@@ -152,6 +152,7 @@ Popup {
                             Component {
                                 id: textField
                                 TextField {
+                                    Accessible.name: field.modelData.name
                                     text: dialog.values[field.modelData.name] !== undefined ? dialog.values[field.modelData.name] : ""
                                     placeholderText: field.modelData.type === "text" ? "" : field.modelData.type
                                     placeholderTextColor: NextTheme.muted
@@ -166,16 +167,21 @@ Popup {
                             Component {
                                 id: choiceField
                                 ComboBox {
+                                    Accessible.name: field.modelData.name
                                     model: field.modelData.choices
                                     height: 26
                                     currentIndex: Math.max(0, field.modelData.choices.indexOf(dialog.values[field.modelData.name]))
                                     font.pixelSize: NextTheme.fontSize
+                                    id: choiceBox
+                                    background: Rectangle { radius: NextTheme.radius; color: NextTheme.chrome; border.color: NextTheme.line }
+                                    contentItem: Text { leftPadding: 8; text: choiceBox.displayText; color: NextTheme.text; font: choiceBox.font; verticalAlignment: Text.AlignVCenter }
                                     onActivated: { const v = dialog.values; v[field.modelData.name] = currentText; dialog.values = v }
                                 }
                             }
                             Component {
                                 id: boolField
                                 Switch {
+                                    Accessible.name: field.modelData.name
                                     checked: dialog.values[field.modelData.name] === "true"
                                     onToggled: { const v = dialog.values; v[field.modelData.name] = checked ? "true" : "false"; dialog.values = v }
                                 }

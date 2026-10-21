@@ -789,7 +789,7 @@ if(MOLSHREDDER_BUILD_DESKTOP)
   # New PyMOL-style shell (SEQ-330, `--ui next`). Flat names so the files resolve each other inside the module.
   set(MOLSHREDDER_NEXT_QML
     NextTheme NextButton NextMenu NextObjectPanel NextConsole NextMovieBar
-    NextSequenceBar NextCommandForm NextInspector NextMovieEditor NextResults NextSelectionEditor NextScenes NextTrajectoryImport NextSurface NextVolume NextEditor NextChemistry NextBuilder NextSystemInfo NextCamera NextScript NextShell
+    NextSequenceBar NextCommandForm NextInspector NextMovieEditor NextResults NextSelectionEditor NextScenes NextTrajectoryImport NextSurface NextVolume NextEditor NextChemistry NextBuilder NextSystemInfo NextCamera NextScript NextShortcuts NextShell
   )
   set(MOLSHREDDER_NEXT_QML_FILES "")
   foreach(next_name IN LISTS MOLSHREDDER_NEXT_QML)
@@ -1478,6 +1478,97 @@ if(MOLSHREDDER_BUILD_DESKTOP)
       PROPERTIES
         TIMEOUT 40
         PASS_REGULAR_EXPRESSION "commands=8 errors=0 objects=0"
+    )
+    # Every control of every panel has a name a screen reader can announce (the audit walks the live item tree with
+    # all panels open), with an object loaded, with nothing loaded and in Korean.
+    foreach(accessibility_case IN ITEMS "loaded|en" "empty|en" "loaded|ko")
+      string(REPLACE "|" ";" accessibility_parts "${accessibility_case}")
+      list(GET accessibility_parts 0 accessibility_state)
+      list(GET accessibility_parts 1 accessibility_language)
+      set(accessibility_arguments molshredder_desktop --smoke --ui=next --language=${accessibility_language})
+      if(accessibility_state STREQUAL "loaded")
+        list(
+          APPEND accessibility_arguments
+          "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb"
+          "--command=select sele, resi 10-20"
+        )
+      endif()
+      list(APPEND accessibility_arguments "--command=ui:openall" "--command=ui:a11yaudit")
+      add_test(
+        NAME desktop.next_ui_accessibility_${accessibility_state}_${accessibility_language}_smoke
+        COMMAND ${accessibility_arguments}
+      )
+      set_tests_properties(
+        desktop.next_ui_accessibility_${accessibility_state}_${accessibility_language}_smoke
+        PROPERTIES
+          TIMEOUT 40
+          PASS_REGULAR_EXPRESSION "accessibility audit: problems=0"
+      )
+    endforeach()
+    # Everything a mouse can do is reachable from the keyboard: every control is a Tab stop, the focused viewport
+    # moves the camera with the arrow, +/-, Page and Home keys, and the object list answers Space, Enter and friends.
+    foreach(keyboard_state IN ITEMS loaded empty)
+      set(keyboard_arguments molshredder_desktop --smoke --ui=next --language=en)
+      if(keyboard_state STREQUAL "loaded")
+        list(
+          APPEND keyboard_arguments
+          "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb"
+          "--command=select sele, resi 10-20"
+        )
+      endif()
+      list(APPEND keyboard_arguments "--command=ui:openall" "--command=ui:keyboardaudit")
+      add_test(NAME desktop.next_ui_keyboard_audit_${keyboard_state}_smoke COMMAND ${keyboard_arguments})
+      set_tests_properties(
+        desktop.next_ui_keyboard_audit_${keyboard_state}_smoke
+        PROPERTIES TIMEOUT 40 PASS_REGULAR_EXPRESSION "keyboard audit: problems=0"
+      )
+    endforeach()
+    add_test(
+      NAME desktop.next_ui_keyboard_smoke
+      COMMAND
+        molshredder_desktop --smoke --ui=next --language=en
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb"
+        "--command=ui:expect welcome off"
+        "--command=ui:markview"
+        "--command=ui:expect viewsame"
+        "--command=ui:key Left"
+        "--command=ui:expect viewchanged"
+        "--command=ui:markview"
+        "--command=ui:key Right shift"
+        "--command=ui:expect viewchanged"
+        "--command=ui:markview"
+        "--command=ui:key Plus"
+        "--command=ui:expect viewchanged"
+        "--command=ui:markview"
+        "--command=ui:key Minus"
+        "--command=ui:expect viewchanged"
+        "--command=ui:key PageUp"
+        "--command=ui:key PageDown"
+        "--command=ui:key Up"
+        "--command=ui:key Down shift"
+        "--command=ui:key Home"
+        "--command=ui:rowkey Space"
+        "--command=ui:expect hidden 1UBQ"
+        "--command=ui:rowkey Space"
+        "--command=ui:rowkey Return"
+        "--command=ui:expect active 1UBQ"
+        "--command=ui:rowkey F2"
+        "--command=ui:rowkey Delete"
+        "--command=ui:expect deleteopen"
+        "--command=ui:shortcuts"
+        "--command=ui:expect shortcuts"
+    )
+    set_tests_properties(
+      desktop.next_ui_keyboard_smoke
+      PROPERTIES TIMEOUT 40 PASS_REGULAR_EXPRESSION "commands=3 errors=0 objects=1"
+    )
+    add_test(
+      NAME desktop.next_ui_welcome_smoke
+      COMMAND molshredder_desktop --smoke --ui=next --language=en "--command=ui:expect welcome on" "--command=ui:shortcuts" "--command=ui:expect shortcuts"
+    )
+    set_tests_properties(
+      desktop.next_ui_welcome_smoke
+      PROPERTIES TIMEOUT 40 PASS_REGULAR_EXPRESSION "commands=0 errors=0 objects=0"
     )
     add_test(
       NAME desktop.next_ui_error_smoke
@@ -4334,6 +4425,15 @@ if(MOLSHREDDER_BUILD_DESKTOP)
         APPEND
         PROPERTY ENVIRONMENT "MOLSHREDDER_UI=${MOLSHREDDER_DESKTOP_TEST_UI}"
       )
+      # Any QML warning (binding error, TypeError, missing property) in the new shell fails the run; the old
+      # shell's own tests are exempt.
+      if(MOLSHREDDER_DESKTOP_TEST_UI STREQUAL "next" AND NOT molshredder_test MATCHES "information_architecture")
+        set_property(
+          TEST ${molshredder_test}
+          APPEND
+          PROPERTY FAIL_REGULAR_EXPRESSION "QML warnings=[1-9]"
+        )
+      endif()
     endif()
   endforeach()
 endif()

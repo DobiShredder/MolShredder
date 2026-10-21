@@ -54,6 +54,11 @@ Popup {
     function sliceMaximum() { return viewport ? Math.max(0, viewport.volumeSliceMaximum) : 0 }
 
     component Field: TextField {
+        // Said by screen readers; give each field a `label:` where no placeholder tells what it is.
+        property string label: ""
+        property string derivedLabel: ""
+        Accessible.name: label.length > 0 ? label : (placeholderText.length > 0 ? placeholderText : derivedLabel)
+        Item { visible: false; width: 0; height: 0; Component.onCompleted: parent.derivedLabel = NextTheme.captionBefore(parent) }
         implicitHeight: 28
         color: NextTheme.text
         font.pixelSize: NextTheme.fontSize
@@ -62,6 +67,10 @@ Popup {
         background: Rectangle { radius: NextTheme.radius; color: NextTheme.chrome; border.color: parent.activeFocus ? NextTheme.active : NextTheme.line }
     }
     component Choice: ComboBox {
+        property string label: ""
+        property string derivedLabel: ""
+        Accessible.name: label.length > 0 ? label : (derivedLabel.length > 0 ? derivedLabel : displayText)
+        Item { visible: false; width: 0; height: 0; Component.onCompleted: parent.derivedLabel = NextTheme.captionBefore(parent) }
         implicitHeight: 28
         implicitWidth: 120
         font.pixelSize: NextTheme.fontSize
@@ -148,6 +157,7 @@ Popup {
                 delegate: TabButton {
                     required property string modelData
                     text: modelData
+                    Accessible.name: modelData
                     font.pixelSize: NextTheme.fontSize
                     contentItem: Text { text: parent.text; font: parent.font; color: parent.checked ? NextTheme.text : NextTheme.muted; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                     background: Rectangle {
@@ -202,13 +212,14 @@ Popup {
                         spacing: 8
                         Slider {
                             id: levelSlider
+                            Accessible.name: qsTr("Level")
                             Layout.fillWidth: true
                             from: panel.minimum
                             to: panel.maximum > panel.minimum ? panel.maximum : panel.minimum + 1
                             value: panel.number(levelField.text, from)
                             onMoved: levelField.text = String(Number(value.toPrecision(5)))
                         }
-                        Field { id: levelField; objectName: "contourLevel"; implicitWidth: 90; text: "1" }
+                        Field { id: levelField; label: qsTr("Level value"); objectName: "contourLevel"; implicitWidth: 90; text: "1" }
                     }
                     NextButton { id: carveToggle; text: (checked ? "▾ " : "▸ ") + qsTr("Restrict to a selection"); outlined: false; checkable: true }
                     Grid {
@@ -283,14 +294,14 @@ Popup {
                         Item { id: sliceAxis; property string axis: "z"; width: 1; height: 1 }
                     }
                     Caption { text: qsTr("Index %1 of %2").arg(Math.round(sliceIndex.value)).arg(panel.sliceMaximum()) }
-                    Slider { id: sliceIndex; width: parent.width; from: 0; to: Math.max(1, panel.sliceMaximum()); stepSize: 1; snapMode: Slider.SnapAlways; value: viewport ? viewport.volumeSliceIndex : 0 }
+                    Slider { id: sliceIndex; Accessible.name: qsTr("Slice index"); width: parent.width; from: 0; to: Math.max(1, panel.sliceMaximum()); stepSize: 1; snapMode: Slider.SnapAlways; value: viewport ? viewport.volumeSliceIndex : 0 }
                     Row {
                         spacing: 12
                         Column { spacing: 3; Caption { text: qsTr("Minimum color") } Choice { id: minColor; model: panel.colors; currentIndex: 1; implicitWidth: 104 } }
                         Column { spacing: 3; Caption { text: qsTr("Maximum color") } Choice { id: maxColor; model: panel.colors; currentIndex: 4; implicitWidth: 104 } }
                     }
                     Caption { text: qsTr("Opacity") + "  " + sliceOpacity.value.toFixed(2) }
-                    Slider { id: sliceOpacity; width: parent.width; from: 0.05; to: 1; value: 0.8; stepSize: 0.01 }
+                    Slider { id: sliceOpacity; Accessible.name: qsTr("Opacity"); width: parent.width; from: 0.05; to: 1; value: 0.8; stepSize: 0.01 }
                     NextButton {
                         text: qsTr("Show slice")
                         checked: true

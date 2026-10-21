@@ -278,7 +278,9 @@ Window {
     height: 720
     visible: true
     // Automated runs (see main.cpp) stay behind everything and off-screen.
-    flags: backgroundRun ? (Qt.Tool | Qt.WindowStaysOnBottomHint | Qt.WindowDoesNotAcceptFocus) : Qt.Window
+    flags: backgroundRun ? (Qt.Tool | Qt.WindowStaysOnBottomHint | Qt.WindowDoesNotAcceptFocus | Qt.WindowTransparentForInput) : Qt.Window
+    // Fully transparent: the window renders (screenshots, picking) but nobody sees it or can click it.
+    opacity: backgroundRun ? 0 : 1
     x: backgroundRun ? -30000 : Screen.virtualX + 60
     y: backgroundRun ? -30000 : Screen.virtualY + 60
     color: "#050812"

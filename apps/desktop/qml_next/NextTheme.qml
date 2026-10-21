@@ -30,4 +30,20 @@ QtObject {
     readonly property int smallFont: 11
     readonly property int radius: 5
     readonly property int rowHeight: 28
+
+    // The text of the closest preceding sibling label (Caption/Text): what a screen reader should call a control
+    // that sits right after it. Empty when there is none.
+    function captionBefore(item) {
+        const siblings = item && item.parent ? item.parent.children : []
+        let found = ""
+        for (let i = 0; i < siblings.length; ++i) {
+            const sibling = siblings[i]
+            if (sibling === item) break
+            // a label is text that is not itself a control (controls expose one of these properties)
+            if (typeof sibling.text === "string" && sibling.text.length > 0 && sibling.checkable === undefined
+                && sibling.placeholderText === undefined && sibling.currentIndex === undefined && sibling.down === undefined)
+                found = sibling.text
+        }
+        return found
+    }
 }

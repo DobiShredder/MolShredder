@@ -42,6 +42,11 @@ Popup {
     function openPanel() { open() }
 
     component Field: TextField {
+        // Said by screen readers; give each field a `label:` where no placeholder tells what it is.
+        property string label: ""
+        property string derivedLabel: ""
+        Accessible.name: label.length > 0 ? label : (placeholderText.length > 0 ? placeholderText : derivedLabel)
+        Item { visible: false; width: 0; height: 0; Component.onCompleted: parent.derivedLabel = NextTheme.captionBefore(parent) }
         implicitHeight: 28
         color: NextTheme.text
         font.pixelSize: NextTheme.fontSize
@@ -50,6 +55,10 @@ Popup {
         background: Rectangle { radius: NextTheme.radius; color: NextTheme.chrome; border.color: parent.activeFocus ? (panel.valid || parent === selectionField ? NextTheme.active : NextTheme.error) : NextTheme.line }
     }
     component Choice: ComboBox {
+        property string label: ""
+        property string derivedLabel: ""
+        Accessible.name: label.length > 0 ? label : (derivedLabel.length > 0 ? derivedLabel : displayText)
+        Item { visible: false; width: 0; height: 0; Component.onCompleted: parent.derivedLabel = NextTheme.captionBefore(parent) }
         implicitHeight: 28
         implicitWidth: 120
         font.pixelSize: NextTheme.fontSize
@@ -135,6 +144,7 @@ Popup {
                 Caption { text: qsTr("Opacity") + "  " + opacitySlider.value.toFixed(2) }
                 Slider {
                     id: opacitySlider
+                    Accessible.name: qsTr("Opacity")
                     width: parent.width
                     from: 0.05
                     to: 1

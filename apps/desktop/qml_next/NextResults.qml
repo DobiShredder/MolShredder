@@ -160,6 +160,7 @@ Popup {
                     spacing: 8
                     ComboBox {
                         id: kindBox
+                        Accessible.name: qsTr("Analysis")
                         model: panel.kinds.map(function(k) { return k.label })
                         implicitWidth: 170
                         implicitHeight: 26
@@ -171,6 +172,7 @@ Popup {
                     }
                     TextField {
                         id: resultName
+                        Accessible.name: qsTr("result name (optional)")
                         implicitWidth: 150
                         implicitHeight: 26
                         placeholderText: qsTr("result name (optional)")
@@ -199,6 +201,7 @@ Popup {
                             Component {
                                 id: textField
                                 TextField {
+                                    Accessible.name: fieldRow.modelData.label
                                     implicitWidth: fieldRow.modelData.key === "selection" || fieldRow.modelData.key === "first" || fieldRow.modelData.key === "second" || fieldRow.modelData.key === "from" || fieldRow.modelData.key === "to" ? 120 : 76
                                     implicitHeight: 26
                                     text: panel.fieldValues[fieldRow.modelData.key] !== undefined ? panel.fieldValues[fieldRow.modelData.key] : ""
@@ -212,6 +215,7 @@ Popup {
                             Component {
                                 id: choiceField
                                 ComboBox {
+                                    Accessible.name: fieldRow.modelData.label
                                     model: fieldRow.modelData.choices
                                     implicitWidth: 112
                                     implicitHeight: 26

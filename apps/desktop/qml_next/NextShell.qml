@@ -14,7 +14,9 @@ Window {
     minimumHeight: 560
     visible: true
     // Automated runs (see main.cpp) stay behind everything and off-screen.
-    flags: backgroundRun ? (Qt.Tool | Qt.WindowStaysOnBottomHint | Qt.WindowDoesNotAcceptFocus) : Qt.Window
+    flags: backgroundRun ? (Qt.Tool | Qt.WindowStaysOnBottomHint | Qt.WindowDoesNotAcceptFocus | Qt.WindowTransparentForInput) : Qt.Window
+    // Fully transparent: the window renders (screenshots, picking) but nobody sees it or can click it.
+    opacity: backgroundRun ? 0 : 1
     x: backgroundRun ? -30000 : Screen.virtualX + 60
     y: backgroundRun ? -30000 : Screen.virtualY + 60
     title: qsTr("MolShredder")
@@ -85,6 +87,13 @@ Window {
         case "sysinfo": openSystemInfo(); break
         case "menuaudit": runMenuAudit(); break
         case "expect": expect(rest); break
+        case "openall": openAllPanels(); break
+        case "key": pressKey(rest); break
+        case "rowkey": pressRowKey(rest); break
+        case "markview": markedView = viewport.pymolViewText(); break
+        case "shortcuts": shortcutsPanel.openPanel(); break
+        case "keyboardaudit": runKeyboardAudit(); break
+        case "a11yaudit": runAccessibilityAudit(); break
         case "scope": viewport.workspaceScope = rest === "on"; break
         case "delete": deleteDialog.ask(rest); break
         case "confirmdelete": deleteDialog.confirm(); break
@@ -163,8 +172,59 @@ Window {
         case "deleteopen": ok = deleteDialog.visible; break
         case "file": ok = viewport.fileExists(spec.substring(5).trim()); break
         case "panels": ok = visiblePanels().split(",").indexOf(parts[1]) >= 0; break
+        case "viewchanged": ok = viewport.pymolViewText() !== markedView; break
+        case "viewsame": ok = viewport.pymolViewText() === markedView; break
+        case "welcome": ok = welcomeCard.visible === (parts[1] !== "off"); break
+        case "shortcuts": ok = shortcutsPanel.visible; break
+        case "active": ok = viewport.objectItems.some(function(item) { return item.active && item.name === parts[1] }); break
+        case "hidden": ok = viewport.objectItems.some(function(item) { return item.name === parts[1] && item.visible === false }); break
         }
         if (!ok) { errorCount += 1; output.append("error", "error: expectation failed: " + spec); console.log("MolShredder expectation failed: " + spec) }
+    }
+    function openAllPanels() {
+        for (const entry of sessionPanels) entry.open()
+        forms.openFor("setting set", ({}))
+    }
+    function runKeyboardAudit() {
+        const problems = viewport.keyboardProblems()
+        for (const problem of problems) { errorCount += 1; console.log("MolShredder keyboard problem: " + problem) }
+        console.log("MolShredder keyboard audit: problems=" + problems.length)
+    }
+    function runAccessibilityAudit() {
+        const problems = viewport.accessibilityProblems()
+        for (const problem of problems) { errorCount += 1; console.log("MolShredder accessibility problem: " + problem) }
+        console.log("MolShredder accessibility audit: problems=" + problems.length)
+    }
+    // Camera keys of the focused viewport: arrows rotate, Shift+arrows move, +/- zoom, Page Up/Down move the clipping
+    // planes, Home resets. Returns true when the key was one of them.
+    function viewportKey(key, modifiers) {
+        const shift = (modifiers & Qt.ShiftModifier) !== 0
+        const step = 12
+        switch (key) {
+        case Qt.Key_Left: if (shift) viewport.pan(-step, 0); else viewport.orbit(-step, 0); return true
+        case Qt.Key_Right: if (shift) viewport.pan(step, 0); else viewport.orbit(step, 0); return true
+        case Qt.Key_Up: if (shift) viewport.pan(0, -step); else viewport.orbit(0, -step); return true
+        case Qt.Key_Down: if (shift) viewport.pan(0, step); else viewport.orbit(0, step); return true
+        case Qt.Key_Plus: case Qt.Key_Equal: viewport.dolly(-1); return true
+        case Qt.Key_Minus: case Qt.Key_Underscore: viewport.dolly(1); return true
+        case Qt.Key_PageUp: viewport.clipCamera("move", 2.0, "", ""); return true
+        case Qt.Key_PageDown: viewport.clipCamera("move", -2.0, "", ""); return true
+        case Qt.Key_Home: viewport.resetViewAnimated(0.35, 1); return true
+        }
+        return false
+    }
+    property string markedView: ""
+    // `ui:key NAME [shift]` of the smoke tests presses a viewport key; `ui:rowkey NAME` presses an object-list key.
+    function pressKey(spec) {
+        const names = {Left: Qt.Key_Left, Right: Qt.Key_Right, Up: Qt.Key_Up, Down: Qt.Key_Down, Plus: Qt.Key_Plus, Minus: Qt.Key_Minus,
+                       PageUp: Qt.Key_PageUp, PageDown: Qt.Key_PageDown, Home: Qt.Key_Home}
+        const parts = spec.split(/\s+/)
+        if (names[parts[0]] === undefined) { errorCount += 1; console.log("MolShredder unknown key: " + spec); return }
+        if (!viewportKey(names[parts[0]], parts[1] === "shift" ? Qt.ShiftModifier : 0)) { errorCount += 1; console.log("MolShredder key not handled: " + spec) }
+    }
+    function pressRowKey(spec) {
+        const names = {Return: Qt.Key_Return, Space: Qt.Key_Space, F2: Qt.Key_F2, Delete: Qt.Key_Delete, Menu: Qt.Key_Menu}
+        if (names[spec.trim()] === undefined || !side.keyAction(names[spec.trim()], 0)) { errorCount += 1; console.log("MolShredder row key not handled: " + spec) }
     }
     // The entry points the desktop smoke tests (and the session restore) call by name.
     function openSystemInfo() { systemInfoPanel.openPanel(); systemInfoPanelSourceJson = systemInfoPanel.sourceJson }
@@ -288,6 +348,7 @@ Window {
         case "volumes": volumePanel.openPanel(); break
         case "editAtoms": atomEditor.openEditor(); break
         case "camera": cameraPanel.openPanel(); break
+        case "shortcuts": shortcutsPanel.openPanel(); break
         case "systemInfo": openSystemInfo(); break
         case "builder": moleculeBuilder.openBuilder(); break
         case "chemistry": chemistryPanel.openPanel(); break
@@ -420,6 +481,7 @@ Window {
         ],
         "Help": [
             {text: qsTr("Command help"), command: "help"},
+            {text: qsTr("Keyboard shortcuts…"), action: "shortcuts", hint: "F1"},
             {text: qsTr("System information…"), action: "systemInfo"},
             {separator: true},
             {text: (localization.currentLanguage === "en" ? "✓ " : "") + "English", action: "language", code: "en"},
@@ -487,6 +549,19 @@ Window {
                 id: viewArea
                 anchors { left: parent.left; right: parent.right; top: sequence.bottom; bottom: movie.top }
                 clip: true
+                // Keyboard control of the camera while the viewport has focus (click it or Tab to it).
+                activeFocusOnTab: true
+                Accessible.role: Accessible.Graphic
+                Accessible.name: qsTr("3D viewport")
+                Keys.onPressed: function(event) { if (root.viewportKey(event.key, event.modifiers)) event.accepted = true }
+                Rectangle {
+                    anchors.fill: parent
+                    z: 30
+                    color: "transparent"
+                    border.width: 2
+                    border.color: NextTheme.active
+                    visible: viewArea.activeFocus
+                }
 
                 MolecularViewport {
                     id: viewport
@@ -503,6 +578,7 @@ Window {
                         property real pressY: 0
                         property bool dragged: false
                         onPressed: function(mouse) {
+                            viewArea.forceActiveFocus()
                             previousX = mouse.x; previousY = mouse.y; pressX = mouse.x; pressY = mouse.y; dragged = false
                         }
                         onPositionChanged: function(mouse) {
@@ -571,6 +647,51 @@ Window {
                     anchors.fill: parent
                     onDropped: function(drop) {
                         for (const url of drop.urls) root.run("load --path " + root.quote(root.localPath(url)))
+                    }
+                }
+
+                // First run and empty workspace: where to start.
+                Rectangle {
+                    id: welcomeCard
+                    objectName: "welcomeCard"
+                    visible: viewport.objectItems.length === 0 && !viewport.hasVolume
+                    anchors.centerIn: parent
+                    width: Math.min(460, parent.width - 40)
+                    height: welcomeColumn.implicitHeight + 36
+                    radius: 10
+                    color: Qt.rgba(0.08, 0.1, 0.14, 0.92)
+                    border.color: NextTheme.line
+                    z: 25
+                    Column {
+                        id: welcomeColumn
+                        x: 18; y: 18
+                        width: parent.width - 36
+                        spacing: 10
+                        Text { text: qsTr("Welcome to MolShredder"); color: NextTheme.viewText; font.pixelSize: 20; font.weight: Font.DemiBold }
+                        Text {
+                            width: parent.width
+                            wrapMode: Text.Wrap
+                            color: NextTheme.viewText
+                            font.pixelSize: NextTheme.fontSize
+                            text: qsTr("Open a structure to begin. You can also drop a file onto this window.")
+                        }
+                        Flow {
+                            width: parent.width
+                            spacing: 8
+                            NextButton { hud: true; text: qsTr("Open structure…"); onClicked: root.perform({action: "openStructure"}) }
+                            NextButton { hud: true; text: qsTr("Open session…"); onClicked: root.perform({action: "openSession"}) }
+                            NextButton { hud: true; text: qsTr("Build a molecule…"); onClicked: root.perform({action: "builder"}) }
+                        }
+                        Text {
+                            width: parent.width
+                            wrapMode: Text.Wrap
+                            color: NextTheme.viewText
+                            opacity: 0.8
+                            font.pixelSize: NextTheme.smallFont
+                            lineHeight: 1.25
+                            text: qsTr("• Type commands in the line below (PyMOL syntax such as show cartoon, or name --option value).\n• Ctrl+K lists every command as a form.\n• Left drag rotates, wheel moves the clipping planes, right drag zooms.\n• Everything here works from the keyboard too.")
+                        }
+                        NextButton { hud: true; text: qsTr("Keyboard shortcuts…"); onClicked: shortcutsPanel.openPanel() }
                     }
                 }
 
@@ -727,6 +848,7 @@ Window {
         onBrowseRequested: chooseFile(qsTr("Run script"), "scriptPath", false, [qsTr("Python (*.py)"), qsTr("All files (*)")])
         onInfo: function(text) { output.append("dim", text) }
     }
+    NextShortcuts { id: shortcutsPanel }
     NextSystemInfo {
         id: systemInfoPanel
         viewport: viewport
@@ -858,6 +980,7 @@ Window {
     Shortcut { sequence: "Ctrl+I"; onActivated: root.showInspector(0) }
     Shortcut { sequence: "Ctrl+Shift+E"; onActivated: atomEditor.openEditor() }
     Shortcut { sequence: "Ctrl+Shift+U"; onActivated: volumePanel.openPanel() }
+    Shortcut { sequence: "F1"; onActivated: shortcutsPanel.openPanel() }
     Shortcut { sequence: "Ctrl+Shift+J"; onActivated: cameraPanel.openPanel() }
     Shortcut { sequence: "Ctrl+Shift+N"; onActivated: scenesPanel.openPanel() }
     Shortcut { sequence: "Ctrl+Shift+F"; onActivated: selectionEditor.openEditor() }

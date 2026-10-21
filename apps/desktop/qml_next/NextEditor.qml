@@ -97,6 +97,11 @@ Popup {
     }
 
     component Field: TextField {
+        // Said by screen readers; give each field a `label:` where no placeholder tells what it is.
+        property string label: ""
+        property string derivedLabel: ""
+        Accessible.name: label.length > 0 ? label : (placeholderText.length > 0 ? placeholderText : derivedLabel)
+        Item { visible: false; width: 0; height: 0; Component.onCompleted: parent.derivedLabel = NextTheme.captionBefore(parent) }
         implicitHeight: 26
         implicitWidth: 80
         color: NextTheme.text
@@ -231,9 +236,9 @@ Popup {
                         Caption { text: qsTr("Position (Å)") }
                         Row {
                             spacing: 6
-                            Field { id: xField; objectName: "editX" }
-                            Field { id: yField }
-                            Field { id: zField }
+                            Field { id: xField; label: qsTr("Position x"); objectName: "editX" }
+                            Field { id: yField; label: qsTr("Position y") }
+                            Field { id: zField; label: qsTr("Position z") }
                             NextButton {
                                 objectName: "coordinateApplyButton"
                                 text: qsTr("Move atom")
@@ -310,9 +315,9 @@ Popup {
                     Heading { text: qsTr("Move the whole selection") }
                     Row {
                         spacing: 6
-                        Field { id: dxField; text: "0"; objectName: "moveX" }
-                        Field { id: dyField; text: "0" }
-                        Field { id: dzField; text: "0" }
+                        Field { id: dxField; label: qsTr("Shift x"); text: "0"; objectName: "moveX" }
+                        Field { id: dyField; label: qsTr("Shift y"); text: "0" }
+                        Field { id: dzField; label: qsTr("Shift z"); text: "0" }
                         NextButton {
                             text: qsTr("Shift by")
                             enabled: panel.finite(dxField.text) && panel.finite(dyField.text) && panel.finite(dzField.text) && panel.preview.ok && !panel.trajectoryAttached

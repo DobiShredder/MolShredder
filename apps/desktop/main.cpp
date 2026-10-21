@@ -117,6 +117,19 @@ graphics_runtime_info(QQuickWindow &window) {
   return result;
 }
 
+// QML warnings (binding errors, TypeErrors, missing properties) mean a panel is broken for someone; automated runs
+// count them and report the total at exit so the test can fail on any.
+std::atomic<int> g_qml_warnings{0};
+QtMessageHandler g_previous_message_handler{nullptr};
+
+void count_qml_warnings(QtMsgType type, const QMessageLogContext &context, const QString &message) {
+  if ((type == QtWarningMsg || type == QtCriticalMsg) &&
+      (message.contains(QStringLiteral(".qml")) ||
+       (context.file != nullptr && QString::fromUtf8(context.file).contains(QStringLiteral(".qml")))))
+    ++g_qml_warnings;
+  if (g_previous_message_handler != nullptr) g_previous_message_handler(type, context, message);
+}
+
 }  // namespace
 
 int main(int argc, char *argv[]) {
@@ -152,6 +165,10 @@ int main(int argc, char *argv[]) {
   }();
   if (automated_run && !qEnvironmentVariableIsSet("MOLSHREDDER_FOREGROUND"))
     qputenv("QT_MAC_DISABLE_FOREGROUND_APPLICATION_TRANSFORM", QByteArrayLiteral("1"));
+  if (automated_run) {
+    g_previous_message_handler = qInstallMessageHandler(count_qml_warnings);
+    std::atexit([] { std::fprintf(stderr, "MolShredder QML warnings=%d\n", g_qml_warnings.load()); });
+  }
   molshredder::python::link_embedded_module();
   if (redirected_render_requested) {
     std::fprintf(stderr,

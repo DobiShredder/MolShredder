@@ -13,6 +13,8 @@ AbstractButton {
     implicitWidth: Math.max(24, contentItem.implicitWidth + 14)
     hoverEnabled: true
     focusPolicy: Qt.TabFocus
+    // Screen readers announce the visible text unless a panel gives a better name (icon-only buttons do).
+    Accessible.name: text
     contentItem: Text {
         text: control.text
         font.pixelSize: control.pixelSize

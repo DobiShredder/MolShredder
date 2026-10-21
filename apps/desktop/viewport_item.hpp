@@ -470,6 +470,11 @@ public:
   Q_INVOKABLE bool fileExists(const QString &path) const;
   // True when the first 256 KiB of the file contain `needle` (the script panel warns before an isolated run).
   Q_INVOKABLE bool fileContainsText(const QString &path, const QString &needle) const;
+  // Interactive controls of the visible window (panels included) that a screen reader would announce without a
+  // name: one line per control, empty when every control has a name.
+  Q_INVOKABLE QStringList accessibilityProblems() const;
+  // Visible, enabled interactive controls that the Tab key cannot reach.
+  Q_INVOKABLE QStringList keyboardProblems() const;
   Q_INVOKABLE QString pymolViewText() const;
   Q_INVOKABLE bool importPymolView(const QString &values);
   Q_INVOKABLE bool importPymolViewAnimated(const QString &values,

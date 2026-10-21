@@ -113,6 +113,11 @@ Popup {
     }
 
     component Field: TextField {
+        // Said by screen readers; give each field a `label:` where no placeholder tells what it is.
+        property string label: ""
+        property string derivedLabel: ""
+        Accessible.name: label.length > 0 ? label : (placeholderText.length > 0 ? placeholderText : derivedLabel)
+        Item { visible: false; width: 0; height: 0; Component.onCompleted: parent.derivedLabel = NextTheme.captionBefore(parent) }
         implicitHeight: 26
         implicitWidth: 70
         color: NextTheme.text
@@ -166,6 +171,7 @@ Popup {
                     Field { id: residueNumberField; implicitWidth: 50; text: "1"; onTextChanged: builder.touch() }
                     ComboBox {
                         id: unitBox
+                        Accessible.name: qsTr("Unit")
                         model: builder.units
                         implicitWidth: 120
                         implicitHeight: 26
@@ -200,12 +206,12 @@ Popup {
                         required property string charge
                         spacing: 6
                         Text { width: 28; height: 26; verticalAlignment: Text.AlignVCenter; text: atomRow.index + 1; color: NextTheme.muted; font.family: NextTheme.mono; font.pixelSize: 12 }
-                        Field { text: atomRow.name; onTextEdited: { atomModel.setProperty(atomRow.index, "name", text); builder.touch() } }
-                        Field { text: atomRow.element; onTextEdited: { atomModel.setProperty(atomRow.index, "element", text); builder.touch() } }
-                        Field { text: atomRow.px; onTextEdited: { atomModel.setProperty(atomRow.index, "px", text); builder.touch() } }
-                        Field { text: atomRow.py; onTextEdited: { atomModel.setProperty(atomRow.index, "py", text); builder.touch() } }
-                        Field { text: atomRow.pz; onTextEdited: { atomModel.setProperty(atomRow.index, "pz", text); builder.touch() } }
-                        Field { implicitWidth: 56; text: atomRow.charge; onTextEdited: { atomModel.setProperty(atomRow.index, "charge", text); builder.touch() } }
+                        Field { label: qsTr("Atom %1 name").arg(atomRow.index + 1); text: atomRow.name; onTextEdited: { atomModel.setProperty(atomRow.index, "name", text); builder.touch() } }
+                        Field { label: qsTr("Atom %1 element").arg(atomRow.index + 1); text: atomRow.element; onTextEdited: { atomModel.setProperty(atomRow.index, "element", text); builder.touch() } }
+                        Field { label: qsTr("Atom %1 x").arg(atomRow.index + 1); text: atomRow.px; onTextEdited: { atomModel.setProperty(atomRow.index, "px", text); builder.touch() } }
+                        Field { label: qsTr("Atom %1 y").arg(atomRow.index + 1); text: atomRow.py; onTextEdited: { atomModel.setProperty(atomRow.index, "py", text); builder.touch() } }
+                        Field { label: qsTr("Atom %1 z").arg(atomRow.index + 1); text: atomRow.pz; onTextEdited: { atomModel.setProperty(atomRow.index, "pz", text); builder.touch() } }
+                        Field { label: qsTr("Atom %1 charge").arg(atomRow.index + 1); implicitWidth: 56; text: atomRow.charge; onTextEdited: { atomModel.setProperty(atomRow.index, "charge", text); builder.touch() } }
                         NextButton { text: "✕"; outlined: false; Accessible.name: qsTr("Remove atom"); onClicked: { atomModel.remove(atomRow.index); builder.touch() } }
                     }
                 }
@@ -230,11 +236,12 @@ Popup {
                         required property string order
                         spacing: 6
                         Text { width: 28; height: 26; verticalAlignment: Text.AlignVCenter; text: bondRow.index + 1; color: NextTheme.muted; font.family: NextTheme.mono; font.pixelSize: 12 }
-                        Field { implicitWidth: 56; text: bondRow.first; onTextEdited: { bondModel.setProperty(bondRow.index, "first", text); builder.touch() } }
+                        Field { label: qsTr("Bond %1 first atom").arg(bondRow.index + 1); implicitWidth: 56; text: bondRow.first; onTextEdited: { bondModel.setProperty(bondRow.index, "first", text); builder.touch() } }
                         Text { height: 26; verticalAlignment: Text.AlignVCenter; text: "–"; color: NextTheme.muted }
-                        Field { implicitWidth: 56; text: bondRow.second; onTextEdited: { bondModel.setProperty(bondRow.index, "second", text); builder.touch() } }
+                        Field { label: qsTr("Bond %1 second atom").arg(bondRow.index + 1); implicitWidth: 56; text: bondRow.second; onTextEdited: { bondModel.setProperty(bondRow.index, "second", text); builder.touch() } }
                         ComboBox {
                             id: orderBox
+                            Accessible.name: qsTr("Bond %1 order").arg(bondRow.index + 1)
                             model: builder.orders
                             currentIndex: Math.max(0, builder.orders.indexOf(bondRow.order))
                             implicitWidth: 110

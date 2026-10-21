@@ -19,6 +19,7 @@
 #include <utility>
 #include <vector>
 
+#include <QAccessible>
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -6865,6 +6866,90 @@ QVariantMap MolecularViewport::commandData(const QString &name, const QVariantMa
   for (auto it = arguments.cbegin(); it != arguments.cend(); ++it)
     parameters.emplace(it.key().toStdString(), it.value().toString().toStdString());
   return runJsonAction(actions_, name.toStdString().c_str(), parameters);
+}
+
+QStringList MolecularViewport::accessibilityProblems() const {
+  QStringList problems;
+  if (window() == nullptr) return problems;
+  QAccessible::setActive(true);
+  const auto interactive = [](QAccessible::Role role) {
+    switch (role) {
+    case QAccessible::Button:
+    case QAccessible::CheckBox:
+    case QAccessible::RadioButton:
+    case QAccessible::ComboBox:
+    case QAccessible::EditableText:
+    case QAccessible::Slider:
+    case QAccessible::PageTab:
+    case QAccessible::MenuItem:
+    case QAccessible::SpinBox:
+      return true;
+    default:
+      return false;
+    }
+  };
+  std::function<void(QQuickItem *, const QString &)> visit = [&](QQuickItem *item, const QString &panel) {
+    if (item == nullptr || !item->isVisible() || item->opacity() <= 0.0) return;
+    // Panels are named by their nearest named ancestor; a control by what a person would see on it.
+    auto owner = item->objectName().isEmpty() ? panel : item->objectName();
+    if (QString::fromLatin1(item->metaObject()->className()) == QLatin1String("QQuickPopupItem") && item->parent() != nullptr &&
+        !item->parent()->objectName().isEmpty())
+      owner = item->parent()->objectName();
+    if (auto *interface = QAccessible::queryAccessibleInterface(item)) {
+      if (interactive(interface->role()) && interface->text(QAccessible::Name).trimmed().isEmpty() &&
+          interface->text(QAccessible::Description).trimmed().isEmpty()) {
+        QString shown;
+        for (const char *property : {"text", "placeholderText", "currentText", "displayText"}) {
+          shown = item->property(property).toString();
+          if (!shown.isEmpty()) break;
+        }
+        // The component the control was declared in (NextCamera, NextEditor, …) tells where to fix it.
+        QString declared;
+        for (QObject *object = item; object != nullptr && declared.isEmpty(); object = object->parent()) {
+          const auto name = QString::fromLatin1(object->metaObject()->className());
+          if (name.startsWith(QLatin1String("Next"))) declared = name.left(name.indexOf(QLatin1String("_QMLTYPE")));
+        }
+        problems << QStringLiteral("%1 · %2 '%3'").arg(declared.isEmpty() ? (owner.isEmpty() ? QStringLiteral("(window)") : owner) : declared,
+                                                       QString::fromLatin1(item->metaObject()->className()), shown);
+      }
+    }
+    for (auto *child : item->childItems()) visit(child, owner);
+  };
+  visit(window()->contentItem(), QString{});
+  return problems;
+}
+
+QStringList MolecularViewport::keyboardProblems() const {
+  QStringList problems;
+  if (window() == nullptr) return problems;
+  QAccessible::setActive(true);
+  std::function<void(QQuickItem *)> visit = [&](QQuickItem *item) {
+    if (item == nullptr || !item->isVisible() || item->opacity() <= 0.0) return;
+    if (auto *interface = QAccessible::queryAccessibleInterface(item)) {
+      const auto role = interface->role();
+      const bool control = role == QAccessible::Button || role == QAccessible::CheckBox || role == QAccessible::ComboBox ||
+                           role == QAccessible::EditableText || role == QAccessible::Slider || role == QAccessible::PageTab;
+      // read-only log lines are static text and are not tab stops
+      if (control && item->isEnabled() && !item->activeFocusOnTab() && item->property("readOnly").toBool() == false &&
+          item->width() > 0.0 && item->height() > 0.0) {
+        QString shown;
+        for (const char *property : {"text", "placeholderText", "currentText", "displayText"}) {
+          shown = item->property(property).toString();
+          if (!shown.isEmpty()) break;
+        }
+        QString declared;
+        for (QObject *object = item; object != nullptr && declared.isEmpty(); object = object->parent()) {
+          const auto name = QString::fromLatin1(object->metaObject()->className());
+          if (name.startsWith(QLatin1String("Next"))) declared = name.left(name.indexOf(QLatin1String("_QMLTYPE")));
+        }
+        problems << QStringLiteral("%1 · %2 '%3'").arg(declared.isEmpty() ? QStringLiteral("(window)") : declared,
+                                                       QString::fromLatin1(item->metaObject()->className()), shown);
+      }
+    }
+    for (auto *child : item->childItems()) visit(child);
+  };
+  visit(window()->contentItem());
+  return problems;
 }
 
 bool MolecularViewport::fileExists(const QString &path) const { return QFileInfo::exists(path); }

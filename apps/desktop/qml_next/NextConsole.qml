@@ -100,6 +100,8 @@ Rectangle {
             height: edit.contentHeight + 1
             TextEdit {
                 id: edit
+                Accessible.role: Accessible.StaticText
+                Accessible.name: edit.text
                 x: 10
                 width: parent.width - 20
                 readOnly: true
