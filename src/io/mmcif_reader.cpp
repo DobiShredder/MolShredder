@@ -5,6 +5,7 @@
 #include <charconv>
 #include "molshredder/core/parse_number.hpp"
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <optional>
 #include <set>
@@ -551,6 +552,81 @@ block_unit_cell(const CifBlock &block, std::string_view source) {
   return Result<std::optional<model::UnitCell>>::success(cell.value());
 }
 
+// Helix and sheet residue ranges the file declares (_struct_conf HELX_*,
+// _struct_sheet_range), as the PDB reader does for HELIX/SHEET. kind is the
+// PyMOL ss code: "H" or "S".
+struct SecondaryRange {
+  std::string kind;
+  std::string chain;
+  std::int64_t first{};
+  std::int64_t last{};
+};
+
+std::vector<SecondaryRange> declared_secondary_ranges(const CifBlock &block) {
+  std::vector<SecondaryRange> ranges;
+  const auto parse_int = [](const Token *token, std::int64_t &value) {
+    const auto text = present(token);
+    if (!text.has_value()) return false;
+    const auto *begin = text->data();
+    const auto *end = text->data() + text->size();
+    const auto parsed = std::from_chars(begin, end, value);
+    return parsed.ec == std::errc{} && parsed.ptr == end;
+  };
+  // One row of a category, from a loop row or from the scalar items.
+  using Lookup = std::function<const Token *(std::string_view)>;
+  const auto add_row = [&](const Lookup &get, std::string_view category,
+                           std::string kind) {
+    const auto name = [&](std::string_view suffix) {
+      return std::string{category} + std::string{suffix};
+    };
+    const Token *chain_token = present(get(name("beg_auth_asym_id"))).has_value()
+                                   ? get(name("beg_auth_asym_id"))
+                                   : get(name("beg_label_asym_id"));
+    const bool author = present(get(name("beg_auth_seq_id"))).has_value();
+    std::int64_t first{};
+    std::int64_t last{};
+    if (!parse_int(get(name(author ? "beg_auth_seq_id" : "beg_label_seq_id")), first) ||
+        !parse_int(get(name(author ? "end_auth_seq_id" : "end_label_seq_id")), last))
+      return;
+    ranges.push_back({std::move(kind), present(chain_token).value_or(""), first, last});
+  };
+  for (const auto &loop : block.loops) {
+    if (loop.columns.empty()) continue;
+    const bool conf = loop.columns.front().starts_with("_struct_conf.");
+    const bool sheet = loop.columns.front().starts_with("_struct_sheet_range.");
+    if (!conf && !sheet) continue;
+    std::map<std::string, std::size_t, std::less<>> columns;
+    for (std::size_t index = 0; index < loop.columns.size(); ++index)
+      columns.emplace(loop.columns[index], index);
+    const auto rows = loop.values.size() / loop.columns.size();
+    for (std::size_t row = 0; row < rows; ++row) {
+      const RowView view{loop, row, columns};
+      const Lookup get = [&view](std::string_view name) { return view.get(name); };
+      if (conf) {
+        const auto type = present(view.get("_struct_conf.conf_type_id"));
+        if (type.has_value() && !lowercase(*type).starts_with("helx")) continue;
+        add_row(get, "_struct_conf.", "H");
+      } else {
+        add_row(get, "_struct_sheet_range.", "S");
+      }
+    }
+  }
+  const auto scalar = [&block](std::string_view name) -> const Token * {
+    const auto found = block.scalars.find(name);
+    return found == block.scalars.end() ? nullptr : &found->second;
+  };
+  if (scalar("_struct_conf.beg_auth_seq_id") != nullptr ||
+      scalar("_struct_conf.beg_label_seq_id") != nullptr) {
+    const auto type = present(scalar("_struct_conf.conf_type_id"));
+    if (!type.has_value() || lowercase(*type).starts_with("helx"))
+      add_row(scalar, "_struct_conf.", "H");
+  }
+  if (scalar("_struct_sheet_range.beg_auth_seq_id") != nullptr ||
+      scalar("_struct_sheet_range.beg_label_seq_id") != nullptr)
+    add_row(scalar, "_struct_sheet_range.", "S");
+  return ranges;
+}
+
 Result<StructureData> build_structure(const CifBlock &block,
                                       std::string_view source,
                                       StructureFormat format,
@@ -670,6 +746,22 @@ Result<StructureData> build_structure(const CifBlock &block,
                                                                        : 0U);
   }
 
+  // Helices and strands the file declares, as the same `ss` property the PDB
+  // reader fills; without it the cartoon falls back to a hydrogen-bond assignment.
+  const auto secondary_ranges = declared_secondary_ranges(block);
+  std::vector<std::string> secondary_values;
+  if (!secondary_ranges.empty()) {
+    secondary_values.reserve(first_model.size());
+    for (const auto *atom : first_model) {
+      std::string kind;
+      for (const auto &range : secondary_ranges)
+        if (range.chain == atom->chain_id && atom->residue_number >= range.first &&
+            atom->residue_number <= range.last)
+          kind = range.kind;
+      secondary_values.push_back(std::move(kind));
+    }
+  }
+
   std::set<std::pair<std::size_t, std::size_t>> unique_bonds;
   for (const auto *loop : connection_loops) {
     std::map<std::string, std::size_t, std::less<>> connection_columns;
@@ -763,6 +855,14 @@ Result<StructureData> build_structure(const CifBlock &block,
     if (const auto error = add_property(std::get<0>(property),
                                         std::move(std::get<1>(property)),
                                         std::get<2>(property));
+        error.has_value()) {
+      return Result<StructureData>::failure(*error);
+    }
+  }
+  if (!secondary_values.empty()) {
+    if (const auto error = add_property(
+            "ss", model::AtomPropertyColumn{std::move(secondary_values)},
+            "_struct_conf/_struct_sheet_range");
         error.has_value()) {
       return Result<StructureData>::failure(*error);
     }

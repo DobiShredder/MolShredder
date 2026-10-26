@@ -606,6 +606,10 @@ private:
   QString status_text_{
       QStringLiteral("Demo packet · open a PDB or mmCIF file")};
   QString representation_{QStringLiteral("spheres")};
+  // False until a representation was picked explicitly (--representation, the
+  // legacy toolbar): until then a loaded structure keeps the workspace default
+  // (protein cartoon, small molecules lines, ...).
+  bool representation_chosen_{false};
   qulonglong atom_count_{};
   qulonglong primitive_count_{};
   QString selection_text_{QStringLiteral("No selection")};

@@ -2148,6 +2148,90 @@
    "diagnostics": [],
    "stop": false,
    "objects": []
+  },
+  {
+   "id": "util_cnc",
+   "pml": "util.cnc",
+   "invocations": [
+    {
+     "command": "color",
+     "arguments": {
+      "color": "atomic",
+      "selection": "((all) and not elem C)",
+      "scope": "workspace"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "util_cnc_selection",
+   "pml": "util.cnc chain A",
+   "invocations": [
+    {
+     "command": "color",
+     "arguments": {
+      "color": "atomic",
+      "selection": "((chain A) and not elem C)",
+      "scope": "workspace"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "util_cbag",
+   "pml": "util.cbag resn LIG",
+   "invocations": [
+    {
+     "command": "color",
+     "arguments": {
+      "color": "atomic",
+      "selection": "((resn LIG) and not elem C)",
+      "scope": "workspace"
+     }
+    },
+    {
+     "command": "color",
+     "arguments": {
+      "color": "carbon",
+      "selection": "(elem C and (resn LIG))",
+      "scope": "workspace"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
+  },
+  {
+   "id": "util_cbay",
+   "pml": "util.cbay",
+   "invocations": [
+    {
+     "command": "color",
+     "arguments": {
+      "color": "atomic",
+      "selection": "((all) and not elem C)",
+      "scope": "workspace"
+     }
+    },
+    {
+     "command": "color",
+     "arguments": {
+      "color": "yellow",
+      "selection": "(elem C and (all))",
+      "scope": "workspace"
+     }
+    }
+   ],
+   "diagnostics": [],
+   "stop": false,
+   "objects": []
   }
  ]
 }

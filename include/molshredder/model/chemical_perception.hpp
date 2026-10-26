@@ -76,4 +76,24 @@ struct ChemicalPerceptionReport {
 apply_chemical_perception(const Topology &source,
                           const ChemicalPerceptionReport &report);
 
+// Distance-based connectivity for structure files that do not list the bonds
+// of polymer residues (PDB, mmCIF, GRO, XYZ, ...), as PyMOL and VMD do on load.
+// Uses the same radius rule as perceive_chemistry but a cell grid, so the cost
+// is linear in the atom count. Atoms with different non-empty alternate
+// locations are never bonded; existing bonds are kept. Returns `source`
+// unchanged when no bond is added; added bonds are marked `inferred`. The
+// result keeps the source's topology version (load-time use only).
+[[nodiscard]] operation::Result<std::shared_ptr<const Topology>>
+infer_connectivity(std::shared_ptr<const Topology> source,
+                   const CoordinateFrame &frame,
+                   double covalent_radius_scale = 1.20);
+
+// Coarse class of every residue, used to choose what a freshly loaded object
+// shows. Residue kinds a reader or the user stated explicitly win; otherwise
+// the residue name decides, and a polymer needs two same-family residues in a
+// chain (a lone amino acid is a small molecule).
+enum class ResidueClass : std::uint8_t { protein, nucleic, organic, ion, solvent };
+
+[[nodiscard]] std::vector<ResidueClass> classify_residues(const Topology &topology);
+
 }  // namespace molshredder::model

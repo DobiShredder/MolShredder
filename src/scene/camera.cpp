@@ -176,8 +176,11 @@ operation::Result<Camera> Camera::orbit_pixels(
   if (const auto error = validate(config); error.has_value()) {
     return operation::Result<Camera>::failure(*error);
   }
+  // Both turns are about the camera's own screen axes (a trackball), so the
+  // molecule follows the mouse even when it has been turned upside down; a
+  // fixed world "up" axis made horizontal drags run backwards after a flip.
   const auto yaw = quaternion_from_axis_angle(
-      model::Vec3d{0.0, 1.0, 0.0},
+      rotate(parameters_.orientation, model::Vec3d{0.0, 1.0, 0.0}),
       -delta_x * config.orbit_radians_per_pixel);
   const auto yawed = normalized(yaw * parameters_.orientation);
   const auto pitch_axis = rotate(yawed, model::Vec3d{1.0, 0.0, 0.0});

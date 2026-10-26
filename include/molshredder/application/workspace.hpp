@@ -1658,6 +1658,12 @@ public:
   // Removes a named selection of the active object.
   [[nodiscard]] std::optional<operation::Error> delete_named_selection(
       std::string_view name);
+  // Files loaded afterwards get the default look (representation by residue
+  // class, carbon cycle and element colors). A frontend that applies its own
+  // chosen representation turns it off.
+  void set_default_look_on_load(bool enabled) noexcept {
+    default_look_on_load_ = enabled;
+  }
   [[nodiscard]] operation::Result<ShowResult>
   show(render::RepresentationKind kind, std::string selection_expression,
        bool replace_existing = false);
@@ -2273,6 +2279,7 @@ private:
   render::RenderSettingStore render_settings_;
   render::ColorTable color_table_;
   std::size_t auto_color_cursor_{};
+  bool default_look_on_load_{true};
   std::uint64_t next_edit_transaction_id_{1U};
   std::size_t edit_history_memory_budget_bytes_{256U * 1024U * 1024U};
   std::size_t edit_history_memory_used_bytes_{};

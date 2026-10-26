@@ -282,9 +282,15 @@ const std::vector<RenderSettingDefinition> &p0_render_setting_definitions() {
       definition(144, "surface_color", color, std::string{"-1"}, atom),
       definition(787, "isosurface_algorithm", integer, std::int64_t{0}, global,
                  0.0, 2.0),
-      // SEQ-311 S9 (Q-022 b): PyMOL load coloring; off by default in
-      // MolShredder (PyMOL default on).
-      definition(238, "auto_color", boolean, false, global),
+      // PyMOL load coloring (carbon = next object color, other elements =
+      // element color). Q-022 (b) kept it off; the user turned it on by
+      // default on 2026-10-26 (G4), as in PyMOL.
+      definition(238, "auto_color", boolean, true, global),
+      // What a new object shows: -1/1 by residue class (protein cartoon,
+      // nucleic acid sticks, small molecules lines, ions spheres), 0 classic
+      // PyMOL lines for everything when auto_show_lines is on.
+      definition(754, "auto_show_classified", integer, std::int64_t{-1}, global,
+                 -1.0, 1.0),
       // SEQ-311 S11: PyMOL cartoon/ribbon geometry controls.
       definition(91, "cartoon_sampling", integer, std::int64_t{-1}, object_state,
                  -1.0),
@@ -303,7 +309,7 @@ const std::vector<RenderSettingDefinition> &p0_render_setting_definitions() {
 
 operation::Result<RenderSettingStore> RenderSettingStore::create() {
   const auto &definitions = p0_render_setting_definitions();
-  if (definitions.size() != 80U)
+  if (definitions.size() != 81U)
     return operation::Result<RenderSettingStore>::failure(
         invalid("P0 render setting catalog size mismatch"));
   for (std::size_t index = 0; index < definitions.size(); ++index) {

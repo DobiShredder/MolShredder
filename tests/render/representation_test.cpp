@@ -227,8 +227,8 @@ int main() {
       assigned_cartoon.has_value() &&
           assigned_cartoon.value().provenance.at(
               "secondary_structure_method") ==
-              "molshredder-stride-method-v0" &&
-          assigned_cartoon.value().provenance.at("exact_stride_parity") ==
+              "molshredder-dssp-method-v1" &&
+          assigned_cartoon.value().provenance.at("exact_dssp_parity") ==
               "false",
       "automatic cartoon assignment must preserve method provenance");
 

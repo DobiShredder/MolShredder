@@ -58,10 +58,11 @@ Rectangle {
             ]
         }
         if (kind === "A") {
+            // The camera commands read the active object only, so they run after activating this one.
             return [
-                {text: qsTr("zoom"), command: "zoom " + sel},
-                {text: qsTr("center"), command: "center " + sel},
-                {text: qsTr("orient"), command: "orient " + sel},
+                {text: qsTr("zoom"), command: "zoom " + sel, owner: name},
+                {text: qsTr("center"), command: "center " + sel, owner: name},
+                {text: qsTr("orient"), command: "orient " + sel, owner: name},
                 {separator: true},
                 {text: qsTr("rename…"), action: "rename", name: name},
                 {text: qsTr("duplicate…"), form: "object copy", preset: {"object": name}},
@@ -102,7 +103,8 @@ Rectangle {
         }
         const colors = ["red", "orange", "yellow", "green", "cyan", "blue", "magenta", "white", "grey"]
         const entries = [
-            {text: qsTr("by element"), command: "recolor"},
+            {text: qsTr("by element (keep carbon)"), command: "color atomic, (" + sel + ") and not elem C"},
+            {text: qsTr("by element (all atoms)"), command: "color atomic, " + sel},
             {text: qsTr("spectrum by index"), command: "spectrum count, rainbow, " + sel},
             {text: qsTr("spectrum by B-factor"), command: "spectrum b, rainbow, " + sel},
             {separator: true}
@@ -144,6 +146,17 @@ Rectangle {
         return false
     }
 
+    // Middle click on an object or selection row moves the camera to its middle. The camera commands
+    // read the active object only, so the owning object is activated first; groups span objects and are skipped.
+    function centerOn(row) {
+        if (row.kind === "object") commandIn(row.name, "center " + row.name)
+        else if (row.kind === "selection") commandIn(row.owner, "center " + row.name)
+    }
+    // Same path for an object row that is not the first (used by the `ui:objectcenter <name>` test hook).
+    function centerNamed(name) {
+        for (const row of rows) if (row.kind === "object" && row.name === name) { centerOn(row); return }
+    }
+
     // Opens the menu of the first object row (used by the `ui:objectmenu` test hook).
     function openMenu(kind) {
         if (!rows || rows.length === 0) return
@@ -157,7 +170,8 @@ Rectangle {
         id: popup
         property string owner: ""
         onPicked: function(entry) {
-            if (entry.command && owner.length > 0) panel.commandIn(owner, entry.command)
+            if (entry.command && entry.owner) panel.commandIn(entry.owner, entry.command)
+            else if (entry.command && owner.length > 0) panel.commandIn(owner, entry.command)
             else if (entry.command) panel.command(entry.command)
             else if (entry.form) panel.formRequested(entry.form, entry.preset || ({}))
             else if (entry.action === "rename") panel.renameRequested(entry.name)
@@ -265,14 +279,18 @@ Rectangle {
                 font.pixelSize: NextTheme.fontSize
                 font.italic: isSelection
                 font.weight: modelData.active === true || isGroup ? Font.DemiBold : Font.Normal
-                ToolTip.visible: isSelection && nameArea.containsMouse
-                ToolTip.text: isSelection ? modelData.expression + (modelData.dynamic ? "  (dynamic)" : "") : ""
+                ToolTip.visible: (isSelection || isObject) && nameArea.containsMouse
+                ToolTip.delay: 700
+                ToolTip.text: isSelection ? modelData.expression + (modelData.dynamic ? "  (dynamic)" : "")
+                                          : (isObject ? qsTr("Click: make active · Double-click: rename · Middle-click: center the view") : "")
                 MouseArea {
                     id: nameArea
                     anchors.fill: parent
                     hoverEnabled: true
-                    onClicked: {
-                        if (isObject) panel.command("object activate --id " + modelData.id)
+                    acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+                    onClicked: function(mouse) {
+                        if (mouse.button === Qt.MiddleButton) panel.centerOn(modelData)
+                        else if (isObject) panel.command("object activate --id " + modelData.id)
                         else if (isGroup) panel.command("group toggle --name " + modelData.name)
                     }
                     onDoubleClicked: if (isObject) panel.renameRequested(modelData.name)

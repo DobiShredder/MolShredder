@@ -6639,6 +6639,27 @@ operation::Result<BatchLoadResult> Workspace::load_structure_batch(
   }
 }
 
+namespace {
+// Formats whose files normally lack bonds between polymer residues.
+bool formats_without_polymer_bonds(io::StructureFormat format) {
+  switch (format) {
+    case io::StructureFormat::pdb:
+    case io::StructureFormat::mmcif:
+    case io::StructureFormat::bcif:
+    case io::StructureFormat::pdbqt:
+    case io::StructureFormat::cor:
+    case io::StructureFormat::pdbml:
+    case io::StructureFormat::pqr:
+    case io::StructureFormat::gro:
+    case io::StructureFormat::g96:
+    case io::StructureFormat::xyz:
+      return true;
+    default:
+      return false;
+  }
+}
+}  // namespace
+
 operation::Result<BatchLoadResult> Workspace::load_structure_documents(
     std::vector<StructureDocumentLoadRequest> requests,
     operation::TaskContext &context) {
@@ -6730,6 +6751,7 @@ operation::Result<BatchLoadResult> Workspace::load_structure_documents(
 
   auto scene_builder = scene::SceneBuilder::from(*scene_);
   std::vector<WorkspaceObject> pending_objects;
+  std::vector<bool> own_look;
   std::vector<LoadedObjectResult> loaded_objects;
   pending_objects.reserve(structure_count);
   loaded_objects.reserve(structure_count);
@@ -6744,6 +6766,24 @@ operation::Result<BatchLoadResult> Workspace::load_structure_documents(
     const auto &request = requests[candidate.input_index];
     const auto &data = request.document.structures[candidate.record_index];
     auto coordinate_source = data.coordinates;
+    // PDB-like files do not list polymer bonds; connect by covalent distance as
+    // PyMOL/VMD do, so lines and sticks have something to draw. A failure
+    // (huge extent, unreadable frame) keeps the file's own topology.
+    // Session-style documents (PSE, hints) bring their own look, and objects
+    // made inside the workspace (builder, copy, extract: no source file) keep
+    // what their command gave them. Only files get the default look.
+    own_look.push_back(!default_look_on_load_ || request.source_path.empty() ||
+                       request.document.format == io::StructureFormat::pse ||
+                       !data.representation_hints.empty() || !data.visible);
+    auto topology = data.topology;
+    if (formats_without_polymer_bonds(request.document.format)) {
+      if (const auto first_frame = data.coordinates->read_frame(0);
+          first_frame.has_value()) {
+        if (auto connected = model::infer_connectivity(topology, *first_frame.value());
+            connected.has_value())
+          topology = std::move(connected.value());
+      }
+    }
     std::optional<TrajectoryState> embedded_trajectory;
     const auto frame_count = data.coordinates->frame_count().value_or(0U);
     if (frame_count > 1U) {
@@ -6779,11 +6819,11 @@ operation::Result<BatchLoadResult> Workspace::load_structure_documents(
                                                 "embedded-structure-order",
                                                 {},
                                                 {"structure-record-order"},
-                                                data.topology->version()},
+                                                topology->version()},
                                             {}};
     }
     const auto system = model::MolecularSystem::create(
-        object_id, candidate.name, data.topology, coordinate_source);
+        object_id, candidate.name, topology, coordinate_source);
     if (!system.has_value()) {
       return operation::Result<BatchLoadResult>::failure(system.error());
     }
@@ -6794,12 +6834,12 @@ operation::Result<BatchLoadResult> Workspace::load_structure_documents(
     }
     pending_objects.push_back(WorkspaceObject{
         object_id, node.value(), system.value(), 1U, 1U, {},
-        RepresentationVisibilityState::create(data.topology->atom_count())
+        RepresentationVisibilityState::create(topology->atom_count())
             .value(),
         {}, std::move(embedded_trajectory), std::nullopt,
         render::kColorDefault, nullptr, nullptr, nullptr, std::nullopt, false, {}, 0U});
     loaded_objects.push_back(LoadedObjectResult{
-        object_id, candidate.name, data.topology->atom_count(),
+        object_id, candidate.name, topology->atom_count(),
         data.coordinates->frame_count().value_or(0U), candidate.record_index});
     if (context.report_progress) {
       context.report_progress(
@@ -6833,30 +6873,97 @@ operation::Result<BatchLoadResult> Workspace::load_structure_documents(
       pymol_load_colors.has_value()
           ? std::get_if<bool>(&pymol_load_colors.value().value)
           : nullptr;
-  for (auto &pending : pending_objects) {
+  const auto classified_setting = render_settings_.resolve(
+      "auto_show_classified", render::RenderSettingContext{});
+  const auto *classified_value =
+      classified_setting.has_value()
+          ? std::get_if<std::int64_t>(&classified_setting.value().value)
+          : nullptr;
+  const auto lines_setting = render_settings_.resolve(
+      "auto_show_lines", render::RenderSettingContext{});
+  const auto *lines_flag =
+      lines_setting.has_value() ? std::get_if<bool>(&lines_setting.value().value)
+                                : nullptr;
+  const bool classified_show = classified_value != nullptr && *classified_value != 0;
+  const bool classic_lines = !classified_show && lines_flag != nullptr && *lines_flag;
+  for (std::size_t pending_index = 0; pending_index < pending_objects.size();
+       ++pending_index) {
+    auto &pending = pending_objects[pending_index];
     pending.object_color = cycle[cursor % cycle.size()];
     cursor = (cursor + 1U) % cycle.size();
-    if (pymol_load_flag == nullptr || !*pymol_load_flag)
-      continue;
+    if (own_look[pending_index]) continue;
     const auto &topology = *pending.system->topology();
-    std::vector<std::pair<std::uint64_t, std::int32_t>> colors;
-    colors.reserve(topology.atom_count());
-    for (std::size_t atom = 0; atom < topology.atom_count(); ++atom) {
-      const auto id = topology.atom_id(model::AtomIndex{atom});
-      if (!id.has_value())
-        return operation::Result<BatchLoadResult>::failure(
-            invalid("topology atom identity is missing"));
-      const auto element = topology.atoms()[atom].atomic_number;
-      const auto color = element == 6U
-                             ? pending.object_color
-                             : render::ColorTable::element_color(element);
-      // Unknown elements get index 0 like PyMOL.
-      colors.emplace_back(id->value, color);
+    bool changed = false;
+    if (pymol_load_flag != nullptr && *pymol_load_flag) {
+      std::vector<std::pair<std::uint64_t, std::int32_t>> colors;
+      colors.reserve(topology.atom_count());
+      for (std::size_t atom = 0; atom < topology.atom_count(); ++atom) {
+        const auto id = topology.atom_id(model::AtomIndex{atom});
+        if (!id.has_value())
+          return operation::Result<BatchLoadResult>::failure(
+              invalid("topology atom identity is missing"));
+        const auto element = topology.atoms()[atom].atomic_number;
+        const auto color = element == 6U
+                               ? pending.object_color
+                               : render::ColorTable::element_color(element);
+        // Unknown elements get index 0 like PyMOL.
+        colors.emplace_back(id->value, color);
+      }
+      std::sort(colors.begin(), colors.end());
+      pending.atom_colors =
+          std::make_shared<const std::vector<std::pair<std::uint64_t, std::int32_t>>>(
+              std::move(colors));
+      changed = true;
     }
-    std::sort(colors.begin(), colors.end());
-    pending.atom_colors =
-        std::make_shared<const std::vector<std::pair<std::uint64_t, std::int32_t>>>(
-            std::move(colors));
+    if (classified_show || classic_lines) {
+      // Protein: cartoon. Nucleic acid: sticks (the cartoon has no nucleic
+      // backbone yet). Ions and bond-less small-molecule atoms: spheres.
+      // Other small molecules and solvent: lines.
+      const auto residue_classes = model::classify_residues(topology);
+      std::vector<std::uint8_t> has_bond(topology.atom_count(), 0U);
+      for (const auto &bond : topology.bonds()) {
+        has_bond[bond.first.value] = 1U;
+        has_bond[bond.second.value] = 1U;
+      }
+      std::vector<std::uint8_t> cartoon(topology.atom_count(), 0U);
+      std::vector<std::uint8_t> sticks(topology.atom_count(), 0U);
+      std::vector<std::uint8_t> lines(topology.atom_count(), 0U);
+      std::vector<std::uint8_t> spheres(topology.atom_count(), 0U);
+      for (std::size_t atom = 0; atom < topology.atom_count(); ++atom) {
+        const auto residue = topology.atoms()[atom].residue.value;
+        const auto kind = !classified_show || residue >= residue_classes.size()
+                              ? model::ResidueClass::organic
+                              : residue_classes[residue];
+        switch (kind) {
+        case model::ResidueClass::protein: cartoon[atom] = 1U; break;
+        case model::ResidueClass::nucleic: sticks[atom] = 1U; break;
+        case model::ResidueClass::ion: spheres[atom] = 1U; break;
+        case model::ResidueClass::solvent: lines[atom] = 1U; break;
+        case model::ResidueClass::organic:
+          (has_bond[atom] != 0U || classic_lines ? lines : spheres)[atom] = 1U;
+          break;
+        }
+      }
+      const std::pair<render::RepresentationKind, const std::vector<std::uint8_t> *>
+          shown[] = {{render::RepresentationKind::cartoon, &cartoon},
+                     {render::RepresentationKind::sticks, &sticks},
+                     {render::RepresentationKind::lines, &lines},
+                     {render::RepresentationKind::spheres, &spheres}};
+      for (const auto &[kind, mask] : shown) {
+        if (std::none_of(mask->begin(), mask->end(),
+                         [](std::uint8_t value) { return value != 0U; }))
+          continue;
+        if (const auto error = pending.representation_visibility.apply(
+                kind, *mask, RepresentationVisibilityMutation::show);
+            error.has_value())
+          return operation::Result<BatchLoadResult>::failure(*error);
+        changed = true;
+      }
+    }
+    // A topology-only object has no frame to build from; its representations
+    // appear once coordinates attach, from the state set above.
+    if (!changed || pending.system->coordinates()->frame_count().value_or(0U) == 0U)
+      continue;
     const auto frame = active_frame(pending);
     if (!frame.has_value())
       return operation::Result<BatchLoadResult>::failure(frame.error());

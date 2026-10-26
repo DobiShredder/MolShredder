@@ -386,6 +386,7 @@ class StatementTranslation {
   void translate_refresh();
   void translate_recolor();
   void translate_set_color();
+  void translate_util_atomic_colors();
   void translate_code_execution();
   void translate_representation(std::string command, std::string default_representation);
 
@@ -1169,6 +1170,25 @@ void StatementTranslation::translate_recolor() {
   emit("recolor", {});
 }
 
+// util.cnc colors every non-carbon atom by element and leaves carbon alone;
+// util.cba<x> also gives the carbons one named color (PyMOL util.py).
+void StatementTranslation::translate_util_atomic_colors() {
+  static const std::map<char, const char*> carbon_colors{
+      {'b', "slate"}, {'c', "cyan"}, {'g', "carbon"}, {'k', "pink"},
+      {'m', "lightmagenta"}, {'o', "brightorange"}, {'p', "purple"},
+      {'s', "salmon"}, {'w', "hydrogen"}, {'y', "yellow"}};
+  if (!bind({"selection", "quiet"})) return;
+  const auto scope = selection("selection");
+  emit("color", {{"color", "atomic"}, {"selection", "((" + scope + ") and not elem C)"},
+                 {"scope", "workspace"}});
+  if (statement_.command != "util.cnc") {
+    const auto found = carbon_colors.find(statement_.command.back());
+    if (found == carbon_colors.end()) return;
+    emit("color", {{"color", found->second}, {"selection", "(elem C and (" + scope + "))"},
+                   {"scope", "workspace"}});
+  }
+}
+
 void StatementTranslation::translate_set_color() {
   if (!bind({"name", "rgb", "mode", "quiet"}) || !require("name") || !require("rgb")) return;
   require_default("mode", {"0"});
@@ -1269,6 +1289,17 @@ void StatementTranslation::run() {
       {"exit", &StatementTranslation::translate_quit},
       {"refresh", &StatementTranslation::translate_refresh},
       {"recolor", &StatementTranslation::translate_recolor},
+      {"util.cbab", &StatementTranslation::translate_util_atomic_colors},
+      {"util.cbac", &StatementTranslation::translate_util_atomic_colors},
+      {"util.cbag", &StatementTranslation::translate_util_atomic_colors},
+      {"util.cbak", &StatementTranslation::translate_util_atomic_colors},
+      {"util.cbam", &StatementTranslation::translate_util_atomic_colors},
+      {"util.cbao", &StatementTranslation::translate_util_atomic_colors},
+      {"util.cbap", &StatementTranslation::translate_util_atomic_colors},
+      {"util.cbas", &StatementTranslation::translate_util_atomic_colors},
+      {"util.cbaw", &StatementTranslation::translate_util_atomic_colors},
+      {"util.cbay", &StatementTranslation::translate_util_atomic_colors},
+      {"util.cnc", &StatementTranslation::translate_util_atomic_colors},
       {"set_color", &StatementTranslation::translate_set_color},
       {"run", &StatementTranslation::translate_code_execution},
       {"spawn", &StatementTranslation::translate_code_execution},

@@ -6,6 +6,8 @@
 #include <map>
 #include <queue>
 #include <set>
+#include <tuple>
+#include <unordered_map>
 #include <utility>
 
 namespace molshredder::model {
@@ -500,6 +502,138 @@ operation::Result<std::shared_ptr<const Topology>> apply_chemical_perception(
     }
   }
   return builder.build();
+}
+
+std::vector<ResidueClass> classify_residues(const Topology &topology) {
+  const auto &residues = topology.residues();
+  std::vector<ResidueClass> result(residues.size(), ResidueClass::organic);
+  std::vector<PolymerType> family(residues.size(), PolymerType::none);
+  std::map<std::pair<std::string, PolymerType>, std::size_t> chain_members;
+  for (std::size_t index = 0; index < residues.size(); ++index) {
+    const auto &residue = residues[index];
+    auto kind = residue.kind;
+    auto polymer = residue.polymer_type;
+    if (residue.chemical_origin == ChemicalAnnotationOrigin::unspecified) {
+      std::tie(kind, polymer) = classify_residue(residue.name);
+    }
+    family[index] = polymer;
+    switch (kind) {
+    case ResidueKind::amino_acid: result[index] = ResidueClass::protein; break;
+    case ResidueKind::nucleic_acid: result[index] = ResidueClass::nucleic; break;
+    case ResidueKind::solvent: result[index] = ResidueClass::solvent; break;
+    case ResidueKind::ion: result[index] = ResidueClass::ion; break;
+    default: result[index] = ResidueClass::organic; break;
+    }
+    if (polymer == PolymerType::protein || polymer == PolymerType::dna ||
+        polymer == PolymerType::rna)
+      ++chain_members[{residue.chain_id, polymer}];
+  }
+  for (std::size_t index = 0; index < residues.size(); ++index) {
+    if (result[index] != ResidueClass::protein && result[index] != ResidueClass::nucleic)
+      continue;
+    const auto found = chain_members.find({residues[index].chain_id, family[index]});
+    if (found == chain_members.end() || found->second < 2U)
+      result[index] = ResidueClass::organic;
+  }
+  return result;
+}
+
+operation::Result<std::shared_ptr<const Topology>> infer_connectivity(
+    std::shared_ptr<const Topology> source, const CoordinateFrame &frame,
+    double covalent_radius_scale) {
+  using Output = operation::Result<std::shared_ptr<const Topology>>;
+  if (source == nullptr || !std::isfinite(covalent_radius_scale) ||
+      covalent_radius_scale < 1.0 || covalent_radius_scale > 1.5) {
+    return Output::failure({operation::ErrorCode::invalid_argument,
+                            "connectivity inference needs a topology and a radius scale in [1.0, 1.5]",
+                            {}});
+  }
+  const auto &topology = *source;
+  const auto atom_count = topology.atom_count();
+  if (frame.atom_count() != atom_count)
+    return Output::failure({operation::ErrorCode::invalid_argument,
+                            "coordinate frame does not match the topology", {}});
+  const auto coordinates = positions_angstrom(frame);
+  std::vector<double> radius(atom_count, 0.0);
+  double largest = 0.0;
+  Vec3d low{1e300, 1e300, 1e300};
+  std::size_t usable = 0;
+  for (std::size_t atom = 0; atom < atom_count; ++atom) {
+    const auto &c = coordinates[atom];
+    if (!frame.atom_present(atom) || !std::isfinite(c.x) || !std::isfinite(c.y) ||
+        !std::isfinite(c.z))
+      continue;
+    radius[atom] = covalent_radius(topology.atoms()[atom].atomic_number);
+    if (radius[atom] == 0.0) continue;
+    largest = std::max(largest, radius[atom]);
+    low = {std::min(low.x, c.x), std::min(low.y, c.y), std::min(low.z, c.z)};
+    ++usable;
+  }
+  if (usable < 2U) return Output::success(std::move(source));
+
+  const double cell = covalent_radius_scale * 2.0 * largest;
+  const auto cell_of = [&](double value, double origin) {
+    return static_cast<std::int64_t>(std::floor((value - origin) / cell));
+  };
+  // Coordinates far outside any molecular range would overflow the cell key.
+  constexpr std::int64_t kMaxCells = 1LL << 20;
+  const auto key = [](std::int64_t x, std::int64_t y, std::int64_t z) {
+    return (static_cast<std::uint64_t>(x + 1) << 42U) |
+           (static_cast<std::uint64_t>(y + 1) << 21U) |
+           static_cast<std::uint64_t>(z + 1);
+  };
+  std::unordered_map<std::uint64_t, std::vector<std::uint32_t>> grid;
+  grid.reserve(usable);
+  for (std::size_t atom = 0; atom < atom_count; ++atom) {
+    if (radius[atom] == 0.0) continue;
+    const auto &c = coordinates[atom];
+    const auto x = cell_of(c.x, low.x), y = cell_of(c.y, low.y), z = cell_of(c.z, low.z);
+    if (x >= kMaxCells - 2 || y >= kMaxCells - 2 || z >= kMaxCells - 2)
+      return Output::failure({operation::ErrorCode::resource_exhausted,
+                              "structure extent is too large for connectivity inference",
+                              {}});
+    grid[key(x, y, z)].push_back(static_cast<std::uint32_t>(atom));
+  }
+
+  std::vector<Bond> added;
+  std::set<std::pair<std::size_t, std::size_t>> existing;
+  for (const auto &bond : topology.bonds())
+    existing.emplace(bond.first.value, bond.second.value);
+  for (std::size_t first = 0; first < atom_count; ++first) {
+    if (radius[first] == 0.0) continue;
+    const auto &a = coordinates[first];
+    const auto cx = cell_of(a.x, low.x), cy = cell_of(a.y, low.y), cz = cell_of(a.z, low.z);
+    for (std::int64_t dx = -1; dx <= 1; ++dx)
+      for (std::int64_t dy = -1; dy <= 1; ++dy)
+        for (std::int64_t dz = -1; dz <= 1; ++dz) {
+          const auto found = grid.find(key(cx + dx, cy + dy, cz + dz));
+          if (found == grid.end()) continue;
+          for (const auto second : found->second) {
+            if (second <= first) continue;
+            const auto &altloc_a = topology.atoms()[first].alternate_location;
+            const auto &altloc_b = topology.atoms()[second].alternate_location;
+            if (!altloc_a.empty() && !altloc_b.empty() && altloc_a != altloc_b) continue;
+            const auto &b = coordinates[second];
+            const auto distance = std::sqrt((a.x - b.x) * (a.x - b.x) +
+                                            (a.y - b.y) * (a.y - b.y) +
+                                            (a.z - b.z) * (a.z - b.z));
+            if (distance < 0.4 ||
+                distance > covalent_radius_scale * (radius[first] + radius[second]))
+              continue;
+            if (existing.contains({first, second})) continue;
+            added.push_back({{first}, {second}, BondOrder::single, BondQuery::none,
+                             BondStereo::none, ChemicalAnnotationOrigin::inferred});
+          }
+        }
+  }
+  if (added.empty()) return Output::success(std::move(source));
+  std::ranges::sort(added, [](const Bond &l, const Bond &r) {
+    return std::tie(l.first.value, l.second.value) < std::tie(r.first.value, r.second.value);
+  });
+  auto builder = TopologyBuilder::from(topology);
+  if (const auto error = builder.add_bonds(added); error.has_value())
+    return Output::failure(*error);
+  return builder.build_unobserved();
 }
 
 }  // namespace molshredder::model

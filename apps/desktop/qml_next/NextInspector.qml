@@ -222,7 +222,8 @@ Popup {
                     Flow {
                         width: parent.width
                         spacing: 6
-                        NextButton { text: qsTr("by element"); onClicked: inspector.command("recolor") }
+                        NextButton { text: qsTr("by element (keep carbon)"); onClicked: inspector.command("color atomic, (" + inspector.selection() + ") and not elem C") }
+                        NextButton { text: qsTr("by element (all atoms)"); onClicked: inspector.command("color atomic, " + inspector.selection()) }
                         NextButton { text: qsTr("spectrum by index"); onClicked: inspector.command("spectrum count, rainbow, " + inspector.selection()) }
                         NextButton { text: qsTr("spectrum by B-factor"); onClicked: inspector.command("spectrum b, rainbow, " + inspector.selection()) }
                     }

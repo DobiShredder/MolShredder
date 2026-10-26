@@ -6,6 +6,7 @@
 #include <tuple>
 #include <type_traits>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 namespace molshredder::model {
@@ -452,6 +453,47 @@ std::optional<operation::Error> TopologyBuilder::set_residue_semantics(
   return std::nullopt;
 }
 
+std::optional<operation::Error> TopologyBuilder::add_bonds(
+    std::span<const Bond> bonds) {
+  if (bonds.size() > std::numeric_limits<std::uint64_t>::max() - next_bond_id_)
+    return invalid("bond identity space is exhausted");
+  const auto key = [](const Bond& bond) {
+    return std::pair{bond.first.value, bond.second.value};
+  };
+  struct PairHash {
+    std::size_t operator()(const std::pair<std::size_t, std::size_t>& value) const noexcept {
+      return value.first * 0x9E3779B97F4A7C15ULL ^ (value.second + 0x7F4A7C15ULL);
+    }
+  };
+  std::unordered_set<std::pair<std::size_t, std::size_t>, PairHash> seen;
+  seen.reserve(bonds_.size() + bonds.size());
+  for (const auto& existing : bonds_) seen.insert(key(existing));
+  std::vector<Bond> prepared;
+  prepared.reserve(bonds.size());
+  for (auto bond : bonds) {
+    if (!has_atom(bond.first) || !has_atom(bond.second))
+      return invalid("bond references an unknown atom");
+    if (!distinct(bond.first, bond.second))
+      return invalid("bond endpoints must be different atoms");
+    if ((bond.order == BondOrder::query) != (bond.query != BondQuery::none))
+      return invalid(
+          "query bond order and query constraint must be specified together");
+    if (bond.second < bond.first) {
+      std::swap(bond.first, bond.second);
+      bond.stereo = reversed_stereo(bond.stereo);
+    }
+    if (!seen.insert(key(bond)).second)
+      return invalid("duplicate bond endpoints",
+                     "store one bond order per atom pair");
+    prepared.push_back(bond);
+  }
+  for (const auto& bond : prepared) {
+    bonds_.push_back(bond);
+    bond_ids_.push_back(BondId{next_bond_id_++});
+  }
+  return std::nullopt;
+}
+
 std::optional<operation::Error> TopologyBuilder::set_bond_semantics(
     std::size_t bond_index, BondOrder order, BondQuery query,
     ChemicalAnnotationOrigin origin) {
@@ -598,8 +640,18 @@ void TopologyBuilder::set_source_metadata(std::string name,
   source_metadata_.insert_or_assign(std::move(name), std::move(value));
 }
 
+operation::Result<std::shared_ptr<const Topology>>
+TopologyBuilder::build_unobserved() const {
+  return build_with_version(base_version_);
+}
+
 operation::Result<std::shared_ptr<const Topology>> TopologyBuilder::build()
     const {
+  return build_with_version(base_version_ + 1U);
+}
+
+operation::Result<std::shared_ptr<const Topology>>
+TopologyBuilder::build_with_version(std::uint64_t version) const {
   if (base_version_ == std::numeric_limits<std::uint64_t>::max()) {
     return operation::Result<std::shared_ptr<const Topology>>::failure(
         invalid("topology version overflow"));
@@ -616,7 +668,7 @@ operation::Result<std::shared_ptr<const Topology>> TopologyBuilder::build()
         invalid("topology stable identity table is inconsistent"));
 
   auto topology = std::make_shared<Topology>();
-  topology->version_ = base_version_ + 1U;
+  topology->version_ = version;
   topology->atoms_ = atoms_;
   topology->atom_ids_ = atom_ids_;
   topology->residues_ = residues_;

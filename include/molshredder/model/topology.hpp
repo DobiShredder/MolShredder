@@ -395,6 +395,11 @@ class TopologyBuilder {
   retain_atoms(std::span<const AtomId> ordered_atom_ids);
 
   [[nodiscard]] std::optional<operation::Error> add_bond(Bond bond);
+  // Adds many bonds at once. Duplicate endpoints (also against existing bonds)
+  // are rejected with one hash lookup per bond instead of a linear scan, so a
+  // million-bond import stays linear. Nothing is added when any bond is invalid.
+  [[nodiscard]] std::optional<operation::Error> add_bonds(
+      std::span<const Bond> bonds);
   [[nodiscard]] std::optional<operation::Error> set_bond_semantics(
       std::size_t bond_index, BondOrder order, BondQuery query,
       ChemicalAnnotationOrigin origin);
@@ -415,10 +420,17 @@ class TopologyBuilder {
 
   void set_source_metadata(std::string name, std::string value);
 
+  // Like build(), but the result keeps the source's version. Only for replacing
+  // a topology that nothing has observed yet (load-time connectivity), so a
+  // freshly loaded object still reports its first version.
+  [[nodiscard]] operation::Result<std::shared_ptr<const Topology>>
+  build_unobserved() const;
   [[nodiscard]] operation::Result<std::shared_ptr<const Topology>> build()
       const;
 
  private:
+  [[nodiscard]] operation::Result<std::shared_ptr<const Topology>>
+  build_with_version(std::uint64_t version) const;
   [[nodiscard]] bool has_atom(AtomIndex atom) const noexcept;
 
   std::vector<AtomRecord> atoms_;

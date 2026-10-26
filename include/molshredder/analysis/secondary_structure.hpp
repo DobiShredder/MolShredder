@@ -79,6 +79,13 @@ assign_secondary_structure(
     const model::Topology& topology, const model::CoordinateFrame& frame,
     const SecondaryStructureParameters& parameters = {});
 
+// Hydrogen-bond pattern assignment after Kabsch and Sander (1983), written from
+// the paper (see dssp_secondary_structure.cpp). Used for cartoon rendering when
+// the file declares no helices or sheets; not a claim of exact DSSP parity.
+[[nodiscard]] operation::Result<SecondaryStructureResult>
+assign_secondary_structure_dssp(const model::Topology& topology,
+                                const model::CoordinateFrame& frame);
+
 [[nodiscard]] operation::Result<double> stride_method_hbond_energy_v0(
     // Coordinates are expressed in angstrom.
     model::Vec3d donor_n, model::Vec3d donor_h,

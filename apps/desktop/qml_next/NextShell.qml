@@ -60,7 +60,7 @@ Window {
     }
     function quote(text) { return "\"" + String(text).replace(/\\/g, "\\\\").replace(/"/g, "\\\"") + "\"" }
     // `ui:` lines drive the shell itself (used by --command for screenshots and smoke tests):
-    //   ui:form <command> | ui:menu <Title> | ui:objectmenu <A|S|H|L|C> | ui:sequence on|off | ui:output on|off
+    //   ui:form <command> | ui:menu <Title> | ui:objectmenu <A|S|H|L|C> | ui:objectcenter <object> | ui:sequence on|off | ui:output on|off
     function uiCommand(text) {
         const parts = text.substring(3).trim().split(/\s+/)
         const rest = parts.slice(1).join(" ")
@@ -102,6 +102,7 @@ Window {
         case "trajectory": trajectoryImport.openPanel(rest.length > 0 ? rest : undefined); break
         case "menu": menuPopup.entries = menus[rest]; menuPopup.popup(menubar, menuOrder.indexOf(rest) * 62 + 6, 34); break
         case "objectmenu": side.openMenu(rest); break
+        case "objectcenter": side.centerNamed(rest); break
         case "sequence": prefs.sequenceVisible = rest === "on"; break
         case "output": prefs.outputVisible = rest === "on"; break
         case "theme": setTheme(rest); break

@@ -3,6 +3,7 @@
 #include <limits>
 #include <numbers>
 #include <string_view>
+#include <utility>
 
 #include "molshredder/model/coordinates.hpp"
 #include "molshredder/scene/camera.hpp"
@@ -69,6 +70,46 @@ int main() {
                             camera.value().parameters().distance) &&
                        !near(orbit.value().position(), camera.value().position()),
                    "orbit must preserve distance and normalized orientation");
+
+  {
+    // A drag moves the molecule the same way on screen whether the camera is
+    // upright or turned upside down (rolled 180 degrees): the point of the
+    // molecule nearest the viewer follows the mouse.
+    const auto screen_shift = [](const scene::Camera &view, double dx, double dy) {
+      const auto moved = view.orbit_pixels(dx, dy);
+      const auto forward = view.forward();
+      const auto target = view.parameters().target;
+      const model::Vec3d near_point{target.x - forward.x, target.y - forward.y,
+                                    target.z - forward.z};
+      const auto offset = [&](const scene::Camera &camera_at) {
+        const auto eye = camera_at.position();
+        return model::Vec3d{near_point.x - eye.x, near_point.y - eye.y,
+                            near_point.z - eye.z};
+      };
+      const auto before = offset(view);
+      const auto after = offset(moved.value());
+      return std::pair{scene::dot(after, moved.value().right()) -
+                           scene::dot(before, view.right()),
+                       scene::dot(after, moved.value().up()) -
+                           scene::dot(before, view.up())};
+    };
+    auto rolled_parameters = camera.value().parameters();
+    rolled_parameters.orientation = scene::normalized(
+        rolled_parameters.orientation *
+        scene::quaternion_from_axis_angle({0.0, 0.0, 1.0}, std::numbers::pi));
+    const auto rolled = scene::Camera::create(rolled_parameters);
+    const auto upright_right = screen_shift(camera.value(), 30.0, 0.0);
+    const auto rolled_right = screen_shift(rolled.value(), 30.0, 0.0);
+    const auto upright_down = screen_shift(camera.value(), 0.0, 30.0);
+    const auto rolled_down = screen_shift(rolled.value(), 0.0, 30.0);
+    passed &= expect(rolled.has_value() && upright_right.first > 1.0e-6 &&
+                         rolled_right.first > 1.0e-6 &&
+                         near(upright_right.first, rolled_right.first, 1.0e-9),
+                     "horizontal drag must move the molecule the same way upside down");
+    passed &= expect(upright_down.second < -1.0e-6 && rolled_down.second < -1.0e-6 &&
+                         near(upright_down.second, rolled_down.second, 1.0e-9),
+                     "vertical drag must move the molecule the same way upside down");
+  }
 
   const auto pan = camera.value().pan_pixels(100.0, 50.0, 1000.0);
   const auto units_per_pixel =

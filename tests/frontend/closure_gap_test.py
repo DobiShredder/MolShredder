@@ -55,6 +55,16 @@ def main() -> int:
     rows = {str(row[0]): row for row in ok(m.invoke("object list"), "object list")["table"]["rows"]}
     ok(m.invoke("object activate", {"id": chem}), "activate chem")
     require(rows[ubq][5] == 660 and rows[ubq][6] == 1, "ubq atom/frame count")
+    # Files without polymer bonds (PDB, mmCIF, XYZ, ...) are connected by covalent distance on load,
+    # so lines/sticks have something to draw; a file with its own bonds (SDF) is left as written.
+    ubq_bonds = ok(m.invoke("object copy", {"object": ubq, "name": "ubq-bonds"}), "copy ubq")["bond_count"]
+    require(500 < ubq_bonds < 800, f"1ubq must load with distance-inferred bonds: {ubq_bonds}")
+    # A loaded file shows itself by residue class: ubiquitin = cartoon (protein) + lines (the 58 waters), a
+    # small molecule = lines, and auto_color gives every atom a load color.
+    require(rows[ubq][7] == 2, f"1ubq default look is cartoon + lines: {rows[ubq]}")
+    require(rows[chem][7] == 1, f"a small molecule shows lines only: {rows[chem]}")
+    mf_bonds = ok(m.invoke("object copy", {"object": mf, "name": "mf-bonds"}), "copy mf")["bond_count"]
+    require(mf_bonds <= 3, f"three xyz atoms cannot have more than three bonds: {mf_bonds}")
     require(rows[mf][5] == 3 and rows[mf][6] == 2 and rows[mf][8] is True,
             "multi-frame object count and trajectory flag")
 
@@ -99,7 +109,7 @@ def main() -> int:
     # scene.snapshot.* and scene.query.list: lifecycle and the restored channels.
     ok(m.invoke("scene clear"), "scene clear")
     ok(m.invoke("object activate", {"id": mf}), "activate mf")
-    ok(m.invoke("show", {"representation": "sticks"}), "show sticks")
+    ok(m.invoke("as", {"representation": "sticks"}), "show only sticks")   # one representation, whatever the load showed
     ok(m.invoke("traj frame", {"frame": "1"}), "frame 1")
     base_view = ok(m.invoke("view get"), "view get")["camera"]
     ok(m.invoke("scene store", {"name": "a"}), "store a")
@@ -359,7 +369,8 @@ def main() -> int:
     require(count("small and name CA") + count("medium and name CA") +
             count("large and name CA") >= 70, "size classes cover the protein residues")
     require(count("atomicnumber = 16") == count("element S") == 1 and
-            count("numbonds = 0") == 660, "atomic number and bond count fields")
+            count("numbonds = 0") == count("resn HOH") == 58 and count("numbonds > 0") == 602,
+            "atomic number and bond count fields (load connects every non-water atom; the 58 waters are single O atoms)")
     require(count("radius > 1.6") == count("element C or element S"),
             "Bondi radii: carbon 1.7 and sulfur 1.8 exceed 1.6, nitrogen and oxygen do not")
     require(m.invoke("object count", {"selection": "mass > 10"})["status"] == "error",
@@ -1252,6 +1263,14 @@ def main() -> int:
         restored_state = workspace_state()
         require(restored_state == expected_state,
                 f"the session journal replays to the same workspace:\n{restored_state}\n{expected_state}")
+    # mmCIF declares helices and strands (_struct_conf HELX_*, _struct_sheet_range) like PDB HELIX/SHEET;
+    # a TURN_P row is not a helix, and a category with a single row is written without a loop.
+    for fixture_name, helix_residues in (("ss_ranges_loop.cif", 2), ("ss_ranges_single.cif", 3)):
+        loaded = load(fixture_name.replace(".", "_"), fixture_name)["object_id"]
+        counts = {sel: ok(m.invoke("object count", {"object": str(loaded), "selection": sel}),
+                          f"count {sel}")["atom_count"] for sel in ("ss H", "ss S")}
+        require(counts == {"ss H": helix_residues, "ss S": 2},
+                f"{fixture_name}: declared secondary structure {counts}")
     return 0
 
 

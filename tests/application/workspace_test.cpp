@@ -77,6 +77,7 @@ int main(int argc, char** argv) {
 
   {
     auto batch_workspace = std::make_shared<application::Workspace>();
+    batch_workspace->set_default_look_on_load(false);  // these tests count the representations they create
     double progress{};
     operation::TaskContext batch_context{
         {}, [&](const auto& update) { progress = update.fraction; }};
@@ -127,6 +128,7 @@ int main(int argc, char** argv) {
 
   {
     auto async_workspace = std::make_shared<application::Workspace>();
+    async_workspace->set_default_look_on_load(false);  // these tests count the representations they create
     auto scheduler = operation::TaskScheduler::create(
                          {1U, 4U, 1024U * 1024U, 2U})
                          .value();
@@ -203,6 +205,7 @@ int main(int argc, char** argv) {
 
   {
     auto analysis_workspace = std::make_shared<application::Workspace>();
+    analysis_workspace->set_default_look_on_load(false);  // these tests count the representations they create
     const auto loaded = analysis_workspace->load_structure(
         fixture, std::string{"scheduled-analysis"}, io::StructureFormat::pdb);
     auto scheduler = operation::TaskScheduler::create(
@@ -370,6 +373,7 @@ int main(int argc, char** argv) {
 
   {
     auto edit_workspace = std::make_shared<application::Workspace>();
+    edit_workspace->set_default_look_on_load(false);  // these tests count the representations they create
     auto edit_registry = application::make_default_registry(edit_workspace);
     const application::Dispatcher edit_dispatcher{edit_registry};
     const gui::ActionAdapter edit_gui{edit_dispatcher};
@@ -489,6 +493,7 @@ int main(int argc, char** argv) {
 
   {
     auto topology_workspace = std::make_shared<application::Workspace>();
+    topology_workspace->set_default_look_on_load(false);  // these tests count the representations they create
     auto topology_registry =
         application::make_default_registry(topology_workspace);
     const application::Dispatcher topology_dispatcher{topology_registry};
@@ -634,6 +639,7 @@ int main(int argc, char** argv) {
 
   {
     auto frontend_workspace = std::make_shared<application::Workspace>();
+    frontend_workspace->set_default_look_on_load(false);  // these tests count the representations they create
     const auto frontend_registry =
         application::make_default_registry(frontend_workspace);
     const application::Dispatcher frontend_dispatcher{frontend_registry};
@@ -652,6 +658,7 @@ int main(int argc, char** argv) {
                      "GUI adapter must observe canonical batch progress");
 
     auto cancelled_workspace = std::make_shared<application::Workspace>();
+    cancelled_workspace->set_default_look_on_load(false);  // these tests count the representations they create
     const auto cancelled_registry =
         application::make_default_registry(cancelled_workspace);
     const application::Dispatcher cancelled_dispatcher{cancelled_registry};
@@ -670,6 +677,7 @@ int main(int argc, char** argv) {
 
   {
     auto amber_workspace = std::make_shared<application::Workspace>();
+    amber_workspace->set_default_look_on_load(false);  // these tests count the representations they create
     auto amber_registry = application::make_default_registry(amber_workspace);
     const application::Dispatcher amber_dispatcher{amber_registry};
     const gui::ActionAdapter amber_gui{amber_dispatcher};
@@ -698,6 +706,7 @@ int main(int argc, char** argv) {
 
   {
     auto psf_workspace = std::make_shared<application::Workspace>();
+    psf_workspace->set_default_look_on_load(false);  // these tests count the representations they create
     auto psf_registry = application::make_default_registry(psf_workspace);
     const application::Dispatcher psf_dispatcher{psf_registry};
     const gui::ActionAdapter psf_gui{psf_dispatcher};
@@ -720,6 +729,7 @@ int main(int argc, char** argv) {
 
   {
     auto g96_workspace = std::make_shared<application::Workspace>();
+    g96_workspace->set_default_look_on_load(false);  // these tests count the representations they create
     const auto loaded = g96_workspace->load_structure(
         g96_fixture, std::string{"gromos"}, io::StructureFormat::auto_detect);
     const auto current_extent = g96_workspace->selection_extent("all");
@@ -793,6 +803,7 @@ int main(int argc, char** argv) {
 
   {
     auto gro_workspace = std::make_shared<application::Workspace>();
+    gro_workspace->set_default_look_on_load(false);  // these tests count the representations they create
     const auto loaded = gro_workspace->load_structure(
         gro_fixture, std::string{"gromacs"}, io::StructureFormat::auto_detect);
     passed &= expect(
@@ -807,6 +818,7 @@ int main(int argc, char** argv) {
 
   {
     auto mol2_workspace = std::make_shared<application::Workspace>();
+    mol2_workspace->set_default_look_on_load(false);  // these tests count the representations they create
     const auto loaded = mol2_workspace->load_structure(
         mol2_fixture, std::nullopt, io::StructureFormat::auto_detect);
     passed &= expect(
@@ -821,6 +833,7 @@ int main(int argc, char** argv) {
 
   {
     auto chemistry_workspace = std::make_shared<application::Workspace>();
+    chemistry_workspace->set_default_look_on_load(false);  // these tests count the representations they create
     const auto loaded = chemistry_workspace->load_structure(
         sdf_fixture, std::nullopt, io::StructureFormat::auto_detect);
     passed &= expect(
@@ -851,6 +864,7 @@ int main(int argc, char** argv) {
                      "explicit empty batch name must fail without mutation");
 
     auto named_workspace = std::make_shared<application::Workspace>();
+    named_workspace->set_default_look_on_load(false);  // these tests count the representations they create
     const auto named = named_workspace->load_structure(
         sdf_fixture, std::string{"chemistry"}, io::StructureFormat::sdf);
     passed &= expect(
@@ -862,6 +876,7 @@ int main(int argc, char** argv) {
 
   {
     auto pqr_workspace = std::make_shared<application::Workspace>();
+    pqr_workspace->set_default_look_on_load(false);  // these tests count the representations they create
     auto pqr_registry = application::make_default_registry(pqr_workspace);
     const application::Dispatcher pqr_dispatcher{pqr_registry};
     const gui::ActionAdapter pqr_gui{pqr_dispatcher};
@@ -888,6 +903,7 @@ int main(int argc, char** argv) {
   }
 
   auto workspace = std::make_shared<application::Workspace>();
+  workspace->set_default_look_on_load(false);  // these tests count the representations they create
   auto registry = application::make_default_registry(workspace);
   const application::Dispatcher dispatcher{registry};
   const gui::ActionAdapter gui{dispatcher};
@@ -1626,6 +1642,7 @@ int main(int argc, char** argv) {
                    "invalid selection must fail through GUI action");
 
   auto console_workspace = std::make_shared<application::Workspace>();
+  console_workspace->set_default_look_on_load(false);  // these tests count the representations they create
   auto console_registry =
       application::make_default_registry(console_workspace);
   cli::Console console{console_registry};
@@ -1663,6 +1680,7 @@ int main(int argc, char** argv) {
                    "native console must preserve load/select/show state");
 
   auto pbc_workspace = std::make_shared<application::Workspace>();
+  pbc_workspace->set_default_look_on_load(false);  // these tests count the representations they create
   auto pbc_registry = application::make_default_registry(pbc_workspace);
   const application::Dispatcher pbc_dispatcher{pbc_registry};
   const gui::ActionAdapter pbc_gui{pbc_dispatcher};

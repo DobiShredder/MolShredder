@@ -3464,8 +3464,14 @@ bool MolecularViewport::loadStructure(const QUrl &url) {
           static_cast<unsigned long long>(atom_count_));
     return true;
   }
-  if (!rebuildRepresentation())
-    return false;
+  if (representation_chosen_) {
+    if (!rebuildRepresentation())
+      return false;
+  } else {
+    // The workspace already showed the object by residue class on load.
+    if (!rebuildScenePacket())
+      return false;
+  }
   syncTrajectoryState();
   resetView();
   qInfo("MolShredder desktop loaded: atoms=%llu representation=%s "
@@ -4026,6 +4032,8 @@ bool MolecularViewport::setRepresentation(const QString &representation) {
       return false;
     }
   }
+  representation_chosen_ = true;
+  workspace_->set_default_look_on_load(false);
   if (representation_ != normalized) {
     representation_ = normalized;
     emit representationChanged();

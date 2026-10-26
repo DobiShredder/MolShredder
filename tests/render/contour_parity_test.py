@@ -72,6 +72,8 @@ def main() -> int:
         def contour(mode: str) -> dict:
             return run(probe, [
                 ("load", {"file-format": "pdb", "name": "lig", "path": str(structure)}),
+                # A new object shows itself by default; the parity data holds only the contour.
+                ("hide", {"representation": "everything", "selection": "all"}),
                 ("volume load", {"name": "dens", "path": str(density)}),
                 ("volume contour", {**arguments, "mode": mode}),
             ])

@@ -243,7 +243,8 @@ operation::Result<RenderPacket> build_backbone_representation(
           invalid("secondary-structure state count must match residue count"));
     }
     if (states.empty()) {
-      const auto assigned = analysis::assign_secondary_structure(
+      // No helix/sheet records in the file: assign by hydrogen-bond patterns.
+      const auto assigned = analysis::assign_secondary_structure_dssp(
           *request.topology, *request.frame);
       if (!assigned.has_value()) {
         return operation::Result<RenderPacket>::failure(assigned.error());
@@ -253,14 +254,23 @@ operation::Result<RenderPacket> build_backbone_representation(
       states = calculated_states;
       packet.provenance.emplace("secondary_structure_method",
                                 assigned.value().method);
-      packet.provenance.emplace("exact_stride_parity", "false");
+      packet.provenance.emplace("exact_dssp_parity", "false");
     } else {
       packet.provenance.emplace("secondary_structure_method", "caller-supplied");
     }
+    // An isolated bridge is too short for a strand arrow: it stays loop.
+    const bool dssp_states =
+        packet.provenance.contains("secondary_structure_method") &&
+        packet.provenance.at("secondary_structure_method") ==
+            "molshredder-dssp-method-v1";
     for (std::size_t residue = 0; residue < residue_count; ++residue)
-      residue_ss[residue] = is_helix(states[residue])   ? 'H'
-                            : is_sheet(states[residue]) ? 'S'
-                                                        : 'L';
+      residue_ss[residue] =
+          is_helix(states[residue]) ? 'H'
+          : (is_sheet(states[residue]) &&
+             !(dssp_states &&
+               states[residue] == analysis::SecondaryStructureState::beta_bridge))
+              ? 'S'
+              : 'L';
   }
 
   std::vector<std::int32_t> atom_type;

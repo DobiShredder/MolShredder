@@ -382,6 +382,7 @@ target_sources(
     src/analysis/point_group.cpp
     src/analysis/rdf.cpp
     src/analysis/secondary_structure.cpp
+    src/analysis/dssp_secondary_structure.cpp
     src/analysis/time_series.cpp
     src/application/default_registry.cpp
     src/application/analysis_result.cpp
@@ -1073,6 +1074,24 @@ if(MOLSHREDDER_BUILD_DESKTOP)
       PROPERTIES
         TIMEOUT 10
         PASS_REGULAR_EXPRESSION "MolShredder desktop interleaved ready: modes=3 final=checkerboard eyes=2 compositor=QRhi"
+    )
+    add_test(
+      NAME desktop.next_ui_object_center_smoke
+      COMMAND
+        molshredder_desktop --smoke --ui=next --language=en
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb"
+        "--command=load ${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/chemistry.mol2, chem"
+        "--command=ui:objectcenter chem_1"
+        "--command=ui:markview"
+        "--command=ui:objectcenter 1UBQ"
+        "--command=ui:expect viewchanged"
+        "--command=ui:expect active 1UBQ"
+    )
+    set_tests_properties(
+      desktop.next_ui_object_center_smoke
+      PROPERTIES
+        TIMEOUT 20
+        PASS_REGULAR_EXPRESSION "MolShredder next UI ready: commands=3 errors=0 objects=3"
     )
     add_test(
       NAME desktop.next_ui_smoke
@@ -3118,6 +3137,15 @@ if(BUILD_TESTING)
   molshredder_enable_warnings(molshredder_secondary_structure_tests)
   add_test(NAME analysis.secondary_structure COMMAND molshredder_secondary_structure_tests)
 
+  add_executable(molshredder_dssp_secondary_structure_tests
+                 tests/analysis/dssp_secondary_structure_test.cpp)
+  target_compile_features(molshredder_dssp_secondary_structure_tests PRIVATE cxx_std_20)
+  target_link_libraries(molshredder_dssp_secondary_structure_tests PRIVATE MolShredder::Core)
+  molshredder_enable_warnings(molshredder_dssp_secondary_structure_tests)
+  add_test(NAME analysis.dssp_secondary_structure
+           COMMAND molshredder_dssp_secondary_structure_tests
+                   "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb")
+
   add_executable(
     molshredder_frame_cache_tests
     tests/trajectory/frame_cache_test.cpp
@@ -4369,7 +4397,7 @@ if(BUILD_TESTING)
   add_test(NAME cli.setting_list COMMAND molshredder setting list)
   set_tests_properties(
     cli.setting_list
-    PROPERTIES PASS_REGULAR_EXPRESSION "definition_count=80"
+    PROPERTIES PASS_REGULAR_EXPRESSION "definition_count=81"
   )
   set_tests_properties(
     cli.version

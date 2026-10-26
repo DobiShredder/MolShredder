@@ -180,7 +180,10 @@ int main(int argc, char** argv) {
           captured_replay.has_value() &&
           captured_replay.value().applied_count == 4U &&
           captured_restored->object_count() == 1U &&
-          captured_restored->active_object()->representations.size() == 1U &&
+          // The load shows the object by default, so a replay must rebuild exactly what the original has.
+          captured_restored->active_object()->representations.size() ==
+              captured_workspace->active_object()->representations.size() &&
+          captured_workspace->active_object()->representations.size() >= 1U &&
           captured_restored->session_invocations().size() == 4U,
       "captured session must include successful canonical mutations and terminal view state only");
 

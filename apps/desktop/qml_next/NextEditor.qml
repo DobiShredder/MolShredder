@@ -295,6 +295,7 @@ Popup {
                             }
                             ComboBox {
                                 id: orderBox
+                                Accessible.name: qsTr("Bond order")
                                 model: panel.orders
                                 currentIndex: Math.max(0, panel.orders.indexOf(bondRow.modelData.order))
                                 implicitWidth: 110

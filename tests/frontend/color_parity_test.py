@@ -97,11 +97,13 @@ def main() -> int:
         "color canonical invocation drifted",
     )
     data = python_result["data"]
+    # auto_color (default on) gives every atom an explicit load color, so all atoms count as colored.
+    atom_total = molshredder.invoke("object count", {})["data"]["atom_count"]
     require(
         data["color_index"] == 5388
         and data["color_name"] == "mycolor"
         and data["affected_atom_count"] == 1
-        and data["colored_atom_count"] == 1,
+        and data["colored_atom_count"] == atom_total,
         "color response lost table resolution",
     )
     # Q-021 b: workspace scope colors the selection in every object.

@@ -154,6 +154,7 @@ int main(int argc, char **argv) {
   write_dcd(mismatch_path, 2, 2);
 
   auto workspace = std::make_shared<application::Workspace>();
+  workspace->set_default_look_on_load(false);  // these tests count the representations they create
   auto registry = application::make_default_registry(workspace);
   const application::Dispatcher dispatcher{registry};
   const gui::ActionAdapter gui{dispatcher};
@@ -192,6 +193,7 @@ int main(int argc, char **argv) {
       "atom-count mismatch must leave the active object unchanged");
 
   auto load_workspace = std::make_shared<application::Workspace>();
+  load_workspace->set_default_look_on_load(false);  // these tests count the representations they create
   auto load_registry = application::make_default_registry(load_workspace);
   const application::Dispatcher load_dispatcher{load_registry};
   const gui::ActionAdapter load_gui{load_dispatcher};
@@ -660,6 +662,7 @@ int main(int argc, char **argv) {
       "rigid RMSD must reject the collinear fixture without mutating playback");
 
   auto hbond_workspace = std::make_shared<application::Workspace>();
+  hbond_workspace->set_default_look_on_load(false);  // these tests count the representations they create
   auto hbond_registry = application::make_default_registry(hbond_workspace);
   const application::Dispatcher hbond_dispatcher{hbond_registry};
   const gui::ActionAdapter hbond_gui{hbond_dispatcher};
@@ -906,6 +909,7 @@ int main(int argc, char **argv) {
           : operation::Result<application::SessionDocument>::failure(
                 serialized.error());
   auto replayed_workspace = std::make_shared<application::Workspace>();
+  replayed_workspace->set_default_look_on_load(false);  // these tests count the representations they create
   auto replayed_registry =
       application::make_default_registry(replayed_workspace);
   const application::Dispatcher replayed_dispatcher{replayed_registry};
@@ -939,6 +943,7 @@ int main(int argc, char **argv) {
       "state");
 
   auto mapped_workspace = std::make_shared<application::Workspace>();
+  mapped_workspace->set_default_look_on_load(false);  // these tests count the representations they create
   auto mapped_registry = application::make_default_registry(mapped_workspace);
   const application::Dispatcher mapped_dispatcher{mapped_registry};
   const gui::ActionAdapter mapped_gui{mapped_dispatcher};

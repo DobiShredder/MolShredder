@@ -102,6 +102,7 @@ int main() {
       std::pair{144U, "surface_color"},
       std::pair{787U, "isosurface_algorithm"},
       std::pair{238U, "auto_color"},
+      std::pair{754U, "auto_show_classified"},
       std::pair{91U, "cartoon_sampling"},
       std::pair{96U, "cartoon_rect_length"},
       std::pair{97U, "cartoon_rect_width"},
@@ -120,7 +121,7 @@ int main() {
           store.definition("line_width")->stable_id == 44U &&
           store.definition("sphere_mode")->stable_id == 421U &&
           store.definition("valence_zero_mode")->maximum == 2.0,
-      "catalog must expose all 80 pinned setting definitions and stable IDs");
+      "catalog must expose all 81 pinned setting definitions and stable IDs");
   {
     auto labels = RenderSettingStore::create().value();
     const RenderSettingScope label_atom{RenderSettingScopeLevel::atom, 3U, 0U,

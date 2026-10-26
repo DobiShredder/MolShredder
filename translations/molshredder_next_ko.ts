@@ -101,6 +101,18 @@
 <context>
     <name>NextObjectPanel</name>
     <message>
+        <source>Click: make active · Double-click: rename · Middle-click: center the view</source>
+        <translation>클릭: 활성화 · 더블클릭: 이름 바꾸기 · 휠클릭: 화면 중심 이동</translation>
+    </message>
+    <message>
+        <source>by element (keep carbon)</source>
+        <translation>원소별 (탄소는 그대로)</translation>
+    </message>
+    <message>
+        <source>by element (all atoms)</source>
+        <translation>원소별 (모든 원자)</translation>
+    </message>
+    <message>
         <source>hidden</source>
         <translation>숨김</translation>
     </message>
@@ -279,10 +291,6 @@
     <message>
         <source>clear</source>
         <translation>지우기</translation>
-    </message>
-    <message>
-        <source>by element</source>
-        <translation>원소별</translation>
     </message>
     <message>
         <source>spectrum by index</source>
@@ -888,6 +896,14 @@ or drop a file here.</source>
   <context>
     <name>NextInspector</name>
     <message>
+        <source>by element (keep carbon)</source>
+        <translation>원소별 (탄소는 그대로)</translation>
+    </message>
+    <message>
+        <source>by element (all atoms)</source>
+        <translation>원소별 (모든 원자)</translation>
+    </message>
+    <message>
         <source>Scope</source>
         <translation>범위</translation>
     </message>
@@ -950,10 +966,6 @@ or drop a file here.</source>
     <message>
         <source>Hide everything</source>
         <translation>모두 숨기기</translation>
-    </message>
-    <message>
-        <source>by element</source>
-        <translation>원소별</translation>
     </message>
     <message>
         <source>spectrum by index</source>
@@ -1857,6 +1869,10 @@ Run something from the Analyze menu.</source>
   </context>
   <context>
     <name>NextEditor</name>
+    <message>
+        <source>Bond order</source>
+        <translation>결합 차수</translation>
+    </message>
     <message>
         <source>Position x</source>
         <translation>위치 x</translation>

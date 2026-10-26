@@ -93,6 +93,9 @@ int main(int argc, char **argv) {
                                 {"path", fixture.string()}});
   };
 
+  // This test covers the classic palette; auto_color (on by default since 2026-10-26) is covered by color_scope_test.
+  passed &= expect(harness.run("setting set", {{"name", "auto_color"}, {"value", "false"}}).succeeded(),
+                   "auto_color must be switchable off");
   passed &= expect(load("first").succeeded() && load("second").succeeded(),
                    "fixture objects must load");
   passed &= expect(workspace.objects()[0].object_color == 26 &&

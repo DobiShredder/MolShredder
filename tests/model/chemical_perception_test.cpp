@@ -157,5 +157,62 @@ int main() {
           explicit_report.value().aromatic_ring_count == 0U &&
           explicit_report.value().proposed_bond_order_changes.empty(),
       "aromatic perception must update only unknown non-explicit order and preserve explicit single bonds");
+  {
+    // infer_connectivity: load-time distance bonds for files without polymer bonds.
+    TopologyBuilder chain;
+    const auto res = chain.add_residue({"GLY", 1, "", "A", ""});
+    const auto a1 = chain.add_atom({"N", 7, res.value(), "", 0});
+    const auto a2 = chain.add_atom({"CA", 6, res.value(), "", 0});
+    const auto a3 = chain.add_atom({"C", 6, res.value(), "", 0});
+    const auto far_atom = chain.add_atom({"O", 8, res.value(), "", 0});
+    const auto alt_a = chain.add_atom({"CB", 6, res.value(), "A", 0});
+    const auto alt_b = chain.add_atom({"CB", 6, res.value(), "B", 0});
+    passed &= expect(!chain.add_bond({a1.value(), a2.value(), BondOrder::double_bond,
+                                      BondQuery::none, BondStereo::none,
+                                      ChemicalAnnotationOrigin::explicit_input})
+                          .has_value(),
+                     "explicit bond setup failed");
+    const auto source = chain.build();
+    const auto chain_frame = CoordinateFrame::create(CoordinateBuffer{std::vector<Vec3d>{
+        {0.0, 0.0, 0.0}, {1.46, 0.0, 0.0}, {2.0, 1.4, 0.0}, {30.0, 0.0, 0.0},
+        {40.0, 0.0, 0.0}, {40.5, 0.0, 0.0}}});
+    const auto connected = infer_connectivity(source.value(), *chain_frame.value());
+    const auto &bonds = connected.value()->bonds();
+    const auto has_bond = [&](AtomIndex x, AtomIndex y) {
+      return std::ranges::any_of(bonds, [&](const Bond &bond) {
+        return (bond.first == x && bond.second == y) || (bond.first == y && bond.second == x);
+      });
+    };
+    passed &= expect(connected.has_value() && bonds.size() == 2U &&
+                         has_bond(a1.value(), a2.value()) && has_bond(a2.value(), a3.value()),
+                     "inference must add CA-C and keep the explicit N-CA bond only");
+    passed &= expect(bonds.size() == 2U && bonds[0].order == BondOrder::double_bond &&
+                         bonds[0].order_origin == ChemicalAnnotationOrigin::explicit_input &&
+                         bonds[1].order == BondOrder::single &&
+                         bonds[1].order_origin == ChemicalAnnotationOrigin::inferred,
+                     "inferred bonds are single and marked inferred; explicit bonds are untouched");
+    passed &= expect(!has_bond(far_atom.value(), a3.value()) &&
+                         !has_bond(alt_a.value(), alt_b.value()),
+                     "distant atoms and different alternate locations must not be bonded");
+    passed &= expect(connected.value()->version() == source.value()->version(),
+                     "load-time inference keeps the topology version");
+    const auto again = infer_connectivity(connected.value(), *chain_frame.value());
+    passed &= expect(again.has_value() && again.value() == connected.value(),
+                     "a second run adds nothing and returns the same topology");
+    // Linear-time grid: 20000 atoms on a 3 A lattice has no neighbors within cutoff,
+    // 20000 atoms 1.5 A apart form one chain of 19999 bonds.
+    TopologyBuilder big;
+    const auto big_res = big.add_residue({"LIG", 1, "", "A", ""});
+    std::vector<Vec3d> line;
+    for (int i = 0; i < 20000; ++i) {
+      (void)big.add_atom({"C", 6, big_res.value(), "", 0});
+      line.push_back({1.5 * i, 0.0, 0.0});
+    }
+    const auto big_topology = big.build();
+    const auto big_frame = CoordinateFrame::create(CoordinateBuffer{line});
+    const auto big_result = infer_connectivity(big_topology.value(), *big_frame.value());
+    passed &= expect(big_result.has_value() && big_result.value()->bonds().size() == 19999U,
+                     "grid inference must bond a 20000-atom chain");
+  }
   return passed ? 0 : 1;
 }
