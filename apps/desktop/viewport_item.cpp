@@ -197,6 +197,34 @@ QString playback_direction_name(trajectory::PlaybackDirection direction) {
              : QStringLiteral("forward");
 }
 
+// One-letter code the sequence viewer shows: amino acids as in alignments, nucleotides by their base.
+char sequence_letter(const std::string &name) {
+  static const std::map<std::string, char, std::less<>> nucleotides{
+      {"DA", 'A'}, {"DC", 'C'}, {"DG", 'G'}, {"DT", 'T'}, {"DU", 'U'}, {"DI", 'I'},
+      {"A", 'A'}, {"C", 'C'}, {"G", 'G'}, {"U", 'U'}, {"T", 'T'}, {"I", 'I'},
+      {"ADE", 'A'}, {"CYT", 'C'}, {"GUA", 'G'}, {"THY", 'T'}, {"URA", 'U'}};
+  std::string upper;
+  for (const auto c : name) upper.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(c))));
+  if (const auto found = nucleotides.find(upper); found != nucleotides.end()) return found->second;
+  return analysis::residue_letter(name);
+}
+
+// The projection the viewport renders with, for overlays that sit on atoms.
+QMatrix4x4 overlay_projection(const scene::CameraParameters &parameters, float aspect) {
+  QMatrix4x4 projection;
+  if (parameters.projection == scene::ProjectionMode::perspective) {
+    projection.perspective(
+        static_cast<float>(parameters.vertical_field_of_view_radians * 180.0 / std::numbers::pi),
+        aspect, static_cast<float>(parameters.near_clip), static_cast<float>(parameters.far_clip));
+  } else {
+    const auto half_height = static_cast<float>(parameters.orthographic_height * 0.5);
+    const auto half_width = half_height * aspect;
+    projection.ortho(-half_width, half_width, -half_height, half_height,
+                     static_cast<float>(parameters.near_clip), static_cast<float>(parameters.far_clip));
+  }
+  return projection;
+}
+
 QMatrix4x4 qt_matrix(const scene::Matrix4d &matrix) {
   QMatrix4x4 result;
   for (std::size_t row = 0; row < 4U; ++row) {
@@ -573,6 +601,7 @@ public:
     }
     angle_ = viewport->angle();
     background_ = viewport->backgroundRgb();
+    lighting_ = viewport->lighting();
     if (camera_revision_ != viewport->cameraRevision()) {
       camera_revision_ = viewport->cameraRevision();
       if (const auto *camera = viewport->camera(); camera != nullptr) {
@@ -737,16 +766,47 @@ public:
                     static_cast<float>(-center_.y),
                     static_cast<float>(-center_.z));
     const auto size = renderTarget()->pixelSize();
-    const auto update_uniform = [updates, &model](QRhiBuffer *buffer,
-                                                  const QMatrix4x4 &vp,
-                                                  const QSize &viewport_size) {
+    // Lights live in camera space, so the normals are rotated by view * model
+    // (the `model` slot of the uniform block only feeds normals).
+    std::array<float, 44> light_block{};
+    {
+      const auto &light = lighting_;
+      const auto extra = std::max(0, light.count - 1);
+      const auto reflect_scale =
+          light.reflect / std::sqrt(static_cast<float>(std::max(1, extra)));
+      light_block[0] = light.ambient;
+      light_block[1] = extra == 0 ? light.direct + light.reflect : light.direct;
+      light_block[2] = reflect_scale;
+      light_block[3] = light.shininess;
+      light_block[4] = light.specular_direct;
+      light_block[5] = light.specular_reflect;
+      light_block[6] = static_cast<float>(extra);
+      for (int index = 0; index < 9; ++index) {
+        const auto &direction = light.directions[static_cast<std::size_t>(index)];
+        const auto length = std::sqrt(direction[0] * direction[0] +
+                                      direction[1] * direction[1] +
+                                      direction[2] * direction[2]);
+        // Toward the light: the setting is the direction the light travels.
+        const auto scale = length > 1.0e-6F ? -1.0F / length : 0.0F;
+        const auto base = static_cast<std::size_t>(8 + index * 4);
+        light_block[base] = direction[0] * scale;
+        light_block[base + 1U] = direction[1] * scale;
+        light_block[base + 2U] = length > 1.0e-6F ? direction[2] * scale : 1.0F;
+      }
+    }
+    const auto update_uniform = [updates, &model, &light_block](
+                                    QRhiBuffer *buffer, const QMatrix4x4 &vp,
+                                    const QMatrix4x4 &view,
+                                    const QSize &viewport_size) {
       const auto mvp = vp * model;
+      const auto normal_source = view * model;
       const std::array<float, 4> viewport{
           static_cast<float>(viewport_size.width()),
           static_cast<float>(viewport_size.height()), 0.0F, 0.0F};
       updates->updateDynamicBuffer(buffer, 0U, 64U, mvp.constData());
-      updates->updateDynamicBuffer(buffer, 64U, 64U, model.constData());
+      updates->updateDynamicBuffer(buffer, 64U, 64U, normal_source.constData());
       updates->updateDynamicBuffer(buffer, 128U, 16U, viewport.data());
+      updates->updateDynamicBuffer(buffer, 144U, 176U, light_block.data());
     };
     std::optional<scene::StereoPair> stereo_pair;
     const auto base_camera = scene::Camera::create(camera_parameters_);
@@ -785,9 +845,11 @@ public:
       const auto &right_camera =
           stereo_parameters_.swap_eyes ? pair.left.camera : pair.right.camera;
       update_uniform(uniform_buffer_.get(),
-                     view_projection(left_camera, size), size);
+                     view_projection(left_camera, size),
+                     qt_matrix(left_camera.view_matrix()), size);
       update_uniform(stereo_uniform_buffer_.get(),
-                     view_projection(right_camera, size), size);
+                     view_projection(right_camera, size),
+                     qt_matrix(right_camera.view_matrix()), size);
       update_volume_uniform(*updates, volume_uniform_buffer_.get(),
                             left_camera, model, size);
       update_volume_uniform(*updates, stereo_volume_uniform_buffer_.get(),
@@ -810,9 +872,11 @@ public:
               ? pair.left.camera
               : pair.right.camera;
       update_uniform(uniform_buffer_.get(),
-                     view_projection(left_camera, left_size), left_size);
+                     view_projection(left_camera, left_size),
+                     qt_matrix(left_camera.view_matrix()), left_size);
       update_uniform(stereo_uniform_buffer_.get(),
-                     view_projection(right_camera, right_size), right_size);
+                     view_projection(right_camera, right_size),
+                     qt_matrix(right_camera.view_matrix()), right_size);
       update_volume_uniform(*updates, volume_uniform_buffer_.get(),
                             left_camera, model, left_size);
       update_volume_uniform(*updates, stereo_volume_uniform_buffer_.get(),
@@ -820,7 +884,8 @@ public:
     } else {
       if (!base_camera.has_value()) return;
       update_uniform(uniform_buffer_.get(),
-                     view_projection(base_camera.value(), size), size);
+                     view_projection(base_camera.value(), size),
+                     qt_matrix(base_camera.value().view_matrix()), size);
       update_volume_uniform(*updates, volume_uniform_buffer_.get(),
                             base_camera.value(), model, size);
     }
@@ -1167,25 +1232,30 @@ private:
 
   void create_uniform_resources() {
     uniform_buffer_.reset(
-        rhi_->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, 144U));
+        rhi_->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, 320U));
     if (!uniform_buffer_->create()) {
       uniform_buffer_.reset();
       return;
     }
     bindings_.reset(rhi_->newShaderResourceBindings());
     bindings_->setBindings({QRhiShaderResourceBinding::uniformBuffer(
-        0, QRhiShaderResourceBinding::VertexStage, uniform_buffer_.get())});
+        0,
+        QRhiShaderResourceBinding::VertexStage |
+            QRhiShaderResourceBinding::FragmentStage,
+        uniform_buffer_.get())});
     if (!bindings_->create())
       bindings_.reset();
     stereo_uniform_buffer_.reset(
-        rhi_->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, 144U));
+        rhi_->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, 320U));
     if (!stereo_uniform_buffer_->create()) {
       stereo_uniform_buffer_.reset();
       return;
     }
     stereo_bindings_.reset(rhi_->newShaderResourceBindings());
     stereo_bindings_->setBindings({QRhiShaderResourceBinding::uniformBuffer(
-        0, QRhiShaderResourceBinding::VertexStage,
+        0,
+        QRhiShaderResourceBinding::VertexStage |
+            QRhiShaderResourceBinding::FragmentStage,
         stereo_uniform_buffer_.get())});
     if (!stereo_bindings_->create())
       stereo_bindings_.reset();
@@ -2165,6 +2235,7 @@ private:
   scene::CameraParameters camera_parameters_;
   scene::StereoParameters stereo_parameters_;
   render::ColorRgb background_{render::kDefaultBackgroundRgb};
+  MolecularViewport::Lighting lighting_;
   std::array<std::int32_t, 2> stereo_output_origin_{};
   bool stereo_composite_failure_logged_{};
   model::Vec3d center_{};
@@ -2241,6 +2312,10 @@ MolecularViewport::MolecularViewport(QQuickItem *parent)
           &MolecularViewport::onCameraAnimationTick);
   connect(this, &MolecularViewport::objectsChanged, this, &MolecularViewport::objectTreeChanged);
   connect(this, &MolecularViewport::selectionChanged, this, &MolecularViewport::objectTreeChanged);
+  // The selection squares and the sequence highlight follow the named selection `sele`.
+  connect(this, &MolecularViewport::selectionChanged, this, &MolecularViewport::refreshSelectionMarkerCache);
+  connect(this, &MolecularViewport::trajectoryChanged, this, &MolecularViewport::refreshSelectionMarkerCache);
+  connect(this, &MolecularViewport::analysisResultsChanged, this, &MolecularViewport::selectionMarkersChanged);
   connect(this, &MolecularViewport::sessionChanged, this, &MolecularViewport::objectTreeChanged);
   connect(this, &QQuickItem::widthChanged, this,
           &MolecularViewport::analysisResultsChanged);
@@ -2945,23 +3020,9 @@ QVariantList MolecularViewport::analysisItems() const {
 QVariantList MolecularViewport::analysisLabelItems() const {
   QVariantList items;
   if (!camera_.has_value() || width() <= 0.0 || height() <= 0.0) return items;
-  QMatrix4x4 projection;
   const auto &parameters = camera_->parameters();
-  const auto aspect = static_cast<float>(width() / height());
-  if (parameters.projection == scene::ProjectionMode::perspective) {
-    projection.perspective(
-        static_cast<float>(parameters.vertical_field_of_view_radians *
-                           180.0 / std::numbers::pi),
-        aspect, static_cast<float>(parameters.near_clip),
-        static_cast<float>(parameters.far_clip));
-  } else {
-    const auto half_height =
-        static_cast<float>(parameters.orthographic_height * 0.5);
-    const auto half_width = half_height * aspect;
-    projection.ortho(-half_width, half_width, -half_height, half_height,
-                     static_cast<float>(parameters.near_clip),
-                     static_cast<float>(parameters.far_clip));
-  }
+  const auto projection =
+      overlay_projection(parameters, static_cast<float>(width() / height()));
   const auto view = qt_matrix(camera_->view_matrix());
   for (const auto &label : packet_.labels) {
     // Atom labels carry a camera-space offset (label_position +
@@ -3011,6 +3072,67 @@ QVariantList MolecularViewport::analysisLabelItems() const {
     items.push_back(std::move(item));
   }
   return items;
+}
+
+void MolecularViewport::refreshSelectionMarkerCache() {
+  selection_marker_positions_.clear();
+  selected_residue_flags_.clear();
+  const auto *active = workspace_->active_object();
+  for (const auto &object : workspace_->objects()) {
+    const auto listed = object.selections.list();
+    if (!std::any_of(listed.begin(), listed.end(), [](const auto &info) { return info.name == "sele"; }))
+      continue;
+    const auto ids = workspace_->selected_atom_ids(object.id, "@sele");
+    if (!ids.has_value()) continue;
+    const auto &topology = *object.system->topology();
+    auto &flags = selected_residue_flags_[object.id];
+    flags.assign(topology.residue_count(), 0U);
+    for (const auto id : ids.value())
+      if (const auto index = topology.atom_index(model::AtomId{id}); index.has_value())
+        flags[topology.atoms()[index->value].residue.value] = 1U;
+  }
+  if (active != nullptr && selected_residue_flags_.contains(active->id)) {
+    // The squares over the atoms are drawn for the active object.
+    const auto data = workspace_->selected_atom_data("@sele", false, false);
+    if (data.has_value()) selection_marker_positions_ = data.value().positions;
+  }
+  ++selection_revision_;
+  emit selectionMarkersChanged();
+}
+
+int MolecularViewport::selectedResidueCount() const {
+  const auto *active = workspace_->active_object();
+  if (active == nullptr) return 0;
+  const auto found = selected_residue_flags_.find(active->id);
+  return found == selected_residue_flags_.end()
+             ? 0
+             : static_cast<int>(std::count(found->second.begin(), found->second.end(), std::uint8_t{1}));
+}
+
+QList<QPointF> MolecularViewport::selectionMarkers() const {
+  QList<QPointF> markers;
+  if (!camera_.has_value() || width() <= 0.0 || height() <= 0.0 ||
+      selection_marker_positions_.empty())
+    return markers;
+  constexpr std::size_t kLimit = 4000U;
+  const auto &parameters = camera_->parameters();
+  const auto projection =
+      overlay_projection(parameters, static_cast<float>(width() / height()));
+  const auto view = qt_matrix(camera_->view_matrix());
+  const auto scale = static_cast<float>(analysisOverlayStyle().units_per_angstrom);
+  const auto step = std::max<std::size_t>(1U, selection_marker_positions_.size() / kLimit);
+  for (std::size_t index = 0; index < selection_marker_positions_.size(); index += step) {
+    const auto &p = selection_marker_positions_[index];
+    const QVector4D clip =
+        projection * (view * QVector4D{static_cast<float>(p.x) * scale, static_cast<float>(p.y) * scale,
+                                       static_cast<float>(p.z) * scale, 1.0F});
+    if (!(clip.w() > 0.0F)) continue;
+    const auto z = clip.z() / clip.w();
+    if (z < -1.0F || z > 1.0F) continue;
+    markers.push_back({(static_cast<double>(clip.x() / clip.w()) + 1.0) * width() * 0.5,
+                       (1.0 - static_cast<double>(clip.y() / clip.w())) * height() * 0.5});
+  }
+  return markers;
 }
 
 bool MolecularViewport::analyzeCenter(const QString &selection,
@@ -3373,6 +3495,43 @@ bool MolecularViewport::exportAnalysisResult(qulonglong result_id,
   setStatus(QStringLiteral("Analysis result exported"), atom_count_,
             primitive_count_);
   return true;
+}
+
+MolecularViewport::Lighting MolecularViewport::lighting() const {
+  Lighting result;
+  const render::RenderSettingContext context{};
+  const auto number = [&](const char *name, float fallback) {
+    const auto value = workspace_->resolve_render_setting(name, context);
+    if (!value.has_value()) return fallback;
+    if (const auto *real = std::get_if<double>(&value.value().value))
+      return static_cast<float>(*real);
+    if (const auto *integer = std::get_if<std::int64_t>(&value.value().value))
+      return static_cast<float>(*integer);
+    return fallback;
+  };
+  result.ambient = number("ambient", result.ambient);
+  result.direct = number("direct", result.direct);
+  result.reflect = number("reflect", result.reflect);
+  result.shininess = std::max(1.0F, number("shininess", result.shininess));
+  result.specular_direct = number("spec_direct", result.specular_direct);
+  // PyMOL: a negative spec_reflect means "use specular".
+  const auto specular = number("specular", 1.0F);
+  const auto specular_reflect = number("spec_reflect", -1.0F);
+  result.specular_reflect = specular_reflect < 0.0F ? specular : specular_reflect;
+  result.count = std::clamp(static_cast<int>(number("light_count", 2.0F)), 1, 10);
+  static constexpr std::array<const char *, 9> names{
+      "light",  "light2", "light3", "light4", "light5",
+      "light6", "light7", "light8", "light9"};
+  for (std::size_t index = 0; index < names.size(); ++index) {
+    const auto value = workspace_->resolve_render_setting(names[index], context);
+    if (!value.has_value()) continue;
+    if (const auto *vector =
+            std::get_if<render::RenderSettingVector3>(&value.value().value))
+      result.directions[index] = {static_cast<float>((*vector)[0]),
+                                  static_cast<float>((*vector)[1]),
+                                  static_cast<float>((*vector)[2])};
+  }
+  return result;
 }
 
 bool MolecularViewport::loadStructure(const QUrl &url) {
@@ -5993,6 +6152,7 @@ bool MolecularViewport::refreshWorkspacePresentation() {
     volume_slice_maximum_ = static_cast<qulonglong>(shape.z - 1U);
   }
   emit volumeChanged();
+  refreshSelectionMarkerCache();
   emit objectsChanged();
   emit analysisResultsChanged();
   if (workspace_->active_object() == nullptr && volume == nullptr) {
@@ -6762,16 +6922,56 @@ QVariantList MolecularViewport::sequenceItems() const {
   if (object == nullptr) return items;
   const auto &topology = *object->system->topology();
   constexpr qsizetype kLimit = 20000;
-  for (const auto &residue : topology.residues()) {
+  for (std::size_t residue_index = 0; residue_index < topology.residues().size(); ++residue_index) {
+    const auto &residue = topology.residues()[residue_index];
     if (items.size() >= kLimit) break;
     QVariantMap item;
+    const auto flags = selected_residue_flags_.find(object->id);
+    item.insert(QStringLiteral("selected"), flags != selected_residue_flags_.end() &&
+                                                residue_index < flags->second.size() &&
+                                                flags->second[residue_index] != 0U);
+    item.insert(QStringLiteral("segment"), QString::fromStdString(residue.segment_id));
     item.insert(QStringLiteral("chain"), QString::fromStdString(residue.chain_id));
     item.insert(QStringLiteral("resi"), QString::number(residue.sequence_number) + QString::fromStdString(residue.insertion_code));
-    item.insert(QStringLiteral("letter"), QString(QChar::fromLatin1(analysis::residue_letter(residue.name))));
+    item.insert(QStringLiteral("letter"), QString(QChar::fromLatin1(sequence_letter(residue.name))));
     item.insert(QStringLiteral("name"), QString::fromStdString(residue.name));
     items.push_back(item);
   }
   return items;
+}
+
+QVariantList MolecularViewport::sequenceRows() const {
+  QVariantList rows;
+  constexpr qsizetype kLimit = 20000;
+  qsizetype total = 0;
+  const auto *active = workspace_->active_object();
+  for (const auto &object : workspace_->objects()) {
+    const auto &topology = *object.system->topology();
+    const auto flags = selected_residue_flags_.find(object.id);
+    // One row per object; the chains follow each other in the same row.
+    QVariantList items;
+    for (std::size_t residue_index = 0; residue_index < topology.residues().size() && total < kLimit; ++residue_index, ++total) {
+      const auto &residue = topology.residues()[residue_index];
+      QVariantMap item;
+      item.insert(QStringLiteral("chain"), QString::fromStdString(residue.chain_id));
+      item.insert(QStringLiteral("segment"), QString::fromStdString(residue.segment_id));
+      item.insert(QStringLiteral("resi"), QString::number(residue.sequence_number) +
+                                              QString::fromStdString(residue.insertion_code));
+      item.insert(QStringLiteral("letter"), QString(QChar::fromLatin1(sequence_letter(residue.name))));
+      item.insert(QStringLiteral("name"), QString::fromStdString(residue.name));
+      item.insert(QStringLiteral("selected"), flags != selected_residue_flags_.end() &&
+                                                  residue_index < flags->second.size() &&
+                                                  flags->second[residue_index] != 0U);
+      items.push_back(item);
+    }
+    QVariantMap entry;
+    entry.insert(QStringLiteral("objectId"), static_cast<qulonglong>(object.id));
+    entry.insert(QStringLiteral("object"), QString::fromStdString(object.system->name()));
+    entry.insert(QStringLiteral("active"), active != nullptr && active->id == object.id);
+    entry.insert(QStringLiteral("items"), items);
+    rows.push_back(entry);
+  }
+  return rows;
 }
 
 QVariantList MolecularViewport::commandCatalog() const {

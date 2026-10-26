@@ -1271,6 +1271,34 @@ def main() -> int:
                           f"count {sel}")["atom_count"] for sel in ("ss H", "ss S")}
         require(counts == {"ss H": helix_residues, "ss S": 2},
                 f"{fixture_name}: declared secondary structure {counts}")
+    # preset: named looks over the same show/hide/color operations (the object has 602 polymer atoms and 58 waters).
+    preset_object = str(load("preset_ubq", "1ubq.pdb")["object_id"])
+
+    def representation_count():
+        rows = ok(m.invoke("object list"), "object list")["table"]["rows"]
+        return [row for row in rows if str(row[0]) == preset_object][0][7]
+    for look, expected in (("default", 2), ("simple", 2), ("simple_no_solv", 1), ("ball_and_stick", 2), ("ligands", 1)):
+        applied = ok(m.invoke("preset", {"name": look, "selection": "preset_ubq"}), f"preset {look}")
+        require(applied["failed_statements"] == 0, f"preset {look} ran every statement: {applied}")
+        require(representation_count() == expected, f"preset {look}: {representation_count()} representations")
+    require(m.invoke("preset", {"name": "no_such_look"})["status"] == "error", "an unknown preset is refused")
+    for style in ("automatic", "round_ribbon", "flat_ribbon", "oval_ribbon", "tube_helices", "tube", "thin_tube",
+                  "dumbbell_helices", "barbell", "edged_ribbon", "square_ribbon", "strip", "putty"):
+        applied = ok(m.invoke("cartoon style", {"name": style, "selection": "preset_ubq"}), f"cartoon style {style}")
+        require(applied["failed_statements"] == 0, f"cartoon style {style} ran every statement: {applied}")
+    require(m.invoke("cartoon style", {"name": "no_such_style"})["status"] == "error", "an unknown cartoon style is refused")
+    # `ss` works on a protein that declares no helices or sheets: the hydrogen-bond assignment fills in.
+    with tempfile.TemporaryDirectory() as directory:
+        stripped = pathlib.Path(directory) / "no_ss.pdb"
+        stripped.write_text("".join(line for line in (fixtures / "1ubq.pdb").read_text().splitlines(keepends=True)
+                                    if not line.startswith(("HELIX", "SHEET"))))
+        loaded_id = str(ok(m.invoke("load", {"path": str(stripped), "name": "no_ss"}), "load stripped")["object_id"])
+        counts = {sel: ok(m.invoke("object count", {"object": loaded_id, "selection": sel}), f"count {sel}")["atom_count"]
+                  for sel in ("ss H and name CA", "ss S and name CA")}
+        require(10 <= counts["ss H and name CA"] <= 20 and 20 <= counts["ss S and name CA"] <= 30,
+                f"computed helices and strands of ubiquitin: {counts}")
+    chains = ok(m.invoke("color chains", {"selection": "all"}), "color chains")  # active object = the last one loaded
+    require(chains["chain_count"] == 1 and chains["affected_atom_count"] == 660, f"color chains: {chains}")
     return 0
 
 

@@ -27,6 +27,8 @@ struct PymolBackboneInput {
   std::span<const char> residue_ss;
   // Per atom PyMOL cartoon type code (empty: all automatic).
   std::span<const std::int32_t> atom_cartoon_type;
+  // Per atom temperature factor (empty: all zero); the putty profile scales the tube by it.
+  std::span<const double> b_factor;
   // Packet length unit per Angstrom (0.1 for nanometer frames).
   double unit_scale{1.0};
   // Residue pick id provider.
@@ -51,6 +53,28 @@ struct PymolCartoonParameters {
   int refine{5};
   int flat_cycles{4};
   double refine_tips{10.0};
+  // PyMOL cartoon_flat_sheets / cartoon_smooth_loops (+ smooth_first/last/cycles).
+  bool flat_sheets{true};
+  bool smooth_loops{false};
+  int smooth_first{1};
+  int smooth_last{1};
+  int smooth_cycles{2};
+  // cartoon_fancy_helices draws automatic helices as dumbbells; cartoon_fancy_sheets (on by default)
+  // draws automatic sheets with arrow heads, otherwise as rectangles.
+  bool fancy_helices{false};
+  bool fancy_sheets{true};
+  // Dumbbell: a thin web with a rod along each edge.
+  double dumbbell_length{1.6};
+  double dumbbell_width{0.17};
+  double dumbbell_radius{0.16};
+  // Putty: a tube whose radius follows the B-factor (cartoon_putty_*).
+  double putty_radius{0.4};
+  int putty_quality{9};
+  double putty_scale_min{0.6};
+  double putty_scale_max{4.0};
+  double putty_scale_power{1.5};
+  double putty_range{2.0};
+  int putty_transform{0};
 };
 
 struct PymolRibbonParameters {
@@ -62,7 +86,7 @@ struct PymolRibbonParameters {
 };
 
 // Appends cartoon mesh triangles; returns PyMOL type codes that were drawn
-// with a fallback profile (dumbbell, putty, cylinder).
+// with a fallback profile (cylinder).
 std::vector<std::int32_t> append_pymol_cartoon(const PymolBackboneInput &input,
                                                const PymolCartoonParameters &parameters,
                                                RenderPacket &packet);

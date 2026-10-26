@@ -16,6 +16,7 @@
 
 #include "molshredder/operation/error.hpp"
 #include "molshredder/analysis/contacts.hpp"
+#include "molshredder/analysis/secondary_structure.hpp"
 
 namespace molshredder::selection {
 namespace {
@@ -361,6 +362,31 @@ operation::Result<Mask> predicate_mask(const Predicate& predicate,
           "atom index is one-based; examples: index 1, index 1:10, index 1+3"));
     }
   }
+  // `ss` on a structure that declares no helices or sheets: use the assignment the cartoon draws
+  // (hydrogen-bond patterns) so the keyword works for every protein with coordinates.
+  std::optional<std::vector<std::string>> computed_ss;
+  if (predicate.field == Field::property &&
+      (predicate.property == "ss" || predicate.property == "secondary_structure") &&
+      topology.properties().find("ss") == nullptr &&
+      (context.frame == nullptr ||
+       context.frame->metadata().atom_properties.find("ss") ==
+           context.frame->metadata().atom_properties.end()) &&
+      context.frame != nullptr) {
+    const auto assigned = analysis::assign_secondary_structure_dssp(topology, *context.frame);
+    if (assigned.has_value()) {
+      std::vector<std::string> by_residue(topology.residue_count());
+      for (std::size_t residue = 0; residue < by_residue.size() && residue < assigned.value().residues.size(); ++residue) {
+        const auto state = assigned.value().residues[residue].state;
+        using State = analysis::SecondaryStructureState;
+        by_residue[residue] = (state == State::alpha_helix || state == State::helix_310 || state == State::pi_helix) ? "H"
+                              : state == State::extended_strand                                                    ? "S"
+                                                                                                                  : "";
+      }
+      computed_ss.emplace();
+      computed_ss->reserve(topology.atom_count());
+      for (const auto& atom : topology.atoms()) computed_ss->push_back(by_residue[atom.residue.value]);
+    }
+  }
   const auto peptide_residues =
       predicate.field == Field::peptide_sequence
           ? peptide_sequence_residues(predicate.value, topology)
@@ -463,6 +489,10 @@ operation::Result<Mask> predicate_mask(const Predicate& predicate,
         break;
       }
       case Field::property: {
+        if (computed_ss.has_value()) {
+          matches = string_value_matches(predicate.value, (*computed_ss)[index], predicate.literal);
+          break;
+        }
         const auto property_match =
             property_value_matches(predicate, topology, context, index);
         if (!property_match.has_value())

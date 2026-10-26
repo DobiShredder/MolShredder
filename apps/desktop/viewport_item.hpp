@@ -101,6 +101,10 @@ class MolecularViewport : public QQuickRhiItem {
                  analysisResultsChanged)
   Q_PROPERTY(QVariantList analysisLabelItems READ analysisLabelItems NOTIFY
                  analysisResultsChanged)
+  // Screen positions (pixels of this item) of the atoms in the named selection `sele`, for the
+  // selection squares drawn over the viewport. Follows the camera and the selection.
+  Q_PROPERTY(QList<QPointF> selectionMarkers READ selectionMarkers NOTIFY
+                 selectionMarkersChanged)
 
 public:
   explicit MolecularViewport(QQuickItem *parent = nullptr);
@@ -213,6 +217,7 @@ public:
   }
   [[nodiscard]] QVariantList analysisItems() const;
   [[nodiscard]] QVariantList analysisLabelItems() const;
+  [[nodiscard]] QList<QPointF> selectionMarkers() const;
   Q_INVOKABLE QString trajectoryMappingText() const;
 
   Q_INVOKABLE bool loadStructure(const QUrl &url);
@@ -445,6 +450,11 @@ public:
   Q_INVOKABLE QStringList completeCommandLine(const QString &prefix) const;
   // Residues of the active object for the sequence bar: [{chain, resi, letter, name}] (at most 20000).
   Q_INVOKABLE QVariantList sequenceItems() const;
+  // One row per object: {objectId, object, active, items:[residues with chain]}; chains share the row.
+  Q_INVOKABLE QVariantList sequenceRows() const;
+  // Changes whenever the named selection `sele` (or the frame it is read in) changes.
+  Q_INVOKABLE qulonglong selectionRevision() const noexcept { return selection_revision_; }
+  Q_INVOKABLE int selectedResidueCount() const;
   // Every registered command with its parameters (name, summary, undo, parameters[]), for forms and help.
   Q_INVOKABLE QVariantList commandCatalog() const;
   // Render-setting catalog rows {name, type, default, minimum, maximum, unit, scope} for the inspector.
@@ -519,6 +529,22 @@ public:
   [[nodiscard]] std::uint64_t cameraRevision() const noexcept {
     return camera_revision_;
   }
+  // PyMOL lighting from the render settings: a headlight (`direct`) plus
+  // light_count-1 extra lights (`light`, `light2`, ...; each the direction the
+  // light travels in camera space) of strength `reflect`, with a specular
+  // highlight. Everything is in camera space, so the lit side always faces
+  // the viewer however the molecule is turned.
+  struct Lighting {
+    float ambient{0.14F};
+    float direct{0.45F};
+    float reflect{0.45F};
+    float specular_direct{0.0F};
+    float specular_reflect{1.0F};
+    float shininess{55.0F};
+    int count{2};
+    std::array<std::array<float, 3>, 9> directions{};
+  };
+  [[nodiscard]] Lighting lighting() const;
   [[nodiscard]] render::ColorRgb backgroundRgb() const noexcept {
     return workspace_->color_table().background_rgb();
   }
@@ -544,6 +570,7 @@ signals:
   void statusChanged();
   void representationChanged();
   void selectionChanged();
+  void selectionMarkersChanged();
   void objectsChanged();
   void objectTreeChanged();
   void trajectoryChanged();
@@ -591,6 +618,13 @@ private:
                             double duration_seconds, int hand);
 
   std::shared_ptr<application::Workspace> workspace_;
+  // The atoms of the named selection `sele` (angstrom) and the residues that hold them, refreshed when
+  // the selection or the frame changes (not on every camera move).
+  void refreshSelectionMarkerCache();
+  std::vector<model::Vec3d> selection_marker_positions_;
+  // Per object: which residues hold atoms of that object's `sele` (for the sequence highlight).
+  std::map<std::uint64_t, std::vector<std::uint8_t>> selected_residue_flags_;
+  qulonglong selection_revision_{0U};
   std::shared_ptr<application::RuntimeDiagnostics> diagnostics_;
   command::Registry registry_;
   application::Dispatcher dispatcher_;

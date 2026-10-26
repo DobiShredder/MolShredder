@@ -101,6 +101,282 @@
 <context>
     <name>NextObjectPanel</name>
     <message>
+        <source>dumbbell helices (fancy)</source>
+        <translation>helix를 아령형으로 (fancy)</translation>
+    </message>
+    <message>
+        <source>barbell</source>
+        <translation>바벨형</translation>
+    </message>
+    <message>
+        <source>edged ribbon</source>
+        <translation>가장자리 강조 리본</translation>
+    </message>
+    <message>
+        <source>square ribbon</source>
+        <translation>정사각 리본</translation>
+    </message>
+    <message>
+        <source>strip</source>
+        <translation>가는 띠</translation>
+    </message>
+    <message>
+        <source>putty (B-factor tube)</source>
+        <translation>putty (B-factor 굵기 관)</translation>
+    </message>
+    <message>
+        <source>cartoon style</source>
+        <translation>cartoon 모양</translation>
+    </message>
+    <message>
+        <source>automatic (default)</source>
+        <translation>자동 (기본)</translation>
+    </message>
+    <message>
+        <source>round ribbon</source>
+        <translation>둥근 ribbon</translation>
+    </message>
+    <message>
+        <source>flat ribbon</source>
+        <translation>납작한 ribbon</translation>
+    </message>
+    <message>
+        <source>oval ribbon</source>
+        <translation>타원 ribbon</translation>
+    </message>
+    <message>
+        <source>tube helices, arrow sheets</source>
+        <translation>helix는 관, sheet는 화살표</translation>
+    </message>
+    <message>
+        <source>tube</source>
+        <translation>관</translation>
+    </message>
+    <message>
+        <source>thin tube</source>
+        <translation>가는 관</translation>
+    </message>
+    <message>
+        <source>by element, carbons colored…</source>
+        <translation>원소별, 탄소 색 지정…</translation>
+    </message>
+    <message>
+        <source>labels</source>
+        <translation>라벨</translation>
+    </message>
+    <message>
+        <source>all atoms</source>
+        <translation>모든 원자</translation>
+    </message>
+    <message>
+        <source>main chain</source>
+        <translation>주사슬</translation>
+    </message>
+    <message>
+        <source>side chains</source>
+        <translation>곁사슬</translation>
+    </message>
+    <message>
+        <source>ligands</source>
+        <translation>리간드</translation>
+    </message>
+    <message>
+        <source>solvent</source>
+        <translation>용매</translation>
+    </message>
+    <message>
+        <source>hydrogens</source>
+        <translation>수소</translation>
+    </message>
+    <message>
+        <source>set rotation origin</source>
+        <translation>회전 중심으로 설정</translation>
+    </message>
+    <message>
+        <source>preset</source>
+        <translation>preset</translation>
+    </message>
+    <message>
+        <source>find</source>
+        <translation>찾기</translation>
+    </message>
+    <message>
+        <source>align</source>
+        <translation>정렬</translation>
+    </message>
+    <message>
+        <source>make selection</source>
+        <translation>selection 만들기</translation>
+    </message>
+    <message>
+        <source>this object to another…</source>
+        <translation>이 객체를 다른 객체에…</translation>
+    </message>
+    <message>
+        <source>another object to this…</source>
+        <translation>다른 객체를 이 객체에…</translation>
+    </message>
+    <message>
+        <source>polymer</source>
+        <translation>polymer</translation>
+    </message>
+    <message>
+        <source>C-alpha atoms</source>
+        <translation>C-alpha 원자</translation>
+    </message>
+    <message>
+        <source>polar hydrogens</source>
+        <translation>극성 수소</translation>
+    </message>
+    <message>
+        <source>non-polar hydrogens</source>
+        <translation>비극성 수소</translation>
+    </message>
+    <message>
+        <source>group…</source>
+        <translation>그룹으로 묶기…</translation>
+    </message>
+    <message>
+        <source>remove waters</source>
+        <translation>물 분자 제거</translation>
+    </message>
+    <message>
+        <source>remove all hydrogens</source>
+        <translation>모든 수소 제거</translation>
+    </message>
+    <message>
+        <source>remove non-polar hydrogens</source>
+        <translation>비극성 수소 제거</translation>
+    </message>
+    <message>
+        <source>states</source>
+        <translation>상태</translation>
+    </message>
+    <message>
+        <source>split into objects</source>
+        <translation>객체로 나누기</translation>
+    </message>
+    <message>
+        <source>split by chain</source>
+        <translation>chain별로 나누기</translation>
+    </message>
+    <message>
+        <source>placement</source>
+        <translation>배치</translation>
+    </message>
+    <message>
+        <source>hydrogen bonds within the object…</source>
+        <translation>객체 안의 수소결합…</translation>
+    </message>
+    <message>
+        <source>contacts within the object…</source>
+        <translation>객체 안의 접촉…</translation>
+    </message>
+    <message>
+        <source>default look</source>
+        <translation>기본 표시</translation>
+    </message>
+    <message>
+        <source>simple</source>
+        <translation>단순</translation>
+    </message>
+    <message>
+        <source>simple (no solvent)</source>
+        <translation>단순 (용매 제외)</translation>
+    </message>
+    <message>
+        <source>ball and stick</source>
+        <translation>공과 막대</translation>
+    </message>
+    <message>
+        <source>ligands and their surroundings</source>
+        <translation>리간드와 주변</translation>
+    </message>
+    <message>
+        <source>show surface</source>
+        <translation>표면 보이기</translation>
+    </message>
+    <message>
+        <source>surface options…</source>
+        <translation>표면 옵션…</translation>
+    </message>
+    <message>
+        <source>only (hide the rest)</source>
+        <translation>이것만 (나머지 숨김)</translation>
+    </message>
+    <message>
+        <source>waters</source>
+        <translation>물 분자</translation>
+    </message>
+    <message>
+        <source>residue (name and number)</source>
+        <translation>잔기 (이름과 번호)</translation>
+    </message>
+    <message>
+        <source>residue number</source>
+        <translation>잔기 번호</translation>
+    </message>
+    <message>
+        <source>chain</source>
+        <translation>chain</translation>
+    </message>
+    <message>
+        <source>atom number</source>
+        <translation>원자 번호</translation>
+    </message>
+    <message>
+        <source>occupancy</source>
+        <translation>점유율</translation>
+    </message>
+    <message>
+        <source>van der Waals radius</source>
+        <translation>van der Waals 반지름</translation>
+    </message>
+    <message>
+        <source>secondary structure</source>
+        <translation>2차구조</translation>
+    </message>
+    <message>
+        <source>by chain</source>
+        <translation>chain별</translation>
+    </message>
+    <message>
+        <source>by secondary structure</source>
+        <translation>2차구조별</translation>
+    </message>
+    <message>
+        <source>reds</source>
+        <translation>빨강 계열</translation>
+    </message>
+    <message>
+        <source>greens</source>
+        <translation>초록 계열</translation>
+    </message>
+    <message>
+        <source>blues</source>
+        <translation>파랑 계열</translation>
+    </message>
+    <message>
+        <source>yellows</source>
+        <translation>노랑 계열</translation>
+    </message>
+    <message>
+        <source>magentas</source>
+        <translation>자홍 계열</translation>
+    </message>
+    <message>
+        <source>cyans</source>
+        <translation>청록 계열</translation>
+    </message>
+    <message>
+        <source>oranges</source>
+        <translation>주황 계열</translation>
+    </message>
+    <message>
+        <source>grays</source>
+        <translation>회색 계열</translation>
+    </message>
+    <message>
         <source>Click: make active · Double-click: rename · Middle-click: center the view</source>
         <translation>클릭: 활성화 · 더블클릭: 이름 바꾸기 · 휠클릭: 화면 중심 이동</translation>
     </message>
@@ -237,14 +513,6 @@
         <translation>복제…</translation>
     </message>
     <message>
-        <source>align to…</source>
-        <translation>정렬…</translation>
-    </message>
-    <message>
-        <source>split states</source>
-        <translation>state 나누기</translation>
-    </message>
-    <message>
         <source>fix</source>
         <translation>고정</translation>
     </message>
@@ -259,14 +527,6 @@
     <message>
         <source>surface</source>
         <translation>표면</translation>
-    </message>
-    <message>
-        <source>only lines</source>
-        <translation>선만</translation>
-    </message>
-    <message>
-        <source>only cartoon</source>
-        <translation>카툰만</translation>
     </message>
     <message>
         <source>everything</source>
@@ -344,12 +604,28 @@ or drop a file here.</source>
 <context>
     <name>NextSequenceBar</name>
     <message>
+        <source>Sequence scroll</source>
+        <translation>서열 스크롤</translation>
+    </message>
+    <message>
+        <source>Sequence</source>
+        <translation>서열</translation>
+    </message>
+    <message>
+        <source>%1 residues selected</source>
+        <translation>잔기 %1개 선택됨</translation>
+    </message>
+    <message>
         <source>no residues</source>
         <translation>Residue 없음</translation>
     </message>
 </context>
 <context>
     <name>NextShell</name>
+    <message>
+        <source>Lighting…</source>
+        <translation>조명…</translation>
+    </message>
     <message>
         <source>Welcome to MolShredder</source>
         <translation>MolShredder에 오신 것을 환영합니다</translation>
@@ -2822,6 +3098,105 @@ Run something from the Analyze menu.</source>
     <message>
         <source>double-click</source>
         <translation>더블클릭</translation>
+    </message>
+  </context>
+  <context>
+    <name>NextLighting</name>
+    <message>
+        <source>Ambient</source>
+        <translation>주변광</translation>
+    </message>
+    <message>
+        <source>Headlight</source>
+        <translation>정면광</translation>
+    </message>
+    <message>
+        <source>Extra lights</source>
+        <translation>보조광</translation>
+    </message>
+    <message>
+        <source>Highlight</source>
+        <translation>하이라이트</translation>
+    </message>
+    <message>
+        <source>Shininess</source>
+        <translation>광택</translation>
+    </message>
+    <message>
+        <source>Default</source>
+        <translation>기본</translation>
+    </message>
+    <message>
+        <source>Soft</source>
+        <translation>부드럽게</translation>
+    </message>
+    <message>
+        <source>Matte</source>
+        <translation>무광</translation>
+    </message>
+    <message>
+        <source>Studio</source>
+        <translation>스튜디오</translation>
+    </message>
+    <message>
+        <source>Dramatic</source>
+        <translation>강한 대비</translation>
+    </message>
+    <message>
+        <source>LIGHTING</source>
+        <translation>조명</translation>
+    </message>
+    <message>
+        <source>Reset all</source>
+        <translation>모두 초기화</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>닫기</translation>
+    </message>
+    <message>
+        <source>Looks</source>
+        <translation>분위기</translation>
+    </message>
+    <message>
+        <source>Lights stay fixed relative to the screen: the side facing you is always lit, however the molecule is turned.</source>
+        <translation>조명은 화면에 고정됩니다. 분자를 어떻게 돌려도 보는 쪽 면이 항상 밝습니다.</translation>
+    </message>
+    <message>
+        <source>Intensity</source>
+        <translation>세기</translation>
+    </message>
+    <message>
+        <source>Lights</source>
+        <translation>광원</translation>
+    </message>
+    <message>
+        <source>Number of lights (headlight included)</source>
+        <translation>광원 수 (정면광 포함)</translation>
+    </message>
+    <message>
+        <source>Number of lights</source>
+        <translation>광원 수</translation>
+    </message>
+    <message>
+        <source>Each extra light shines in the direction x, y, z (camera space: x right, y up, z toward you).</source>
+        <translation>보조광은 x, y, z 방향으로 비춥니다 (카메라 기준: x 오른쪽, y 위, z 보는 사람 쪽).</translation>
+    </message>
+    <message>
+        <source>Light %1</source>
+        <translation>광원 %1</translation>
+    </message>
+    <message>
+        <source>Light %1 x</source>
+        <translation>광원 %1 x</translation>
+    </message>
+    <message>
+        <source>Light %1 y</source>
+        <translation>광원 %1 y</translation>
+    </message>
+    <message>
+        <source>Light %1 z</source>
+        <translation>광원 %1 z</translation>
     </message>
   </context>
 </TS>

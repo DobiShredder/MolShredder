@@ -60,7 +60,7 @@ Window {
     }
     function quote(text) { return "\"" + String(text).replace(/\\/g, "\\\\").replace(/"/g, "\\\"") + "\"" }
     // `ui:` lines drive the shell itself (used by --command for screenshots and smoke tests):
-    //   ui:form <command> | ui:menu <Title> | ui:objectmenu <A|S|H|L|C> | ui:objectcenter <object> | ui:sequence on|off | ui:output on|off
+    //   ui:form <command> | ui:menu <Title> | ui:lighting | ui:objectmenu <A|S|H|L|C> | ui:objectcenter <object> | ui:sequence on|off | ui:seqselect ROW FIRST LAST [add] | ui:output on|off
     function uiCommand(text) {
         const parts = text.substring(3).trim().split(/\s+/)
         const rest = parts.slice(1).join(" ")
@@ -76,6 +76,7 @@ Window {
         case "chemistry": chemistryPanel.openPanel(); if (rest === "analyze") chemistryPanel.analyze(); break
         case "builder": moleculeBuilder.openBuilder(); break
         case "camera": cameraPanel.openPanel(); break
+        case "lighting": lightingPanel.openPanel(); break
         case "script": scriptPanel.openPanel(rest); break
         case "scriptrun": {
             const inProcess = rest.indexOf("inprocess ") === 0
@@ -104,6 +105,7 @@ Window {
         case "objectmenu": side.openMenu(rest); break
         case "objectcenter": side.centerNamed(rest); break
         case "sequence": prefs.sequenceVisible = rest === "on"; break
+        case "seqselect": sequence.selectByHook(rest); break
         case "output": prefs.outputVisible = rest === "on"; break
         case "theme": setTheme(rest); break
         case "mouse": setMouseMode(rest); break
@@ -127,6 +129,10 @@ Window {
             if (entry.separator) return
             entries += 1
             if (!entry.text || entry.text.length === 0) problems.push(where + ": entry without text")
+            if (entry.submenu) {
+                for (const sub of entry.submenu) check(where + " ▸ " + entry.text, sub)
+                return
+            }
             if (entry.command) {
                 const problem = viewport.auditCommandLine(entry.command)
                 if (problem.length > 0) problems.push(where + " ▸ " + entry.text + ": " + problem)
@@ -178,6 +184,8 @@ Window {
         case "welcome": ok = welcomeCard.visible === (parts[1] !== "off"); break
         case "shortcuts": ok = shortcutsPanel.visible; break
         case "active": ok = viewport.objectItems.some(function(item) { return item.active && item.name === parts[1] }); break
+        case "seqselected": ok = viewport.selectedResidueCount() === parseInt(parts[1], 10); break
+        case "markers": ok = viewport.selectionMarkers.length >= parseInt(parts[1], 10); break
         case "hidden": ok = viewport.objectItems.some(function(item) { return item.name === parts[1] && item.visible === false }); break
         }
         if (!ok) { errorCount += 1; output.append("error", "error: expectation failed: " + spec); console.log("MolShredder expectation failed: " + spec) }
@@ -242,6 +250,7 @@ Window {
         {id: "molecule-builder", panel: function() { return moleculeBuilder }, open: function() { moleculeBuilder.openBuilder() }},
         {id: "render-settings", panel: function() { return inspector }, open: function() { showInspector(2) }},
         {id: "views", panel: function() { return cameraPanel }, open: function() { cameraPanel.openPanel() }},
+        {id: "lighting", panel: function() { return lightingPanel }, open: function() { lightingPanel.openPanel() }},
         {id: "scenes", panel: function() { return scenesPanel }, open: function() { scenesPanel.openPanel() }},
         {id: "movie", panel: function() { return movieEditor }, open: function() { movieEditor.openEditor() }},
         {id: "chemistry", panel: function() { return chemistryPanel }, open: function() { chemistryPanel.openPanel() }},
@@ -349,6 +358,7 @@ Window {
         case "volumes": volumePanel.openPanel(); break
         case "editAtoms": atomEditor.openEditor(); break
         case "camera": cameraPanel.openPanel(); break
+        case "lighting": lightingPanel.openPanel(); break
         case "shortcuts": shortcutsPanel.openPanel(); break
         case "systemInfo": openSystemInfo(); break
         case "builder": moleculeBuilder.openBuilder(); break
@@ -430,6 +440,7 @@ Window {
         ],
         "Setting": [
             {text: qsTr("Inspector…"), action: "inspector", tab: 0, hint: "Ctrl+I"},
+            {text: qsTr("Lighting…"), action: "lighting"},
             {separator: true},
             {text: qsTr("Set render setting…"), form: "setting set"},
             {text: qsTr("Show setting…"), form: "setting get"},
@@ -541,7 +552,7 @@ Window {
                 id: sequence
                 viewport: viewport
                 visible: prefs.sequenceVisible
-                height: visible ? 34 : 0
+                height: visible ? contentHeight : 0
                 anchors { left: parent.left; right: parent.right; top: parent.top }
                 onCommand: function(text) { root.run(text) }
             }
@@ -610,6 +621,32 @@ Window {
                             viewport.pickAt(mouse.x, mouse.y)
                         }
                         onDoubleClicked: viewport.resetViewAnimated(0.35, 1)
+                    }
+                }
+
+                // Squares over the atoms of the named selection `sele`, as PyMOL marks a selection.
+                Canvas {
+                    id: selectionMarkerLayer
+                    objectName: "selectionMarkerLayer"
+                    anchors.fill: parent
+                    z: 15
+                    visible: viewport.selectionMarkers.length > 0
+                    Accessible.ignored: true
+                    onPaint: {
+                        const ctx = getContext("2d")
+                        ctx.clearRect(0, 0, width, height)
+                        const points = viewport.selectionMarkers
+                        ctx.lineWidth = 1.5
+                        ctx.strokeStyle = "#ff4fa3"
+                        ctx.fillStyle = "#ffffff"
+                        for (let i = 0; i < points.length; ++i) {
+                            ctx.strokeRect(points[i].x - 4, points[i].y - 4, 8, 8)
+                            ctx.fillRect(points[i].x - 1, points[i].y - 1, 2, 2)
+                        }
+                    }
+                    Connections {
+                        target: viewport
+                        function onSelectionMarkersChanged() { selectionMarkerLayer.requestPaint() }
                     }
                 }
 
@@ -856,6 +893,11 @@ Window {
     }
     NextCamera {
         id: cameraPanel
+        viewport: viewport
+        onRun: function(text) { root.run(text) }
+    }
+    NextLighting {
+        id: lightingPanel
         viewport: viewport
         onRun: function(text) { root.run(text) }
     }

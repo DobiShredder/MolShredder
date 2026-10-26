@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Cartoon and ribbon geometry parity with PyMOL 3.1.0 VRML exports (Q-019 a).
 
-Arguments: geometry probe, 1ubq.pdb, pymol310_backbone.json.gz.
+Arguments: geometry probe, 1ubq.pdb, pymol310_backbone.json.gz and optionally
+pymol310_backbone_styles.json.gz (dumbbell, putty and the cartoon_* flag settings).
 Meshes are compared as surfaces: every vertex of one mesh must lie close to
 the other mesh (point-to-triangle distance) in both directions.
 """
@@ -124,8 +125,8 @@ def check_mesh(name: str, actual: dict, expected: dict) -> None:
 
 
 def main() -> int:
-    require(len(sys.argv) == 4, "expected probe, 1ubq.pdb and pymol310_backbone.json.gz")
-    probe, ubq, capture_path = (pathlib.Path(arg).resolve() for arg in sys.argv[1:])
+    require(len(sys.argv) in (4, 5), "expected probe, 1ubq.pdb, pymol310_backbone.json.gz [, styles.json.gz]")
+    probe, ubq, capture_path = (pathlib.Path(arg).resolve() for arg in sys.argv[1:4])
     with gzip.open(capture_path, "rt") as handle:
         cases = json.load(handle)["cases"]
     # 1ubq without residues 30-32 (header kept) for gap handling.
@@ -169,6 +170,43 @@ def main() -> int:
         if "same_as" in expected:
             expected = cases[expected["same_as"]]
         check_mesh(name, run(probe, script), expected)
+
+    if len(sys.argv) == 5:
+        with gzip.open(pathlib.Path(sys.argv[4]).resolve(), "rt") as handle:
+            styles = json.load(handle)["cases"]
+        putty = "resi 10-40"
+        style_meshes = {
+            "dumbbell": base() + [cartoon("dumbbell", "resi 10-25")],
+            "dumbbell_dims": base() + [setting("cartoon_dumbbell_length", "2.2"),
+                                       setting("cartoon_dumbbell_width", "0.3"),
+                                       setting("cartoon_dumbbell_radius", "0.25"),
+                                       cartoon("dumbbell", "resi 10-25")],
+            "putty": base() + [cartoon("putty", putty)],
+            "putty_relative": base() + [setting("cartoon_putty_transform", "1"),
+                                        setting("cartoon_putty_scale_min", "0.3"),
+                                        setting("cartoon_putty_scale_max", "5"),
+                                        cartoon("putty", putty)],
+            "putty_absolute": base() + [setting("cartoon_putty_transform", "7"),
+                                        setting("cartoon_putty_scale_min", "-1"),
+                                        setting("cartoon_putty_scale_max", "-1"),
+                                        setting("cartoon_putty_radius", "0.05"),
+                                        cartoon("putty", putty)],
+            "putty_dims": base() + [setting("cartoon_putty_radius", "0.6"),
+                                    setting("cartoon_putty_range", "1.2"),
+                                    setting("cartoon_putty_scale_power", "2.0"),
+                                    setting("cartoon_putty_quality", "7"),
+                                    cartoon("putty", "all")],
+            "flat_sheets_off": base() + [setting("cartoon_flat_sheets", "false")],
+            "smooth_loops_on": base() + [setting("cartoon_smooth_loops", "true")],
+            "smooth_loops_cycles": base() + [setting("cartoon_smooth_loops", "true"),
+                                             setting("cartoon_smooth_cycles", "4"),
+                                             setting("cartoon_smooth_first", "1"),
+                                             setting("cartoon_smooth_last", "2")],
+            "fancy_helices": base() + [setting("cartoon_fancy_helices", "true")],
+            "fancy_sheets_off": base() + [setting("cartoon_fancy_sheets", "false")],
+        }
+        for name, script in style_meshes.items():
+            check_mesh(name, run(probe, script), styles[name])
 
     ribbons = {
         "ribbon_default": base(representation="ribbon"),

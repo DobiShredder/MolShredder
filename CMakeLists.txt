@@ -790,7 +790,7 @@ if(MOLSHREDDER_BUILD_DESKTOP)
   # New PyMOL-style shell (SEQ-330, `--ui next`). Flat names so the files resolve each other inside the module.
   set(MOLSHREDDER_NEXT_QML
     NextTheme NextButton NextMenu NextObjectPanel NextConsole NextMovieBar
-    NextSequenceBar NextCommandForm NextInspector NextMovieEditor NextResults NextSelectionEditor NextScenes NextTrajectoryImport NextSurface NextVolume NextEditor NextChemistry NextBuilder NextSystemInfo NextCamera NextScript NextShortcuts NextShell
+    NextSequenceBar NextCommandForm NextInspector NextMovieEditor NextResults NextSelectionEditor NextScenes NextTrajectoryImport NextSurface NextVolume NextEditor NextChemistry NextBuilder NextSystemInfo NextCamera NextLighting NextScript NextShortcuts NextShell
   )
   set(MOLSHREDDER_NEXT_QML_FILES "")
   foreach(next_name IN LISTS MOLSHREDDER_NEXT_QML)
@@ -1462,6 +1462,108 @@ if(MOLSHREDDER_BUILD_DESKTOP)
       PROPERTIES
         TIMEOUT 40
         PASS_REGULAR_EXPRESSION "commands=20 errors=0 objects=1"
+    )
+    add_test(
+      NAME desktop.next_ui_preset_smoke
+      COMMAND
+        molshredder_desktop --smoke --ui=next --language=en
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb"
+        "--command=preset --name simple --selection 1UBQ"
+        "--command=preset --name simple_no_solv --selection 1UBQ"
+        "--command=preset --name ball_and_stick --selection 1UBQ"
+        "--command=preset --name ligands --selection 1UBQ"
+        "--command=preset --name default --selection 1UBQ"
+        "--command=util.cbc 1UBQ"
+        "--command=util.cbag 1UBQ"
+    )
+    set_tests_properties(
+      desktop.next_ui_preset_smoke
+      PROPERTIES
+        TIMEOUT 40
+        PASS_REGULAR_EXPRESSION "commands=7 errors=0 objects=1"
+    )
+    add_test(
+      NAME desktop.next_ui_sequence_select_smoke
+      COMMAND
+        molshredder_desktop --smoke --ui=next --language=en
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb"
+        "--command=ui:sequence on"
+        "--command=ui:seqselect 0 4 8"
+        "--command=ui:expect seqselected 5"
+        "--command=ui:expect markers 20"
+        "--command=ui:seqselect 0 10 11 add"
+        "--command=ui:expect seqselected 7"
+        "--command=ui:seqselect 0 10 11 add"
+        "--command=ui:expect seqselected 5"
+        "--command=ui:seqselect 0 30 30"
+        "--command=ui:expect seqselected 1"
+    )
+    set_tests_properties(
+      desktop.next_ui_sequence_select_smoke
+      PROPERTIES
+        TIMEOUT 30
+        PASS_REGULAR_EXPRESSION "commands=4 errors=0 objects=1"
+    )
+    add_test(
+      NAME desktop.next_ui_sequence_rows_smoke
+      COMMAND
+        molshredder_desktop --smoke --ui=next --language=en
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb"
+        "--command=load ${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/synthetic_multimodel.pdb, other"
+        "--command=ui:sequence on"
+        "--command=ui:seqselect 0 2 5"
+        "--command=ui:expect active 1UBQ"
+        "--command=ui:expect seqselected 4"
+        "--command=ui:seqselect 1 0 0"
+        "--command=ui:expect active other"
+        "--command=ui:expect seqselected 1"
+    )
+    set_tests_properties(
+      desktop.next_ui_sequence_rows_smoke
+      PROPERTIES
+        TIMEOUT 30
+        PASS_REGULAR_EXPRESSION "commands=5 errors=0 objects=2"
+    )
+    add_test(
+      NAME desktop.next_ui_cartoon_style_smoke
+      COMMAND
+        molshredder_desktop --smoke --ui=next --language=en
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb"
+        "--command=cartoon style --name round_ribbon --selection 1UBQ"
+        "--command=cartoon style --name flat_ribbon --selection 1UBQ"
+        "--command=cartoon style --name oval_ribbon --selection 1UBQ"
+        "--command=cartoon style --name tube_helices --selection 1UBQ"
+        "--command=cartoon style --name tube --selection 1UBQ"
+        "--command=cartoon style --name thin_tube --selection 1UBQ"
+        "--command=cartoon style --name automatic --selection 1UBQ"
+        "--command=set cartoon_oval_length, 1.0, 1UBQ"
+        "--command=set cartoon_loop_radius, 0.3, 1UBQ"
+    )
+    set_tests_properties(
+      desktop.next_ui_cartoon_style_smoke
+      PROPERTIES
+        TIMEOUT 60
+        PASS_REGULAR_EXPRESSION "commands=9 errors=0 objects=1"
+    )
+    add_test(
+      NAME desktop.next_ui_lighting_smoke
+      COMMAND
+        molshredder_desktop --smoke --ui=next --language=en
+        "--open=${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb"
+        "--command=ui:lighting"
+        "--command=ui:expect panels lighting"
+        "--command=setting set --name ambient --value 0.3"
+        "--command=setting set --name light_count --value 3"
+        "--command=setting set --name light2 --value 0.1,0.2,0.3"
+        "--command=setting set --name specular --value 0"
+        "--command=setting unset --name light2"
+        "--command=setting unset --name ambient"
+    )
+    set_tests_properties(
+      desktop.next_ui_lighting_smoke
+      PROPERTIES
+        TIMEOUT 30
+        PASS_REGULAR_EXPRESSION "commands=6 errors=0 objects=1"
     )
     add_test(
       NAME desktop.next_ui_behavior_smoke
@@ -3873,6 +3975,7 @@ if(BUILD_TESTING)
       "$<TARGET_FILE:molshredder_geometry_probe>"
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb"
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/render/fixtures/geometry/pymol310_backbone.json.gz"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/render/fixtures/geometry/pymol310_backbone_styles.json.gz"
   )
   add_test(
     NAME render.measure_parity
@@ -4022,6 +4125,15 @@ if(BUILD_TESTING)
       "$<TARGET_FILE:molshredder_sample_plugin_good>"
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb"
       "${CMAKE_CURRENT_BINARY_DIR}"
+  )
+
+  add_test(
+    NAME frontend.first_load_camera
+    COMMAND
+      Python3::Interpreter
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/frontend/first_load_camera_test.py"
+      "$<TARGET_FILE:molshredder_python>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures"
   )
 
   add_test(
@@ -4397,7 +4509,7 @@ if(BUILD_TESTING)
   add_test(NAME cli.setting_list COMMAND molshredder setting list)
   set_tests_properties(
     cli.setting_list
-    PROPERTIES PASS_REGULAR_EXPRESSION "definition_count=81"
+    PROPERTIES PASS_REGULAR_EXPRESSION "definition_count=123"
   )
   set_tests_properties(
     cli.version

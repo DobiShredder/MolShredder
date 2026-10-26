@@ -118,7 +118,7 @@ bool connected(const PymolBackboneInput &input, const std::vector<ResidueAtoms> 
 // Guide CA atoms with segment ids, cartoon types and orientation vectors.
 std::vector<Guide> cartoon_guides(const PymolBackboneInput &input,
                                   const std::vector<ResidueAtoms> &atoms,
-                                  int gap_cutoff) {
+                                  int gap_cutoff, bool fancy_helices, bool fancy_sheets) {
   const auto &residues = input.topology->residues();
   std::vector<Guide> guides;
   int segment = 0;
@@ -152,11 +152,11 @@ std::vector<Guide> cartoon_guides(const PymolBackboneInput &input,
     const auto ss = input.residue_ss[residue];
     if (ss == 'H') {
       if (car == kAuto)
-        car = kOval;
+        car = fancy_helices ? kDumbbell : kOval;
       parity = 0;
     } else if (ss == 'S') {
       if (car == kAuto)
-        car = kArrow;
+        car = fancy_sheets ? kArrow : kRect;
       parity = parity == 0 ? 1 : 0;
     } else {
       if (car == kAuto)
@@ -377,6 +377,63 @@ void flatten_sheets(std::vector<Guide> &guides, int cycles) {
   }
 }
 
+// cartoon_smooth_loops: moving-average smoothing of positions and orientations along each loop
+// run (loops are guides without helix or sheet), including one neighbor on either side inside the segment.
+void smooth_loops(std::vector<Guide> &guides, int first_window, int last_window, int cycles) {
+  const auto count = static_cast<long>(guides.size());
+  if (count < 2)
+    return;
+  const auto at = [&](long index) -> Guide & { return guides[static_cast<std::size_t>(index)]; };
+  long first = -1;
+  long last = 0;
+  bool end = false;
+  std::vector<V> buffer(guides.size());
+  for (long a = 0; a < count; ++a) {
+    if (a > 0) {
+      if (at(a).segment != at(a - 1).segment)
+        end = true;
+      else if (at(a).ss != 'L')
+        end = true;
+      if (a == count - 1)
+        end = true;
+    }
+    if (end) {
+      if (a > 0 && first > 0 && at(first).segment == at(first - 1).segment)
+        --first;
+      if (last > 0 && at(a).segment == at(a - 1).segment && last < count - 1)
+        ++last;
+      for (int window = first_window; window <= last_window; ++window) {
+        for (int cycle = 0; cycle < cycles; ++cycle) {
+          for (long b = first + window; b <= last - window; ++b) {
+            V sum{};
+            for (long e = -window; e <= window; ++e)
+              sum = sum + at(b + e).position;
+            buffer[static_cast<std::size_t>(b)] = sum * (1.0 / (2 * window + 1));
+          }
+          for (long b = first + window; b <= last - window; ++b)
+            at(b).position = buffer[static_cast<std::size_t>(b)];
+          for (long b = first + window; b <= last - window; ++b) {
+            V sum{};
+            for (long e = -window; e <= window; ++e)
+              sum = sum + at(b + e).orientation;
+            buffer[static_cast<std::size_t>(b)] = sum * (1.0 / (2 * window + 1));
+          }
+          for (long b = first + window; b <= last - window; ++b)
+            at(b).orientation = unit(buffer[static_cast<std::size_t>(b)]);
+        }
+      }
+      first = -1;
+      last = -1;
+      end = false;
+    }
+    if (at(a).ss == 'L') {
+      if (first < 0)
+        first = a;
+      last = a;
+    }
+  }
+}
+
 // Bends sheet tangents toward the run at the sheet tips.
 void refine_tips(const std::vector<Guide> &guides, std::vector<V> &tangent, double factor) {
   for (std::size_t a = 1; a + 1U < guides.size(); ++a) {
@@ -590,6 +647,48 @@ void tube(MeshWriter &mesh, const Path &path, const std::vector<Frame> &frames,
   }
 }
 
+// Tube whose cross-section is scaled by `factor[a]` at each path point (putty). The side normals tilt toward
+// the thinner end by the local rate of change of the radius, as in PyMOL's variable tube.
+void variable_tube(MeshWriter &mesh, const Path &path, const std::vector<Frame> &frames,
+                   const Shape &shape, const std::vector<double> &factor) {
+  const auto count = path.point.size();
+  const auto sides = shape.vertex.size();
+  if (count < 2U || sides == 0U || factor.size() != count)
+    return;
+  const auto radius = [&](std::size_t b, std::size_t a) {
+    return std::hypot(shape.vertex[b].first, shape.vertex[b].second) * factor[a];
+  };
+  std::vector<std::vector<std::uint32_t>> grid(sides, std::vector<std::uint32_t>(count));
+  for (std::size_t b = 0; b < sides; ++b) {
+    std::vector<double> lean(count, 0.0);
+    for (std::size_t a = 1U; a + 1U < count; ++a) {
+      const auto r0 = radius(b, a);
+      const auto before = length(path.point[a - 1U] - path.point[a]);
+      const auto after = length(path.point[a + 1U] - path.point[a]);
+      const auto x1 = before > 0.0 ? (radius(b, a - 1U) - r0) / before : 0.0;
+      const auto x2 = after > 0.0 ? -(radius(b, a + 1U) - r0) / after : 0.0;
+      lean[a] = (x1 + x2) / 2.0;
+      if (a == 1U)
+        lean[0] = x1;
+      if (a + 2U == count)
+        lean[count - 1U] = x2;
+    }
+    for (std::size_t a = 0; a < count; ++a) {
+      const auto side = shape_point(frames[a], shape.normal[b]);
+      const auto normal = unit(frames[a].tangent * lean[a] + side);
+      const auto offset = shape_point(frames[a], {shape.vertex[b].first * factor[a],
+                                                  shape.vertex[b].second * factor[a]});
+      grid[b][a] = mesh.vertex(path.point[a] + offset, normal, path.color[a]);
+    }
+  }
+  for (std::size_t b = 0; b < sides; ++b)
+    for (std::size_t a = 0; a + 1U < count; ++a)
+      mesh.quad(grid[b][a], grid[(b + 1U) % sides][a], grid[b][a + 1U],
+                grid[(b + 1U) % sides][a + 1U], path.atom[a]);
+  flat_cap(mesh, path, frames, shape, 0U, true, factor.front());
+  flat_cap(mesh, path, frames, shape, count - 1U, false, factor.back());
+}
+
 // Paired-face polygon (flat rectangle) with flat end caps.
 void polygon(MeshWriter &mesh, const Path &path, const std::vector<Frame> &frames,
              const Shape &shape) {
@@ -609,6 +708,36 @@ void polygon(MeshWriter &mesh, const Path &path, const std::vector<Frame> &frame
   }
   flat_cap(mesh, path, frames, shape, 0U, true);
   flat_cap(mesh, path, frames, shape, count - 1U, false);
+}
+
+// Dumbbell web: the two faces of a flat polygon whose length shrinks to nothing over `sampling` points at
+// each end (PyMOL's tapered polygon); no end caps.
+void polygon_taper(MeshWriter &mesh, const Path &path, const std::vector<Frame> &frames,
+                   const Shape &shape, std::size_t sampling) {
+  const auto count = path.point.size();
+  if (count < 2U)
+    return;
+  const auto taper = [&](std::size_t a) {
+    if (a < sampling)
+      return smooth(static_cast<double>(a) / static_cast<double>(sampling), 2.0);
+    if (a >= count - sampling)
+      return smooth(static_cast<double>(count - a - 1U) / static_cast<double>(sampling), 2.0);
+    return 1.0;
+  };
+  for (std::size_t b = 0; b + 1U < shape.vertex.size(); b += 2U) {
+    std::vector<std::uint32_t> left(count), right(count);
+    for (std::size_t a = 0; a < count; ++a) {
+      const auto f = taper(a);
+      const auto place = [&](std::size_t vertex) {
+        return path.point[a] + shape_point(frames[a], {shape.vertex[vertex].first,
+                                                       shape.vertex[vertex].second * f});
+      };
+      left[a] = mesh.vertex(place(b), shape_point(frames[a], shape.normal[b]), path.color[a]);
+      right[a] = mesh.vertex(place(b + 1U), shape_point(frames[a], shape.normal[b + 1U]), path.color[a]);
+    }
+    for (std::size_t a = 0; a + 1U < count; ++a)
+      mesh.quad(left[a], right[a], left[a + 1U], right[a + 1U], path.atom[a]);
+  }
 }
 
 // Sheet strand: flat body, then an arrow head over the last residue that
@@ -682,6 +811,90 @@ void strand(MeshWriter &mesh, const Path &path, const std::vector<Frame> &frames
   }
 }
 
+struct PuttyStatistics {
+  double mean{10.0};
+  double stdev{0.0};
+  double minimum{0.0};
+  double maximum{10.0};
+};
+
+// Mean, deviation and range of the B-factor over the atoms this cartoon shows.
+PuttyStatistics putty_statistics(const PymolBackboneInput &input) {
+  double sum = 0.0, square = 0.0;
+  double minimum = std::numeric_limits<double>::max(), maximum = std::numeric_limits<double>::lowest();
+  std::size_t count = 0;
+  for (std::size_t atom = 0; atom < input.visible.size() && atom < input.b_factor.size(); ++atom) {
+    if (input.visible[atom] == 0U)
+      continue;
+    const auto value = input.b_factor[atom];
+    sum += value;
+    square += value * value;
+    minimum = std::min(minimum, value);
+    maximum = std::max(maximum, value);
+    ++count;
+  }
+  if (count == 0U)
+    return {};
+  const auto n = static_cast<double>(count);
+  return {sum / n, std::sqrt(std::max(0.0, (square - sum * sum / n) / n)), minimum, maximum};
+}
+
+// Radius factor along a putty path: the B-factor of each point's atom mapped by cartoon_putty_transform,
+// clamped to [scale_min, scale_max] (negative: unbounded) and averaged over +-`window` points.
+std::vector<double> putty_factors(const PymolBackboneInput &input, const PymolCartoonParameters &parameters,
+                                  const PuttyStatistics &statistics, const Path &path, int window) {
+  const auto count = path.point.size();
+  std::vector<double> factor(count, 0.5);
+  const auto transform = parameters.putty_transform;
+  const auto range = parameters.putty_range;
+  const auto data_range = statistics.maximum - statistics.minimum;
+  const bool normalized = transform == 0 || transform == 4;
+  const bool relative = transform == 1 || transform == 5;
+  const bool invalid = (normalized && statistics.stdev < 1e-8) ||
+                       (transform != 3 && transform != 7 && transform != 8 && std::abs(range) < 1e-8) ||
+                       (relative && std::abs(data_range) < 1e-8);
+  if (invalid)
+    return factor;
+  const bool nonlinear = transform <= 3;
+  for (std::size_t a = 0; a < count; ++a) {
+    const auto b = path.atom[a] < input.b_factor.size() ? input.b_factor[path.atom[a]] : 0.0;
+    double scale = 1.0;
+    if (transform == 8) {
+      scale = std::sqrt(b / 8.0) / std::numbers::pi;
+    } else {
+      if (normalized)
+        scale = (range + (b - statistics.mean) / statistics.stdev) / range;
+      else if (relative)
+        scale = (b - statistics.minimum) / (data_range * range);
+      else if (transform == 2 || transform == 6)
+        scale = b / range;
+      else
+        scale = b;
+      scale = std::max(0.0, scale);
+      if (nonlinear)
+        scale = std::pow(scale, parameters.putty_scale_power);
+    }
+    if (parameters.putty_scale_min >= 0.0 && scale < parameters.putty_scale_min)
+      scale = parameters.putty_scale_min;
+    if (parameters.putty_scale_max >= 0.0 && scale > parameters.putty_scale_max)
+      scale = parameters.putty_scale_max;
+    factor[a] = scale;
+  }
+  if (count > 2U) {
+    const auto source = factor;
+    for (std::size_t a = 1U; a + 1U < count; ++a) {
+      double sum = 0.0;
+      for (int w = -window; w <= window; ++w) {
+        const auto index = std::clamp<std::ptrdiff_t>(static_cast<std::ptrdiff_t>(a) + w, 0,
+                                                      static_cast<std::ptrdiff_t>(count) - 1);
+        sum += source[static_cast<std::size_t>(index)];
+      }
+      factor[a] = sum / static_cast<double>(2 * window + 1);
+    }
+  }
+  return factor;
+}
+
 } // namespace
 
 std::vector<std::int32_t> append_pymol_cartoon(const PymolBackboneInput &input,
@@ -689,25 +902,32 @@ std::vector<std::int32_t> append_pymol_cartoon(const PymolBackboneInput &input,
                                                RenderPacket &packet) {
   std::vector<std::int32_t> fallbacks;
   const auto atoms = residue_atoms(input);
-  auto guides = cartoon_guides(input, atoms, parameters.gap_cutoff);
+  auto guides = cartoon_guides(input, atoms, parameters.gap_cutoff, parameters.fancy_helices,
+                               parameters.fancy_sheets);
   const auto count = guides.size();
   if (count < 2U)
     return fallbacks;
   auto path = spans(guides);
   round_helices(guides, path.tangent);
   refine_normals(guides, path);
-  flatten_sheets(guides, parameters.flat_cycles);
+  if (parameters.flat_sheets)
+    flatten_sheets(guides, parameters.flat_cycles);
+  if (parameters.smooth_loops)
+    smooth_loops(guides, parameters.smooth_first, parameters.smooth_last, parameters.smooth_cycles);
   path = spans(guides);
-  refine_tips(guides, path.tangent, parameters.refine_tips);
+  if (parameters.flat_sheets)
+    refine_tips(guides, path.tangent, parameters.refine_tips);
 
   const auto scale = input.unit_scale;
   const auto sampling = static_cast<std::size_t>(std::max(1, parameters.sampling));
   MeshWriter mesh{packet, input};
   Path points;
+  PuttyStatistics putty;
+  bool putty_ready = false;
   const auto extrude = [&](int car) {
     if (points.point.size() < 2U || car == kSkip)
       return;
-    if (car == kDumbbell || car == kPutty || car == kCylinder) {
+    if (car == kCylinder) {
       if (std::find(fallbacks.begin(), fallbacks.end(), car) == fallbacks.end())
         fallbacks.push_back(car);
     }
@@ -722,15 +942,50 @@ std::vector<std::int32_t> append_pymol_cartoon(const PymolBackboneInput &input,
       polygon(mesh, points, oriented_frames(points),
               rectangle(parameters.rect_width * scale, parameters.rect_length * scale));
       break;
+    case kDumbbell: {
+      const auto width = parameters.dumbbell_width * scale;
+      const auto length = parameters.dumbbell_length * scale;
+      const auto w = std::cos(std::numbers::pi / 4.0) * width;
+      const auto l = std::sin(std::numbers::pi / 4.0) * length;
+      const Shape web{{{w, -l}, {w, l}, {-w, l}, {-w, -l}}, {{1, 0}, {1, 0}, {-1, 0}, {-1, 0}}};
+      const auto frames = oriented_frames(points);
+      polygon_taper(mesh, points, frames, web, sampling);
+      // A rod along each edge of the web, pulled in over the first and last `sampling` points.
+      const auto reach = std::sin(std::numbers::pi / 4.0) * length;
+      const auto count = points.point.size();
+      for (const double sign : {-1.0, 1.0}) {
+        Path edge = points;
+        for (std::size_t a = 0; a < count; ++a) {
+          double f = sign * reach;
+          if (a <= sampling)
+            f *= smooth(static_cast<double>(a) / static_cast<double>(sampling), 2.0);
+          else if (a + sampling >= count)
+            f *= smooth(static_cast<double>(count - a - 1U) / static_cast<double>(sampling), 2.0);
+          edge.point[a] = edge.point[a] + frames[a].binormal * f;
+        }
+        tube(mesh, edge, transported_frames(edge),
+             circle(parameters.loop_quality, parameters.dumbbell_radius * scale), Cap::flat,
+             parameters.dumbbell_radius * scale);
+      }
+      break;
+    }
     case kOval:
-    case kDumbbell:
       tube(mesh, points, oriented_frames(points),
            oval(parameters.oval_quality, parameters.oval_width * scale,
                 parameters.oval_length * scale),
            Cap::flat, 0.0);
       break;
+    case kPutty: {
+      if (!putty_ready) {
+        putty = putty_statistics(input);
+        putty_ready = true;
+      }
+      variable_tube(mesh, points, transported_frames(points),
+                    circle(parameters.putty_quality, parameters.putty_radius * scale),
+                    putty_factors(input, parameters, putty, points, static_cast<int>(sampling) / 2));
+      break;
+    }
     case kTube:
-    case kPutty:
     case kCylinder:
       tube(mesh, points, transported_frames(points),
            circle(parameters.tube_quality, parameters.tube_radius * scale), Cap::round,

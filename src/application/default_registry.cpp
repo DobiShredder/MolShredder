@@ -5419,6 +5419,43 @@ command::Registry make_default_registry(
               {"object_id", value.object_id},
               {"representation_count", value.representation_count}}});
       };
+    } else if (canonical_name == "color chains") {
+      handler = [workspace](const Arguments &arguments, TaskContext &) {
+        // The chain colors follow the cycle PyMOL's util.cbc uses.
+        static constexpr std::array<std::string_view, 40> cycle{
+            "carbon", "cyan", "lightmagenta", "yellow", "salmon", "hydrogen",
+            "slate", "orange", "lime", "deepteal", "hotpink", "yelloworange",
+            "violetpurple", "grey70", "marine", "olive", "smudge", "teal",
+            "dirtyviolet", "wheat", "deepsalmon", "lightpink", "aquamarine",
+            "paleyellow", "limegreen", "skyblue", "warmpink", "limon", "violet",
+            "bluewhite", "greencyan", "sand", "forest", "lightteal",
+            "darksalmon", "splitpea", "raspberry", "grey50", "deepblue",
+            "brown"};
+        const auto *object = workspace->active_object();
+        if (object == nullptr)
+          return Result<Response>::failure(operation::Error{
+              operation::ErrorCode::not_found, "no active molecular object",
+              "load or activate a molecular structure first"});
+        const auto ids = workspace->selected_atom_ids(object->id, arguments.at("selection"));
+        if (!ids.has_value()) return Result<Response>::failure(ids.error());
+        const auto &topology = *object->system->topology();
+        std::set<std::string> chains;
+        for (const auto id : ids.value())
+          if (const auto index = topology.atom_index(model::AtomId{id}); index.has_value())
+            chains.insert(topology.residues()[topology.atoms()[index->value].residue.value].chain_id);
+        std::size_t colored = 0;
+        std::size_t position = 0;
+        for (const auto &chain : chains) {
+          const auto expression = "(chain \"" + chain + "\") and (" + arguments.at("selection") + ")";
+          const auto assigned = workspace->assign_color(
+              std::string{cycle[position % cycle.size()]}, expression, application::ObjectScope::active);
+          if (!assigned.has_value()) return Result<Response>::failure(assigned.error());
+          colored += assigned.value().affected_atom_count;
+          ++position;
+        }
+        return Result<Response>::success(
+            {"chains colored", {{"chain_count", chains.size()}, {"affected_atom_count", colored}}});
+      };
     } else if (canonical_name == "color define") {
       handler = [workspace](const Arguments &arguments, TaskContext &) {
         std::array<double, 3> components{};

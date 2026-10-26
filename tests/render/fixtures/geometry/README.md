@@ -13,6 +13,11 @@ merging collinear same-style segments (PyMOL exports one cylinder for same-color
   by the same PyMOL build from `1ubq.pdb` and its copy without residues 30–32 (header kept). Recorded in the research session
   `pymol-cartoon-ribbon-blackbox_20261004T020000Z`; numbers only. `tests/render/backbone_parity_test.py` compares meshes by two-way
   point-to-triangle distance, triangle count and vertex colors.
+- `pymol310_backbone_styles.json.gz`: the same 1ubq capture for the dumbbell and putty profiles (`cartoon dumbbell/putty` plus
+  `cartoon_dumbbell_*` and `cartoon_putty_*` variants) and the flag settings `cartoon_flat_sheets`, `cartoon_smooth_loops`
+  (+`_first/_last/_cycles`), `cartoon_fancy_helices`, `cartoon_fancy_sheets`. Black-box VRML exports from the same PyMOL build; numbers
+  only. The engine was written from these captures and the read-only pinned source's observable behavior (no code copied).
+  `backbone_parity_test.py` compares them with the same two-way mesh distance.
 - `pymol310_measure.json`: distance/angle/dihedral dash cylinders exported as VRML by the same PyMOL build from `1ubq.pdb` (labels
   hidden, identity view) for default, `dash_length/dash_gap`, `angle_size/dihedral_size`, solid (`dash_gap 0`) and `dash_width`
   variants. Research session `pymol-measurement-blackbox_20261004T040000Z`; numbers only. `tests/render/measure_parity_test.py`

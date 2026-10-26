@@ -114,6 +114,37 @@ double coordinate_scale(const RepresentationRequest& request) noexcept {
              : 1.0;
 }
 
+// The temperature factor of every atom (zero where the structure has none); the frame's own column wins.
+std::vector<double> atom_b_factors(const RepresentationRequest& request) {
+  const model::AtomProperty* property = nullptr;
+  for (const char* name : {"b_factor", "b_iso_or_equiv"}) {
+    const auto found = request.frame->metadata().atom_properties.find(name);
+    if (found != request.frame->metadata().atom_properties.end()) {
+      property = &found->second;
+      break;
+    }
+  }
+  for (const char* name : {"b_factor", "b_iso_or_equiv"}) {
+    if (property != nullptr)
+      break;
+    property = request.topology->properties().find(name);
+  }
+  std::vector<double> values(request.topology->atom_count(), 0.0);
+  if (property == nullptr)
+    return values;
+  std::visit(
+      [&](const auto& column) {
+        using Column = std::decay_t<decltype(column)>;
+        if constexpr (!std::is_same_v<Column, model::BooleanColumn> &&
+                      !std::is_same_v<Column, std::vector<std::string>>) {
+          for (std::size_t i = 0; i < values.size() && i < column.size(); ++i)
+            values[i] = static_cast<double>(column[i]);
+        }
+      },
+      property->values);
+  return values;
+}
+
 model::Vec3d stable_perpendicular(model::Vec3d direction) {
   const std::array axes{model::Vec3d{1.0, 0.0, 0.0},
                         model::Vec3d{0.0, 1.0, 0.0},
@@ -289,6 +320,9 @@ operation::Result<RenderPacket> build_backbone_representation(
     present[atom] = request.frame->atom_present(atom) ? 1U : 0U;
     visible[atom] = present[atom] != 0U && atom_selected(request, atom) ? 1U : 0U;
   }
+  std::vector<double> b_factors;
+  if (request.style.kind == RepresentationKind::cartoon)
+    b_factors = atom_b_factors(request);
   std::vector<std::uint64_t> residue_pick(residue_count, 0U);
   detail::PymolBackboneInput input{
       request.topology,
@@ -298,6 +332,7 @@ operation::Result<RenderPacket> build_backbone_representation(
       request.atom_visuals,
       residue_ss,
       atom_type,
+      b_factors,
       coordinate_scale(request),
       [&](model::ResidueIndex residue) {
         auto& pick = residue_pick[residue.value];
@@ -333,11 +368,57 @@ operation::Result<RenderPacket> build_backbone_representation(
                                                    : &gap_cutoff.error();
     return operation::Result<RenderPacket>::failure(*error);
   }
+  // The remaining PyMOL profile settings: a failure to read one keeps its default.
+  const auto number_setting = [&](std::string_view name, double fallback) {
+    const auto value = setting_value(request, name, context, fallback);
+    return value.has_value() ? value.value() : fallback;
+  };
+  const auto integer_setting = [&](std::string_view name, std::int64_t fallback) {
+    const auto value = setting_value(request, name, context, fallback);
+    return value.has_value() ? value.value() : fallback;
+  };
   detail::PymolCartoonParameters parameters;
   parameters.sampling = adaptive_quality(sampling.value(), atom_count, {7, 5, 3, 2}, 1);
-  parameters.loop_quality = adaptive_quality(-1, atom_count, {6, 6, 5, 4}, 3);
-  parameters.oval_quality = adaptive_quality(-1, atom_count, {10, 8, 7, 6}, 3);
-  parameters.tube_quality = adaptive_quality(-1, atom_count, {9, 7, 6, 5}, 3);
+  parameters.loop_quality =
+      adaptive_quality(integer_setting("cartoon_loop_quality", -1), atom_count, {6, 6, 5, 4}, 3);
+  parameters.oval_quality =
+      adaptive_quality(integer_setting("cartoon_oval_quality", -1), atom_count, {10, 8, 7, 6}, 3);
+  parameters.tube_quality =
+      adaptive_quality(integer_setting("cartoon_tube_quality", -1), atom_count, {9, 7, 6, 5}, 3);
+  parameters.oval_length = number_setting("cartoon_oval_length", parameters.oval_length);
+  parameters.oval_width = number_setting("cartoon_oval_width", parameters.oval_width);
+  parameters.tube_radius = number_setting("cartoon_tube_radius", parameters.tube_radius);
+  parameters.loop_radius = number_setting("cartoon_loop_radius", parameters.loop_radius);
+  parameters.power = number_setting("cartoon_power", parameters.power);
+  parameters.power_b = number_setting("cartoon_power_b", parameters.power_b);
+  parameters.throw_factor = number_setting("cartoon_throw", parameters.throw_factor);
+  parameters.refine = static_cast<int>(integer_setting("cartoon_refine", parameters.refine));
+  parameters.flat_cycles = static_cast<int>(integer_setting("cartoon_flat_cycles", parameters.flat_cycles));
+  parameters.refine_tips = number_setting("cartoon_refine_tips", parameters.refine_tips);
+  const auto boolean_setting = [&](std::string_view name, bool fallback) {
+    const auto value = setting_value(request, name, context, fallback);
+    return value.has_value() ? value.value() : fallback;
+  };
+  parameters.flat_sheets = boolean_setting("cartoon_flat_sheets", parameters.flat_sheets);
+  parameters.smooth_loops = boolean_setting("cartoon_smooth_loops", parameters.smooth_loops);
+  parameters.smooth_first = static_cast<int>(integer_setting("cartoon_smooth_first", parameters.smooth_first));
+  parameters.smooth_last = static_cast<int>(integer_setting("cartoon_smooth_last", parameters.smooth_last));
+  parameters.smooth_cycles = static_cast<int>(integer_setting("cartoon_smooth_cycles", parameters.smooth_cycles));
+  parameters.fancy_helices = boolean_setting("cartoon_fancy_helices", parameters.fancy_helices);
+  parameters.fancy_sheets = boolean_setting("cartoon_fancy_sheets", parameters.fancy_sheets);
+  parameters.dumbbell_length = number_setting("cartoon_dumbbell_length", parameters.dumbbell_length);
+  parameters.dumbbell_width = number_setting("cartoon_dumbbell_width", parameters.dumbbell_width);
+  parameters.dumbbell_radius = number_setting("cartoon_dumbbell_radius", parameters.dumbbell_radius);
+  parameters.putty_radius = number_setting("cartoon_putty_radius", parameters.putty_radius);
+  parameters.putty_quality =
+      adaptive_quality(integer_setting("cartoon_putty_quality", -1), atom_count, {11, 9, 7, 5}, 3);
+  parameters.putty_scale_min = number_setting("cartoon_putty_scale_min", parameters.putty_scale_min);
+  parameters.putty_scale_max = number_setting("cartoon_putty_scale_max", parameters.putty_scale_max);
+  parameters.putty_scale_power =
+      number_setting("cartoon_putty_scale_power", parameters.putty_scale_power);
+  parameters.putty_range = number_setting("cartoon_putty_range", parameters.putty_range);
+  parameters.putty_transform =
+      static_cast<int>(integer_setting("cartoon_putty_transform", parameters.putty_transform));
   parameters.rect_length = rect_length.value();
   parameters.rect_width = rect_width.value();
   parameters.gap_cutoff = static_cast<int>(gap_cutoff.value());

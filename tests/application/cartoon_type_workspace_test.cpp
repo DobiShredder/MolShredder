@@ -63,7 +63,7 @@ int main(int argc, char **argv) {
   passed &= expect(cartoon(*workspace)->mesh_vertices == baseline.mesh_vertices,
                    "automatic must restore secondary-structure profiles");
 
-  // tube thickens coil residues; dumbbell is reported as a fallback profile.
+  // tube thickens coil residues; cylinder is still reported as a fallback profile.
   run("cartoon", {{"type", "tube"}, {"selection", "all"}});
   const auto tube = *cartoon(*workspace);
   const auto span = [](const render::RenderPacket &packet) {
@@ -75,6 +75,13 @@ int main(int argc, char **argv) {
                        span(tube) > 0.0,
                    "tube must change the cartoon profile");
   run("cartoon", {{"type", "dumbbell"}, {"selection", "resi 30-40"}});
+  passed &= expect(!cartoon(*workspace)->provenance.contains("cartoon_type_fallback") &&
+                       cartoon(*workspace)->mesh_vertices != tube.mesh_vertices,
+                   "dumbbell is a native profile");
+  run("cartoon", {{"type", "putty"}, {"selection", "resi 10-30"}});
+  passed &= expect(!cartoon(*workspace)->provenance.contains("cartoon_type_fallback"),
+                   "putty is a native profile");
+  run("cartoon", {{"type", "cylinder"}, {"selection", "resi 30-40"}});
   passed &= expect(cartoon(*workspace)->provenance.contains("cartoon_type_fallback"),
                    "types without native profiles must be reported as fallbacks");
   run("cartoon", {{"type", "rect"}, {"selection", "all"}});
@@ -82,5 +89,22 @@ int main(int argc, char **argv) {
                        !cartoon(*workspace)->provenance.contains(
                            "cartoon_type_fallback"),
                    "a unique prefix must select rectangle");
+  // Cartoon profile dimensions are render settings the geometry engine reads.
+  const auto tube_extent = [&](const std::string &radius) {
+    run("setting set", {{"name", "cartoon_tube_radius"}, {"value", radius}});
+    run("cartoon", {{"type", "tube"}, {"selection", "all"}});
+    const auto &bounds = cartoon(*workspace)->bounds;
+    return bounds.maximum.x - bounds.minimum.x;
+  };
+  const auto thin = tube_extent("0.2");
+  const auto thick = tube_extent("1.0");
+  passed &= expect(thick > thin + 1.0, "cartoon_tube_radius changes the tube thickness");
+  run("setting unset", {{"name", "cartoon_tube_radius"}});
+  run("setting set", {{"name", "cartoon_oval_length"}, {"value", "3.0"}});
+  run("cartoon", {{"type", "oval"}, {"selection", "all"}});
+  const auto wide_oval = cartoon(*workspace)->mesh_vertices;
+  run("setting unset", {{"name", "cartoon_oval_length"}});
+  run("cartoon", {{"type", "oval"}, {"selection", "all"}});
+  passed &= expect(wide_oval != cartoon(*workspace)->mesh_vertices, "cartoon_oval_length changes the oval profile");
   return passed ? 0 : 1;
 }

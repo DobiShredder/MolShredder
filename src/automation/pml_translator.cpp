@@ -387,6 +387,7 @@ class StatementTranslation {
   void translate_recolor();
   void translate_set_color();
   void translate_util_atomic_colors();
+  void translate_util_chain_colors();
   void translate_code_execution();
   void translate_representation(std::string command, std::string default_representation);
 
@@ -1170,6 +1171,14 @@ void StatementTranslation::translate_recolor() {
   emit("recolor", {});
 }
 
+// util.cbc gives every chain of the selection its own color.
+void StatementTranslation::translate_util_chain_colors() {
+  if (!bind({"selection", "first_color", "quiet", "legacy"})) return;
+  if (given("first_color") || given("legacy"))
+    warning("ignored_argument", "first_color and legacy have no effect: chain colors follow a fixed cycle");
+  emit("color chains", {{"selection", selection("selection")}});
+}
+
 // util.cnc colors every non-carbon atom by element and leaves carbon alone;
 // util.cba<x> also gives the carbons one named color (PyMOL util.py).
 void StatementTranslation::translate_util_atomic_colors() {
@@ -1300,6 +1309,7 @@ void StatementTranslation::run() {
       {"util.cbaw", &StatementTranslation::translate_util_atomic_colors},
       {"util.cbay", &StatementTranslation::translate_util_atomic_colors},
       {"util.cnc", &StatementTranslation::translate_util_atomic_colors},
+      {"util.cbc", &StatementTranslation::translate_util_chain_colors},
       {"set_color", &StatementTranslation::translate_set_color},
       {"run", &StatementTranslation::translate_code_execution},
       {"spawn", &StatementTranslation::translate_code_execution},

@@ -836,7 +836,17 @@ int main(int argc, char **argv) {
                   {{"mode", "once"}, {"direction", "forward"}, {"steps", "0"}})
               .succeeded(),
       "decode-failure test playback must configure");
-  workspace->active_object()->trajectory->cache->clear();
+  // A prefetch started by the earlier ticks must not refill the cache between clear() and the rename.
+  {
+    auto &playback = *workspace->active_object()->trajectory;
+    playback.prefetch->cancel();
+    for (int wait = 0; wait < 400; ++wait) {
+      const auto state = playback.prefetch->snapshot().state;
+      if (state != trajectory::PrefetchState::queued && state != trajectory::PrefetchState::running) break;
+      std::this_thread::sleep_for(std::chrono::milliseconds{5});
+    }
+    playback.cache->clear();
+  }
   const auto missing_path = trajectory_path.string() + ".temporarily-missing";
   std::filesystem::rename(trajectory_path, missing_path);
   const auto failed_tick = trigger(gui, "traj tick", {{"elapsed-ms", "34"}});

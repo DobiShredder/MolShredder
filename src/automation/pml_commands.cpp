@@ -498,6 +498,144 @@ std::optional<operation::Error> register_pml_commands(
       error.has_value()) {
     return error;
   }
+  // Named looks for a selection, written as PyMOL command text over the same
+  // canonical operations a user would type (`{s}` is the selection).
+  const command::Descriptor preset_descriptor{
+      "preset",
+      "Apply a named look (representations and colors) to a selection",
+      {command::ParameterSpec{"name", command::ParameterType::text, true, std::nullopt,
+                              {"default", "simple", "simple_no_solv", "ball_and_stick", "ligands"}},
+       command::ParameterSpec{"selection", command::ParameterType::text, false, "all"}},
+      command::UndoPolicy::not_undoable};
+  if (const auto error = registry.add(
+          preset_descriptor,
+          [&registry, workspace](const command::Arguments& arguments,
+                                 operation::TaskContext& context) {
+            static const std::map<std::string, std::string, std::less<>> looks{
+                {"default",
+                 "hide everything, ({s})\n"
+                 "show cartoon, ({s}) and polymer.protein\n"
+                 "show sticks, ({s}) and polymer.nucleic\n"
+                 "show lines, ({s}) and (organic or solvent)\n"
+                 "show spheres, ({s}) and inorganic\n"},
+                {"simple",
+                 "hide everything, ({s})\n"
+                 "show ribbon, ({s}) and polymer\n"
+                 "show sticks, ({s}) and organic\n"
+                 "show lines, ({s}) and solvent\n"
+                 "show spheres, ({s}) and inorganic\n"
+                 "util.cbc ({s}) and polymer\n"
+                 "util.cnc ({s})\n"},
+                {"simple_no_solv",
+                 "hide everything, ({s})\n"
+                 "show ribbon, ({s}) and polymer\n"
+                 "show sticks, ({s}) and organic\n"
+                 "show spheres, ({s}) and inorganic\n"
+                 "util.cbc ({s}) and polymer\n"
+                 "util.cnc ({s})\n"},
+                {"ball_and_stick",
+                 "hide everything, ({s})\n"
+                 "show sticks, ({s}) and not solvent\n"
+                 "show spheres, ({s}) and not solvent\n"
+                 "set sphere_scale, 0.25, ({s})\n"
+                 "util.cnc ({s})\n"},
+                {"ligands",
+                 "hide everything, ({s})\n"
+                 "show cartoon, ({s}) and polymer\n"
+                 "show lines, byres (({s}) and polymer within 5 of (({s}) and organic))\n"
+                 "show sticks, ({s}) and organic\n"
+                 "show sticks, (({s}) and solvent) within 4 of (({s}) and organic)\n"
+                 "util.cnc ({s})\n"}};
+            const auto found = looks.find(arguments.at("name"));
+            if (found == looks.end())
+              return Result<command::Response>::failure(invalid("unknown preset: " + arguments.at("name")));
+            std::string text = found->second;
+            const auto selection = arguments.at("selection").empty() ? std::string{"all"} : arguments.at("selection");
+            for (std::size_t at = text.find("{s}"); at != std::string::npos; at = text.find("{s}", at + selection.size()))
+              text.replace(at, 3, selection);
+            auto result = run(registry, {{"text", text}, {"on-error", "continue"}}, workspace, context);
+            if (!result.has_value()) return result;
+            auto response = std::move(result.value());
+            response.summary = "applied preset " + arguments.at("name");
+            response.fields.emplace("preset", arguments.at("name"));
+            return Result<command::Response>::success(std::move(response));
+          });
+      error.has_value()) {
+    return error;
+  }
+  // Cartoon art styles: a cartoon type per secondary-structure class plus the profile dimensions,
+  // written as PyMOL command text over the same `cartoon` and `set` operations. `{s}` is the selection;
+  // `{set}` / `{unset}` give the settings the object scope when the selection is a single object name.
+  const command::Descriptor cartoon_style_descriptor{
+      "cartoon style",
+      "Give a selection a cartoon art style (profiles per helix, sheet and loop)",
+      {command::ParameterSpec{"name", command::ParameterType::text, true, std::nullopt,
+                              {"automatic", "tube", "thin_tube", "round_ribbon", "flat_ribbon", "oval_ribbon",
+                               "tube_helices", "dumbbell_helices", "barbell", "edged_ribbon", "square_ribbon",
+                               "strip", "putty"}},
+       command::ParameterSpec{"selection", command::ParameterType::text, false, "all"}},
+      command::UndoPolicy::not_undoable};
+  if (const auto error = registry.add(
+          cartoon_style_descriptor,
+          [&registry, workspace](const command::Arguments& arguments,
+                                 operation::TaskContext& context) {
+            struct Look {
+              std::string helix, sheet, loop;
+              std::vector<std::pair<std::string, std::string>> settings;
+            };
+            static const std::map<std::string, Look, std::less<>> looks{
+                {"automatic", {"auto", "auto", "auto", {}}},
+                {"tube", {"tube", "tube", "tube", {{"cartoon_tube_radius", "0.5"}}}},
+                {"thin_tube", {"tube", "tube", "tube", {{"cartoon_tube_radius", "0.2"}}}},
+                {"round_ribbon",
+                 {"oval", "oval", "loop", {{"cartoon_oval_length", "0.5"}, {"cartoon_oval_width", "0.5"}}}},
+                {"flat_ribbon",
+                 {"rectangle", "rectangle", "loop", {{"cartoon_rect_length", "2.2"}, {"cartoon_rect_width", "0.15"}}}},
+                {"oval_ribbon",
+                 {"oval", "oval", "loop", {{"cartoon_oval_length", "1.8"}, {"cartoon_oval_width", "0.3"}}}},
+                {"tube_helices", {"tube", "arrow", "loop", {{"cartoon_tube_radius", "0.6"}}}},
+                // Helices as dumbbells (PyMOL's "fancy helices"), sheets keep their arrows.
+                {"dumbbell_helices", {"dumbbell", "arrow", "auto", {}}},
+                // Helices and sheets as a thin web with a rod along each edge, loops as thin tubes.
+                {"barbell", {"dumbbell", "dumbbell", "loop", {}}},
+                {"edged_ribbon",
+                 {"dumbbell", "dumbbell", "loop",
+                  {{"cartoon_dumbbell_length", "2.4"}, {"cartoon_dumbbell_width", "0.1"},
+                   {"cartoon_dumbbell_radius", "0.12"}}}},
+                {"square_ribbon",
+                 {"rectangle", "rectangle", "loop", {{"cartoon_rect_length", "0.8"}, {"cartoon_rect_width", "0.8"}}}},
+                {"strip",
+                 {"rectangle", "rectangle", "loop", {{"cartoon_rect_length", "2.8"}, {"cartoon_rect_width", "0.05"}}}},
+                // A tube as thick as the B-factor says (cartoon_putty_* settings).
+                {"putty", {"putty", "putty", "putty", {}}}};
+            const auto found = looks.find(arguments.at("name"));
+            if (found == looks.end())
+              return Result<command::Response>::failure(invalid("unknown cartoon style: " + arguments.at("name")));
+            const auto selection = arguments.at("selection").empty() ? std::string{"all"} : arguments.at("selection");
+            const bool whole = selection == "all";
+            const std::string target = whole ? std::string{} : ", " + selection;
+            static const char* dimension_settings[] = {"cartoon_tube_radius", "cartoon_oval_length", "cartoon_oval_width",
+                                                       "cartoon_rect_length", "cartoon_rect_width",
+                                                       "cartoon_dumbbell_length", "cartoon_dumbbell_width",
+                                                       "cartoon_dumbbell_radius"};
+            std::string text;
+            for (const auto* name : dimension_settings) text += std::string{"unset "} + name + target + "\n";
+            for (const auto& [name, value] : found->second.settings)
+              text += "set " + name + ", " + value + target + "\n";
+            const auto at = "(" + selection + ")";
+            text += "cartoon " + found->second.helix + ", " + at + " and ss H\n";
+            text += "cartoon " + found->second.sheet + ", " + at + " and ss S\n";
+            text += "cartoon " + found->second.loop + ", " + at + " and not ss H+S\n";
+            auto result = run(registry, {{"text", text}, {"on-error", "continue"}}, workspace, context);
+            if (!result.has_value()) return result;
+            auto response = std::move(result.value());
+            response.summary = "applied cartoon style " + arguments.at("name");
+            response.fields.emplace("style", arguments.at("name"));
+            return Result<command::Response>::success(std::move(response));
+          });
+      error.has_value()) {
+    return error;
+  }
   const command::Descriptor tcl_translate_descriptor{
       "tcl translate",
       "Translate a VMD Tcl script subset into canonical MolShredder operations",

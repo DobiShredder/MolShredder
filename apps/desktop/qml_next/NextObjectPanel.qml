@@ -30,6 +30,30 @@ Rectangle {
         return id
     }
     readonly property var reps: ["lines", "sticks", "spheres", "ribbon", "cartoon"]
+    // Cartoon art styles (`cartoon style --name … --selection …`).
+    readonly property var cartoonStyles: [
+        {id: "automatic", text: qsTr("automatic (default)")},
+        {id: "round_ribbon", text: qsTr("round ribbon")},
+        {id: "flat_ribbon", text: qsTr("flat ribbon")},
+        {id: "oval_ribbon", text: qsTr("oval ribbon")},
+        {id: "tube_helices", text: qsTr("tube helices, arrow sheets")},
+        {id: "dumbbell_helices", text: qsTr("dumbbell helices (fancy)")},
+        {id: "barbell", text: qsTr("barbell")},
+        {id: "edged_ribbon", text: qsTr("edged ribbon")},
+        {id: "square_ribbon", text: qsTr("square ribbon")},
+        {id: "strip", text: qsTr("strip")},
+        {id: "putty", text: qsTr("putty (B-factor tube)")},
+        {id: "tube", text: qsTr("tube")},
+        {id: "thin_tube", text: qsTr("thin tube")}
+    ]
+    // Named looks (`preset --name … --selection …`).
+    readonly property var presets: [
+        {id: "default", text: qsTr("default look")},
+        {id: "simple", text: qsTr("simple")},
+        {id: "simple_no_solv", text: qsTr("simple (no solvent)")},
+        {id: "ball_and_stick", text: qsTr("ball and stick")},
+        {id: "ligands", text: qsTr("ligands and their surroundings")}
+    ]
 
     function menuFor(kind, name, rowKind) {
         const sel = name
@@ -44,6 +68,19 @@ Rectangle {
                 {text: qsTr("ungroup"), command: "group excise --name " + name}
             ]
         }
+        // Entries below run against the row's own object: the object is made active first (the camera, show, hide
+        // and edit commands read the active object). A named selection row already carries its owner.
+        const own = rowKind === "object" ? name : ""
+        const run = function(text, command) { const entry = {text: text, command: command}; if (own.length > 0) entry.owner = own; return entry }
+        // Subsets of atoms an entry can be limited to.
+        const subsets = [
+            {text: qsTr("all atoms"), filter: ""},
+            {text: qsTr("main chain"), filter: " and bb."},
+            {text: qsTr("side chains"), filter: " and sc."},
+            {text: qsTr("ligands"), filter: " and organic"},
+            {text: qsTr("solvent"), filter: " and solvent"},
+            {text: qsTr("hydrogens"), filter: " and hydro"}
+        ]
         if (kind === "A" && rowKind === "selection") {
             return [
                 {text: qsTr("zoom"), command: "zoom " + sel},
@@ -58,58 +95,127 @@ Rectangle {
             ]
         }
         if (kind === "A") {
-            // The camera commands read the active object only, so they run after activating this one.
+            const presetItems = panel.presets.map(function(p) { return run(p.text, "preset --name " + p.id + " --selection " + sel) })
+            const polarItems = [
+                run(qsTr("hydrogen bonds within the object…"), "analyze hbonds --donors \"" + sel + "\" --acceptors \"" + sel + "\""),
+                run(qsTr("contacts within the object…"), "analyze contacts --first \"" + sel + "\" --second \"" + sel + "\"")
+            ]
+            const makeSelection = function(label, suffix, filter) { return run(label, "select " + name + "_" + suffix + ", (" + sel + ")" + filter) }
             return [
-                {text: qsTr("zoom"), command: "zoom " + sel, owner: name},
-                {text: qsTr("center"), command: "center " + sel, owner: name},
-                {text: qsTr("orient"), command: "orient " + sel, owner: name},
+                run(qsTr("zoom"), "zoom " + sel),
+                run(qsTr("orient"), "orient " + sel),
+                run(qsTr("center"), "center " + sel),
+                run(qsTr("set rotation origin"), "origin " + sel),
+                {separator: true},
+                {text: qsTr("preset"), submenu: presetItems},
+                {text: qsTr("cartoon style"), submenu: panel.cartoonStyles.map(function(c) { return run(c.text, "cartoon style --name " + c.id + " --selection " + sel) })},
+                {text: qsTr("find"), submenu: polarItems},
+                {text: qsTr("align"), submenu: [
+                    {text: qsTr("this object to another…"), form: "object align", preset: {"mobile-object": name}},
+                    {text: qsTr("another object to this…"), form: "object align", preset: {"target-object": name}}
+                ]},
+                {text: qsTr("make selection"), submenu: [
+                    makeSelection(qsTr("polymer"), "polymer", " and polymer"),
+                    makeSelection(qsTr("ligands"), "ligands", " and organic"),
+                    makeSelection(qsTr("solvent"), "solvent", " and solvent"),
+                    makeSelection(qsTr("C-alpha atoms"), "calpha", " and name CA and polymer.protein"),
+                    makeSelection(qsTr("main chain"), "mainchain", " and bb."),
+                    makeSelection(qsTr("side chains"), "sidechain", " and sc."),
+                    makeSelection(qsTr("polar hydrogens"), "polar_h", " and (hydro and neighbor (elem N+O+S))"),
+                    makeSelection(qsTr("non-polar hydrogens"), "nonpolar_h", " and (hydro and not neighbor (elem N+O+S))")
+                ]},
                 {separator: true},
                 {text: qsTr("rename…"), action: "rename", name: name},
                 {text: qsTr("duplicate…"), form: "object copy", preset: {"object": name}},
+                {text: qsTr("group…"), form: "group add", preset: {"members": name}},
                 {text: qsTr("delete…"), action: "confirmDelete", name: name},
                 {separator: true},
-                {text: qsTr("align to…"), form: "object align", preset: {"mobile-object": name}},
-                {text: qsTr("split states"), command: "object split-states --object " + name},
-                {text: qsTr("fix"), command: "object fix --object " + name},
-                {text: qsTr("free"), command: "object free --object " + name},
+                run(qsTr("remove waters"), "object remove-atoms --selection \"(" + sel + ") and solvent\""),
+                {text: qsTr("hydrogens"), submenu: [
+                    run(qsTr("remove all hydrogens"), "object remove-atoms --selection \"(" + sel + ") and hydro\""),
+                    run(qsTr("remove non-polar hydrogens"), "object remove-atoms --selection \"(" + sel + ") and hydro and not neighbor (elem N+O+S)\"")
+                ]},
+                {text: qsTr("states"), submenu: [
+                    {text: qsTr("split into objects"), command: "object split-states --object " + name},
+                    {text: qsTr("split by chain"), command: "object split --object " + name}
+                ]},
+                {text: qsTr("placement"), submenu: [
+                    {text: qsTr("fix"), command: "object fix --object " + name},
+                    {text: qsTr("free"), command: "object free --object " + name}
+                ]},
                 {separator: true},
                 {text: qsTr("inspect…"), action: "inspect", name: name},
                 {text: qsTr("analyze…"), form: "analyze center", preset: {"selection": sel}}
             ]
         }
         if (kind === "S" || kind === "H") {
-            const verb = kind === "S" ? "show " : "hide "
-            const items = reps.map(function(r) { return {text: r, command: verb + r + ", " + sel} })
+            const show = kind === "S"
+            const verb = show ? "show " : "hide "
+            const items = reps.map(function(r) {
+                return {text: r, submenu: subsets.map(function(subset) { return run(subset.text, verb + r + ", (" + sel + ")" + subset.filter) }) }
+            })
             items.push({separator: true})
-            if (kind === "S") {
-                items.push({text: qsTr("surface"), command: "surface show"})
-                items.push({text: qsTr("only lines"), command: "as lines, " + sel})
-                items.push({text: qsTr("only cartoon"), command: "as cartoon, " + sel})
+            if (show) {
+                items.push({text: qsTr("surface"), submenu: [
+                    run(qsTr("show surface"), "surface show"),
+                    {text: qsTr("surface options…"), action: "surfaceOptions"}
+                ]})
+                items.push({text: qsTr("only (hide the rest)"), submenu: reps.map(function(r) { return run(r, "as " + r + ", (" + sel + ")") })})
             } else {
-                items.push({text: qsTr("surface"), command: "surface hide"})
-                items.push({text: qsTr("everything"), command: "hide everything, " + sel})
+                items.push(run(qsTr("surface"), "surface hide"))
+                items.push(run(qsTr("labels"), "hide labels, (" + sel + ")"))
+                items.push(run(qsTr("everything"), "hide everything, (" + sel + ")"))
+                items.push(run(qsTr("waters"), "hide everything, (" + sel + ") and solvent"))
+                items.push(run(qsTr("hydrogens"), "hide everything, (" + sel + ") and hydro"))
             }
             return items
         }
         if (kind === "L") {
+            const at = function(filter) { return "(" + sel + ")" + filter }
             return [
-                {text: qsTr("atom name"), command: "label " + sel + ", name"},
-                {text: qsTr("residue name"), command: "label " + sel + ", resn"},
-                {text: qsTr("element"), command: "label " + sel + ", elem"},
-                {text: qsTr("B-factor"), command: "label " + sel + ", b"},
+                run(qsTr("residue (name and number)"), "label " + at(" and name CA") + ", resn+resi"),
+                run(qsTr("residue name"), "label " + at(" and name CA") + ", resn"),
+                run(qsTr("residue number"), "label " + at(" and name CA") + ", resi"),
+                run(qsTr("chain"), "label " + at(" and name CA") + ", chain"),
                 {separator: true},
-                {text: qsTr("clear"), command: "label " + sel + ", \"\""}
+                run(qsTr("atom name"), "label " + at("") + ", name"),
+                run(qsTr("element"), "label " + at("") + ", elem"),
+                run(qsTr("atom number"), "label " + at("") + ", ID"),
+                run(qsTr("B-factor"), "label " + at("") + ", b"),
+                run(qsTr("occupancy"), "label " + at("") + ", q"),
+                run(qsTr("van der Waals radius"), "label " + at("") + ", vdw"),
+                run(qsTr("secondary structure"), "label " + at(" and name CA") + ", ss"),
+                {separator: true},
+                run(qsTr("clear"), "label " + at("") + ", \"\"")
             ]
         }
-        const colors = ["red", "orange", "yellow", "green", "cyan", "blue", "magenta", "white", "grey"]
+        // Color: element and structure schemes, then named colors grouped by family.
+        const families = [
+            {text: qsTr("reds"), colors: ["red", "tv_red", "raspberry", "firebrick", "ruby", "salmon", "darksalmon", "deepsalmon", "warmpink", "chocolate", "brown"]},
+            {text: qsTr("greens"), colors: ["green", "tv_green", "chartreuse", "limegreen", "lime", "palegreen", "splitpea", "smudge", "forest", "olive", "deepolive"]},
+            {text: qsTr("blues"), colors: ["blue", "tv_blue", "marine", "slate", "skyblue", "lightblue", "purpleblue", "deepblue", "density"]},
+            {text: qsTr("yellows"), colors: ["yellow", "tv_yellow", "paleyellow", "limon", "yelloworange", "sand", "wheat"]},
+            {text: qsTr("magentas"), colors: ["magenta", "lightmagenta", "hotpink", "pink", "lightpink", "violet", "violetpurple", "purple", "deeppurple"]},
+            {text: qsTr("cyans"), colors: ["cyan", "palecyan", "aquamarine", "greencyan", "teal", "deepteal", "lightteal"]},
+            {text: qsTr("oranges"), colors: ["orange", "tv_orange", "brightorange", "lightorange"]},
+            {text: qsTr("grays"), colors: ["white", "grey90", "grey80", "grey70", "grey60", "grey50", "grey40", "grey30", "grey20", "grey10", "black"]}
+        ]
         const entries = [
-            {text: qsTr("by element (keep carbon)"), command: "color atomic, (" + sel + ") and not elem C"},
-            {text: qsTr("by element (all atoms)"), command: "color atomic, " + sel},
-            {text: qsTr("spectrum by index"), command: "spectrum count, rainbow, " + sel},
-            {text: qsTr("spectrum by B-factor"), command: "spectrum b, rainbow, " + sel},
+            run(qsTr("by element (keep carbon)"), "color atomic, (" + sel + ") and not elem C"),
+            run(qsTr("by element (all atoms)"), "color atomic, " + sel),
+            {text: qsTr("by element, carbons colored…"), submenu: [
+                ["green", "g"], ["cyan", "c"], ["magenta", "m"], ["yellow", "y"], ["salmon", "s"],
+                ["white", "w"], ["slate", "b"], ["orange", "o"], ["purple", "p"], ["pink", "k"]
+            ].map(function(pair) { return run(pair[0], "util.cba" + pair[1] + " " + sel) })},
+            run(qsTr("by chain"), "util.cbc " + sel),
+            run(qsTr("by secondary structure"), "color red, byres ((" + sel + ") and ss H); color yellow, byres ((" + sel + ") and ss S); color green, (" + sel + ") and not byres (ss H+S)"),
+            run(qsTr("spectrum by index"), "spectrum count, rainbow, " + sel),
+            run(qsTr("spectrum by B-factor"), "spectrum b, rainbow, " + sel),
             {separator: true}
         ]
-        colors.forEach(function(c) { entries.push({text: c, command: "color " + c + ", " + sel}) })
+        families.forEach(function(family) {
+            entries.push({text: family.text, submenu: family.colors.map(function(c) { return run(c, "color " + c + ", " + sel) })})
+        })
         entries.push({separator: true})
         entries.push({text: qsTr("other…"), form: "color", preset: {"selection": sel}})
         return entries

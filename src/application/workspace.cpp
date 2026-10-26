@@ -6976,6 +6976,9 @@ operation::Result<BatchLoadResult> Workspace::load_structure_documents(
   }
   // Reserve before publishing either the object vector or scene. Candidate
   // creation and every potentially allocating validation step completed above.
+  // The first molecule of an empty workspace is framed; later ones leave the
+  // camera where the user put it.
+  const bool first_molecule = objects_.empty() && volumes_.empty();
   objects_.reserve(objects_.size() + pending_objects.size());
   auto_color_cursor_ = cursor;
   objects_.insert(objects_.end(),
@@ -6984,6 +6987,7 @@ operation::Result<BatchLoadResult> Workspace::load_structure_documents(
   next_object_id_ += structure_count;
   active_index_ = objects_.size() - 1U;
   scene_ = next_scene.value();
+  if (first_molecule) (void)reset_camera();
   if (context.report_progress)
     context.report_progress({1.0, "structure-batch-commit"});
   const auto &active = loaded_objects.back();
