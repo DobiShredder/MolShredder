@@ -1,10 +1,13 @@
 #include "pymol_backbone.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <limits>
 #include <numbers>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 
 namespace molshredder::render::detail {
@@ -78,7 +81,17 @@ struct Guide {
 
 struct ResidueAtoms {
   std::optional<std::size_t> ca, n, c, o;
+  // Nucleotide atoms: backbone trace phosphate, chain-end oxygens, the orientation reference C2 and the
+  // sugar ring (C1' C2' C3' C4' O4') with C5'.
+  std::optional<std::size_t> p, o5, o3, c2, c5p;
+  std::array<std::optional<std::size_t>, 5> sugar;
 };
+
+// True when `name` is `base` followed by the sugar prime written as ' or *.
+bool primed(std::string_view name, std::string_view base) {
+  return name.size() == base.size() + 1U && name.substr(0, base.size()) == base &&
+         (name.back() == '\'' || name.back() == '*');
+}
 
 std::vector<ResidueAtoms> residue_atoms(const PymolBackboneInput &input) {
   const auto &topology = *input.topology;
@@ -96,6 +109,23 @@ std::vector<ResidueAtoms> residue_atoms(const PymolBackboneInput &input) {
       entry.c = index;
     else if (atom.name == "O" && !entry.o)
       entry.o = index;
+    if (atom.atomic_number == 15U && atom.name == "P" && !entry.p)
+      entry.p = index;
+    else if (atom.atomic_number == 8U && primed(atom.name, "O5") && !entry.o5)
+      entry.o5 = index;
+    else if (atom.atomic_number == 8U && primed(atom.name, "O3") && !entry.o3)
+      entry.o3 = index;
+    else if (atom.atomic_number == 6U && atom.name == "C2" && !entry.c2)
+      entry.c2 = index;
+    else if (atom.atomic_number == 6U && primed(atom.name, "C5") && !entry.c5p)
+      entry.c5p = index;
+    if (atom.atomic_number == 6U || atom.atomic_number == 8U) {
+      constexpr std::array<std::string_view, 5> ring{"C1", "C2", "C3", "C4", "O4"};
+      for (std::size_t slot = 0; slot < ring.size(); ++slot)
+        if (!entry.sugar[slot] && primed(atom.name, ring[slot]) &&
+            atom.atomic_number == (slot == 4U ? 8U : 6U))
+          entry.sugar[slot] = index;
+    }
   }
   return atoms;
 }
@@ -178,6 +208,92 @@ std::vector<Guide> cartoon_guides(const PymolBackboneInput &input,
     last = residue;
   }
   return guides;
+}
+
+// Guide atoms of nucleic acid chains: the phosphates, plus the 5' O5' of a first residue that has no phosphate
+// and the 3' O3' of the last one. A run needs two phosphates; a lone nucleotide has no cartoon. Each guide's
+// orientation points from a smoothed C2 position to the guide atom. Returns the residues that get a base ladder.
+std::vector<std::uint8_t> nucleic_guides(const PymolBackboneInput &input,
+                                         const std::vector<ResidueAtoms> &atoms,
+                                         std::vector<Guide> &guides) {
+  const auto &residues = input.topology->residues();
+  std::vector<std::uint8_t> ladder(atoms.size(), 0U);
+  int segment = guides.empty() ? 0 : guides.back().segment;
+  std::vector<Guide> run;
+  std::vector<std::size_t> run_residues;
+  std::optional<std::size_t> last;
+  std::optional<V> last_c2;
+  const auto shown = [&](std::optional<std::size_t> atom) {
+    return atom && input.present[*atom] != 0U && input.visible[*atom] != 0U;
+  };
+  const auto push = [&](std::size_t atom, std::size_t residue) {
+    Guide guide;
+    guide.position = input.positions[atom];
+    guide.ss = 'N';
+    guide.car_in = input.atom_cartoon_type.empty() ? kAuto : input.atom_cartoon_type[atom];
+    if (guide.car_in == kAuto)
+      guide.car_in = kTube;
+    guide.atom = atom;
+    guide.residue = model::ResidueIndex{residue};
+    guide.segment = segment;
+    if (atoms[residue].c2 && input.present[*atoms[residue].c2] != 0U) {
+      const auto c2 = input.positions[*atoms[residue].c2];
+      const auto reference = last_c2 ? (c2 + *last_c2 * 2.0) * (1.0 / 3.0) : c2;
+      guide.orientation = unit(guide.position - reference);
+      last_c2 = c2;
+    } else {
+      last_c2.reset();
+    }
+    run.push_back(guide);
+  };
+  const auto linked = [&](std::size_t previous, std::size_t current) {
+    const auto &before = atoms[previous];
+    return before.o3 && atoms[current].p &&
+           length(input.positions[*atoms[current].p] - input.positions[*before.o3]) <=
+               1.9 * input.unit_scale;
+  };
+  const auto finish = [&]() {
+    if (last && shown(atoms[*last].o3))
+      push(*atoms[*last].o3, *last);
+    if (run_residues.size() >= 2U) {
+      guides.insert(guides.end(), run.begin(), run.end());
+      for (const auto residue : run_residues)
+        ladder[residue] = 1U;
+      // A 5' residue without phosphate hangs off the first one.
+      if (run_residues.front() > 0U) {
+        const auto before = run_residues.front() - 1U;
+        if (!atoms[before].p && atoms[before].ca == std::nullopt && linked(before, run_residues.front()))
+          ladder[before] = 1U;
+      }
+    }
+    run.clear();
+    run_residues.clear();
+    last.reset();
+    last_c2.reset();
+  };
+  for (std::size_t residue = 0; residue < atoms.size(); ++residue) {
+    const auto &entry = atoms[residue];
+    if (!entry.p || entry.ca)
+      continue;
+    if (!shown(entry.p))
+      continue;
+    if (last && !linked(*last, residue))
+      finish();
+    if (!last) {
+      ++segment;
+      if (residue > 0U) {
+        const auto before = residue - 1U;
+        if (!atoms[before].p && residues[before].chain_id == residues[residue].chain_id &&
+            shown(atoms[before].o5) && linked(before, residue))
+          push(*atoms[before].o5, before);
+      }
+    }
+    push(*entry.p, residue);
+    run_residues.push_back(residue);
+    last = residue;
+  }
+  finish();
+  return ladder;
 }
 
 struct Spans {
@@ -811,6 +927,90 @@ void strand(MeshWriter &mesh, const Path &path, const std::vector<Frame> &frames
   }
 }
 
+// Base ladder (cartoon_ladder_mode): one rod per nucleotide from the midpoint of its two neighbouring
+// phosphates to the base atom that pairs (N1 of purines, N3 of pyrimidines), blending the sugar's C3' color into
+// the base's. A residue needs every sugar ring atom shown by the cartoon.
+void append_ladders(MeshWriter &mesh, const PymolBackboneInput &input,
+                    const std::vector<ResidueAtoms> &atoms, const std::vector<std::uint8_t> &flagged,
+                    double radius, int quality) {
+  const auto &topology = *input.topology;
+  std::vector<std::vector<std::size_t>> neighbors(topology.atom_count());
+  for (const auto &bond : topology.bonds()) {
+    neighbors[bond.first.value].push_back(bond.second.value);
+    neighbors[bond.second.value].push_back(bond.first.value);
+  }
+  const auto element = [&](std::size_t atom) { return topology.atoms()[atom].atomic_number; };
+  const auto named = [&](std::size_t atom, std::string_view name) {
+    return topology.atoms()[atom].name == name;
+  };
+  const auto has = [&](std::size_t atom) { return input.present[atom] != 0U; };
+  for (std::size_t residue = 0; residue < atoms.size(); ++residue) {
+    if (flagged[residue] == 0U)
+      continue;
+    const auto &entry = atoms[residue];
+    bool complete = true;
+    for (const auto &atom : entry.sugar)
+      complete = complete && atom && has(*atom) && input.visible[*atom] != 0U;
+    if (!complete)
+      continue;
+    const auto c1 = *entry.sugar[0], c3 = *entry.sugar[2];
+    const auto in_sugar = [&](std::size_t atom) {
+      return std::any_of(entry.sugar.begin(), entry.sugar.end(),
+                         [&](const auto &member) { return member && *member == atom; });
+    };
+    // The phosphates on either side of the sugar (or their oxygens at a chain end).
+    const auto phosphate = [&](std::optional<std::size_t> oxygen, std::optional<std::size_t> from)
+        -> std::optional<std::size_t> {
+      if (!oxygen)
+        return std::nullopt;
+      for (const auto neighbor : neighbors[*oxygen])
+        if (element(neighbor) == 15U && (!from || neighbor != *from))
+          return neighbor;
+      return oxygen;
+    };
+    const auto p3 = phosphate(entry.o3, c3);
+    const auto p5 = phosphate(entry.o5, entry.c5p);
+    V outer = input.positions[c3];
+    if (p3 && p5 && has(*p3) && has(*p5))
+      outer = input.positions[*p3] * 0.5 + input.positions[*p5] * 0.5;
+    // The glycosidic nitrogen, then the ring walk to the pairing nitrogen.
+    std::optional<std::size_t> glycosidic, base;
+    for (const auto neighbor : neighbors[c1])
+      if (element(neighbor) == 7U && !in_sugar(neighbor))
+        glycosidic = neighbor;
+    if (!glycosidic)
+      continue;
+    const auto next = [&](std::size_t atom, std::initializer_list<std::size_t> except, unsigned number) {
+      std::vector<std::size_t> found;
+      for (const auto neighbor : neighbors[atom])
+        if (element(neighbor) == number && !in_sugar(neighbor) &&
+            std::find(except.begin(), except.end(), neighbor) == except.end())
+          found.push_back(neighbor);
+      return found;
+    };
+    for (const auto c4 : next(*glycosidic, {}, 6U))
+      for (const auto n3 : next(c4, {*glycosidic}, 7U))
+        for (const auto c2 : next(n3, {c4, *glycosidic}, 6U))
+          for (const auto n1 : next(c2, {n3, c4, *glycosidic}, 7U))
+            if (named(n1, "N1"))
+              base = n1;
+    if (!base)
+      for (const auto c2 : next(*glycosidic, {}, 6U))
+        for (const auto n3 : next(c2, {*glycosidic}, 7U))
+          if (named(n3, "N3"))
+            base = n3;
+    if (!base || !has(*base))
+      continue;
+    Path rod;
+    rod.point = {outer, input.positions[*base]};
+    rod.orientation = {V{}, V{}};
+    rod.color = {input.visuals[c3].color, input.visuals[*base].color};
+    rod.atom = {c3, *base};
+    tube(mesh, rod, transported_frames(rod), circle(quality, radius * input.unit_scale), Cap::round,
+         radius * input.unit_scale);
+  }
+}
+
 struct PuttyStatistics {
   double mean{10.0};
   double stdev{0.0};
@@ -904,6 +1104,7 @@ std::vector<std::int32_t> append_pymol_cartoon(const PymolBackboneInput &input,
   const auto atoms = residue_atoms(input);
   auto guides = cartoon_guides(input, atoms, parameters.gap_cutoff, parameters.fancy_helices,
                                parameters.fancy_sheets);
+  const auto ladders = nucleic_guides(input, atoms, guides);
   const auto count = guides.size();
   if (count < 2U)
     return fallbacks;
@@ -1084,6 +1285,8 @@ std::vector<std::int32_t> append_pymol_cartoon(const PymolBackboneInput &input,
       points.clear();
     }
   }
+  if (parameters.ladder_mode != 0)
+    append_ladders(mesh, input, atoms, ladders, parameters.ladder_radius, parameters.ladder_quality);
   return fallbacks;
 }
 

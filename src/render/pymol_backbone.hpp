@@ -67,6 +67,10 @@ struct PymolCartoonParameters {
   double dumbbell_length{1.6};
   double dumbbell_width{0.17};
   double dumbbell_radius{0.16};
+  // Nucleic acid base ladder (cartoon_ladder_mode / cartoon_ladder_radius).
+  int ladder_mode{1};
+  double ladder_radius{0.25};
+  int ladder_quality{12};
   // Putty: a tube whose radius follows the B-factor (cartoon_putty_*).
   double putty_radius{0.4};
   int putty_quality{9};

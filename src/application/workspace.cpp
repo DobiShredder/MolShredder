@@ -6916,10 +6916,14 @@ operation::Result<BatchLoadResult> Workspace::load_structure_documents(
       changed = true;
     }
     if (classified_show || classic_lines) {
-      // Protein: cartoon. Nucleic acid: sticks (the cartoon has no nucleic
-      // backbone yet). Ions and bond-less small-molecule atoms: spheres.
-      // Other small molecules and solvent: lines.
+      // Protein: cartoon. Nucleic acid chains of two or more nucleotides: cartoon (backbone tube and base
+      // ladder); a lone nucleotide has no cartoon and gets sticks. Ions and bond-less small-molecule atoms:
+      // spheres. Other small molecules and solvent: lines.
       const auto residue_classes = model::classify_residues(topology);
+      std::map<std::string, std::size_t> nucleotides_per_chain;
+      for (std::size_t residue = 0; residue < residue_classes.size(); ++residue)
+        if (residue_classes[residue] == model::ResidueClass::nucleic)
+          ++nucleotides_per_chain[topology.residues()[residue].chain_id];
       std::vector<std::uint8_t> has_bond(topology.atom_count(), 0U);
       for (const auto &bond : topology.bonds()) {
         has_bond[bond.first.value] = 1U;
@@ -6936,7 +6940,9 @@ operation::Result<BatchLoadResult> Workspace::load_structure_documents(
                               : residue_classes[residue];
         switch (kind) {
         case model::ResidueClass::protein: cartoon[atom] = 1U; break;
-        case model::ResidueClass::nucleic: sticks[atom] = 1U; break;
+        case model::ResidueClass::nucleic:
+          (nucleotides_per_chain[topology.residues()[residue].chain_id] >= 2U ? cartoon : sticks)[atom] = 1U;
+          break;
         case model::ResidueClass::ion: spheres[atom] = 1U; break;
         case model::ResidueClass::solvent: lines[atom] = 1U; break;
         case model::ResidueClass::organic:

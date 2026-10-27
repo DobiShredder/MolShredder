@@ -2,7 +2,7 @@
 """Cartoon and ribbon geometry parity with PyMOL 3.1.0 VRML exports (Q-019 a).
 
 Arguments: geometry probe, 1ubq.pdb, pymol310_backbone.json.gz and optionally
-pymol310_backbone_styles.json.gz (dumbbell, putty and the cartoon_* flag settings).
+pymol310_backbone_styles.json.gz (dumbbell, putty and the cartoon_* flag settings) and the DNA fixture dna_fnab.pdb.
 Meshes are compared as surfaces: every vertex of one mesh must lie close to
 the other mesh (point-to-triangle distance) in both directions.
 """
@@ -84,7 +84,7 @@ def distances(points: list, triangles: list, cell: float = 2.0) -> list:
     return sorted(result)
 
 
-def check_mesh(name: str, actual: dict, expected: dict) -> None:
+def check_mesh(name: str, actual: dict, expected: dict, count_tolerance: float = 0.01) -> None:
     vertices = expected["vertices"]
     points = [tuple(vertices[i:i + 3]) for i in range(0, len(vertices), 3)]
     colors = [expected["palette"][index] for index in expected["colors"]]
@@ -94,7 +94,7 @@ def check_mesh(name: str, actual: dict, expected: dict) -> None:
     mesh = [tuple(mesh_points[index] for index in triangle)
             for triangle in actual["mesh_triangles"]]
     require(mesh, f"{name}: MolShredder produced no mesh")
-    require(abs(len(mesh) - len(reference)) <= 0.01 * len(reference),
+    require(abs(len(mesh) - len(reference)) <= count_tolerance * len(reference),
             f"{name}: triangle count {len(mesh)} vs PyMOL {len(reference)}")
     for label, sample, surface in (("MolShredder->PyMOL", mesh_points, reference),
                                    ("PyMOL->MolShredder", points, mesh)):
@@ -124,8 +124,74 @@ def check_mesh(name: str, actual: dict, expected: dict) -> None:
             f"{name}: only {matched}/{len(actual['mesh_vertices'])} vertex colors match PyMOL")
 
 
+def check_nucleic(probe: pathlib.Path, dna: pathlib.Path, styles: dict) -> None:
+    """Nucleic acid cartoon: the backbone tube through the phosphates matches PyMOL, and the base ladder rods
+    (not exported to VRML by PyMOL) end where the pairing nitrogen and the phosphate midpoint are."""
+    records = {}
+    order = []
+    for line in dna.read_text().splitlines():
+        if line.startswith(("ATOM", "HETATM")):
+            key = (line[21], int(line[22:26]))
+            records.setdefault(key, {})[line[12:16].strip()] = tuple(
+                float(line[30 + 8 * i:38 + 8 * i]) for i in range(3))
+            if key not in order:
+                order.append(key)
+    # Both chains without the phosphate of their first residue (a 5' cap on the O5' atom).
+    firsts = {chain: min(number for c, number in order if c == chain) for chain, _ in order}
+    stripped = pathlib.Path(tempfile.mkdtemp()) / "dna_no5p.pdb"
+    with open(dna) as source, open(stripped, "w") as target:
+        for line in source:
+            if line.startswith("CONECT"):
+                continue
+            if (line.startswith(("ATOM", "HETATM")) and int(line[22:26]) == firsts[line[21]]
+                    and line[12:16].strip() in ("P", "O1P", "O2P")):
+                continue
+            target.write(line)
+
+    def script(path: pathlib.Path, ladder: str, extra: list = ()) -> list:
+        return [("load", {"file-format": "pdb", "name": "m", "path": str(path)}),
+                ("hide", {"representation": "everything", "selection": "all"}),
+                ("color", {"color": "atomic", "selection": "all"}),
+                ("show", {"representation": "cartoon", "selection": "all"}),
+                ("setting set", {"name": "cartoon_ladder_mode", "value": ladder})] + list(extra)
+
+    tolerance = 0.02  # PyMOL's round tube caps have 6 more triangles each
+    check_mesh("dna_default", run(probe, script(dna, "0")), styles["dna_default"], tolerance)
+    check_mesh("dna_no5p", run(probe, script(stripped, "0")), styles["dna_no5p"], tolerance)
+    for kind in ("rect", "oval"):
+        extra = [("cartoon", {"type": "rectangle" if kind == "rect" else "oval", "selection": "all"})]
+        check_mesh(f"dna_{kind}", run(probe, script(dna, "0", extra)), styles[f"dna_{kind}"], tolerance)
+
+    with_ladder = run(probe, script(dna, "1"))
+    without = run(probe, script(dna, "0"))
+    require(len(with_ladder["mesh_triangles"]) > len(without["mesh_triangles"]), "dna: ladder rods missing")
+    rods = [tuple(v[0:3]) for v in with_ladder["mesh_vertices"][len(without["mesh_vertices"]):]]
+    sub = lambda a, b: tuple(x - y for x, y in zip(a, b))
+    for key in order:
+        atoms = records[key]
+        later = [other for other in order if other[0] == key[0] and other[1] > key[1]]
+        five = atoms.get("P") or atoms["O5'"]
+        three = records[later[0]].get("P") if later and records[later[0]].get("P") else atoms["O3'"]
+        outer = tuple((x + y) / 2.0 for x, y in zip(five, three))
+        base = atoms["N1"] if "N9" in atoms else atoms["N3"]
+        axis = sub(base, outer)
+        length = math.sqrt(sum(x * x for x in axis))
+        axis = tuple(x / length for x in axis)
+        for tip in (tuple(b + 0.25 * a for b, a in zip(base, axis)),
+                    tuple(o - 0.25 * a for o, a in zip(outer, axis))):
+            require(min(math.dist(tip, rod) for rod in rods) <= 0.02,
+                    f"dna: ladder rod end missing near {tip} of residue {key}")
+    # A single nucleotide has no backbone: no cartoon and no ladder.
+    single = pathlib.Path(tempfile.mkdtemp()) / "dna_single.pdb"
+    with open(dna) as source, open(single, "w") as target:
+        for line in source:
+            if line.startswith(("ATOM", "HETATM")) and line[21] == "A" and int(line[22:26]) == 1:
+                target.write(line)
+    require(not run(probe, script(single, "1"))["mesh_triangles"], "dna: a lone nucleotide has no cartoon")
+
+
 def main() -> int:
-    require(len(sys.argv) in (4, 5), "expected probe, 1ubq.pdb, pymol310_backbone.json.gz [, styles.json.gz]")
+    require(len(sys.argv) in (4, 6), "expected probe, 1ubq.pdb, pymol310_backbone.json.gz [, styles.json.gz, dna_fnab.pdb]")
     probe, ubq, capture_path = (pathlib.Path(arg).resolve() for arg in sys.argv[1:4])
     with gzip.open(capture_path, "rt") as handle:
         cases = json.load(handle)["cases"]
@@ -171,7 +237,7 @@ def main() -> int:
             expected = cases[expected["same_as"]]
         check_mesh(name, run(probe, script), expected)
 
-    if len(sys.argv) == 5:
+    if len(sys.argv) == 6:
         with gzip.open(pathlib.Path(sys.argv[4]).resolve(), "rt") as handle:
             styles = json.load(handle)["cases"]
         putty = "resi 10-40"
@@ -207,6 +273,7 @@ def main() -> int:
         }
         for name, script in style_meshes.items():
             check_mesh(name, run(probe, script), styles[name])
+        check_nucleic(probe, pathlib.Path(sys.argv[5]).resolve(), styles)
 
     ribbons = {
         "ribbon_default": base(representation="ribbon"),

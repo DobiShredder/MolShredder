@@ -3976,6 +3976,7 @@ if(BUILD_TESTING)
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/io/fixtures/1ubq.pdb"
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/render/fixtures/geometry/pymol310_backbone.json.gz"
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/render/fixtures/geometry/pymol310_backbone_styles.json.gz"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/render/fixtures/geometry/dna_fnab.pdb"
   )
   add_test(
     NAME render.measure_parity
@@ -4509,7 +4510,7 @@ if(BUILD_TESTING)
   add_test(NAME cli.setting_list COMMAND molshredder setting list)
   set_tests_properties(
     cli.setting_list
-    PROPERTIES PASS_REGULAR_EXPRESSION "definition_count=123"
+    PROPERTIES PASS_REGULAR_EXPRESSION "definition_count=125"
   )
   set_tests_properties(
     cli.version

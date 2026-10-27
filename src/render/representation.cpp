@@ -409,6 +409,8 @@ operation::Result<RenderPacket> build_backbone_representation(
   parameters.dumbbell_length = number_setting("cartoon_dumbbell_length", parameters.dumbbell_length);
   parameters.dumbbell_width = number_setting("cartoon_dumbbell_width", parameters.dumbbell_width);
   parameters.dumbbell_radius = number_setting("cartoon_dumbbell_radius", parameters.dumbbell_radius);
+  parameters.ladder_mode = static_cast<int>(integer_setting("cartoon_ladder_mode", parameters.ladder_mode));
+  parameters.ladder_radius = number_setting("cartoon_ladder_radius", parameters.ladder_radius);
   parameters.putty_radius = number_setting("cartoon_putty_radius", parameters.putty_radius);
   parameters.putty_quality =
       adaptive_quality(integer_setting("cartoon_putty_quality", -1), atom_count, {11, 9, 7, 5}, 3);

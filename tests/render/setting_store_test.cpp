@@ -128,6 +128,8 @@ int main() {
       std::pair{115U, "cartoon_dumbbell_length"},
       std::pair{116U, "cartoon_dumbbell_width"},
       std::pair{117U, "cartoon_dumbbell_radius"},
+      std::pair{448U, "cartoon_ladder_mode"},
+      std::pair{449U, "cartoon_ladder_radius"},
       std::pair{377U, "cartoon_putty_radius"},
       std::pair{378U, "cartoon_putty_quality"},
       std::pair{379U, "cartoon_putty_scale_min"},
@@ -163,7 +165,7 @@ int main() {
           store.definition("line_width")->stable_id == 44U &&
           store.definition("sphere_mode")->stable_id == 421U &&
           store.definition("valence_zero_mode")->maximum == 2.0,
-      "catalog must expose all 123 pinned setting definitions and stable IDs");
+      "catalog must expose all 125 pinned setting definitions and stable IDs");
   {
     auto labels = RenderSettingStore::create().value();
     const RenderSettingScope label_atom{RenderSettingScopeLevel::atom, 3U, 0U,

@@ -17,7 +17,10 @@ merging collinear same-style segments (PyMOL exports one cylinder for same-color
   `cartoon_dumbbell_*` and `cartoon_putty_*` variants) and the flag settings `cartoon_flat_sheets`, `cartoon_smooth_loops`
   (+`_first/_last/_cycles`), `cartoon_fancy_helices`, `cartoon_fancy_sheets`. Black-box VRML exports from the same PyMOL build; numbers
   only. The engine was written from these captures and the read-only pinned source's observable behavior (no code copied).
-  `backbone_parity_test.py` compares them with the same two-way mesh distance.
+  `backbone_parity_test.py` compares them with the same two-way mesh distance. The same file holds the nucleic acid cartoon
+  (`dna_default`, `dna_no5p`, `dna_rect`, `dna_oval`; ladder off) from `dna_fnab.pdb`, a 6-bp DNA duplex built with PyMOL's `fnab`
+  command (model coordinates only). PyMOL's VRML export has no base ladder, so the test checks the rod ends against the
+  phosphate midpoints and pairing nitrogens computed from the PDB.
 - `pymol310_measure.json`: distance/angle/dihedral dash cylinders exported as VRML by the same PyMOL build from `1ubq.pdb` (labels
   hidden, identity view) for default, `dash_length/dash_gap`, `angle_size/dihedral_size`, solid (`dash_gap 0`) and `dash_width`
   variants. Research session `pymol-measurement-blackbox_20261004T040000Z`; numbers only. `tests/render/measure_parity_test.py`

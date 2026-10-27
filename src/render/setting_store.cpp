@@ -329,6 +329,8 @@ const std::vector<RenderSettingDefinition> &p0_render_setting_definitions() {
       definition(115, "cartoon_dumbbell_length", number, 1.6, object_state, 0.0),
       definition(116, "cartoon_dumbbell_width", number, 0.17, object_state, 0.0),
       definition(117, "cartoon_dumbbell_radius", number, 0.16, object_state, 0.0),
+      definition(448, "cartoon_ladder_mode", integer, std::int64_t{1}, object_state, 0.0),
+      definition(449, "cartoon_ladder_radius", number, 0.25, object_state, 0.0),
       definition(377, "cartoon_putty_radius", number, 0.4, object_state, 0.0),
       definition(378, "cartoon_putty_quality", integer, std::int64_t{-1}, object_state, -1.0),
       definition(379, "cartoon_putty_scale_min", number, 0.6, object_state, -1.0),
@@ -362,7 +364,7 @@ const std::vector<RenderSettingDefinition> &p0_render_setting_definitions() {
 
 operation::Result<RenderSettingStore> RenderSettingStore::create() {
   const auto &definitions = p0_render_setting_definitions();
-  if (definitions.size() != 123U)
+  if (definitions.size() != 125U)
     return operation::Result<RenderSettingStore>::failure(
         invalid("P0 render setting catalog size mismatch"));
   for (std::size_t index = 0; index < definitions.size(); ++index) {
